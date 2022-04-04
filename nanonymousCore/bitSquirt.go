@@ -10,12 +10,6 @@ type bitSquirt struct {
    maxBits int
 }
 
-func (storedData *bitSquirt) newBitSquirt(newBits []byte) *bitSquirt {
-   newBS := bitSquirt{newBits, 0, 0}
-   newBS.maxBits = len(newBS.bits) * 8
-   return &newBS
-}
-
 // TODO possible memory leak??
 func (storedData *bitSquirt) resetBitSquirt() {
    storedData.bits = make([]byte, 0)
