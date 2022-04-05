@@ -14,10 +14,13 @@ import (
    "crypto/rand"
 )
 
-// ED25519
 const NANO_ADDRESS_ENCODING = "13456789abcdefghijkmnopqrstuwxyz"
+const BYTES_IN_KEY = 32
+const NUMBER_OF_MNEMONICS = 2048
+const MNEMNOIC_WORDS = 24
+const BITS_IN_ONE_WORD = 11
 
-type key struct {
+type Key struct {
    initialized bool
    keyType     int    // 0 - Full seed; 1 - private key; 2 - public key
    seed        []byte
@@ -28,13 +31,11 @@ type key struct {
    nanoAddress string
 }
 
-var activeSeed key
+var activeSeed Key
 
 func main() {
 
    var usr string
-
-
 
    menu:
    for {
@@ -89,6 +90,15 @@ func main() {
          } else {
             fmt.Println("ERROR: No active seed!")
          }
+      case "5":
+         var blarg bitSquirt
+         blarg.slurpBits(0b101001, 6)
+         blarg.slurpBits(0b101001, 6)
+         blarg.slurpBits(0b101001, 6)
+         blarg.slurpBits(0b10, 2)
+
+         bits, num := blarg.squirtBits(23)
+         fmt.Println("number is:", bits, "read ", num, "bits")
       default:
          break menu
       }
@@ -99,9 +109,9 @@ func main() {
 
 // GenerateSeed gets entropy and generates a new mnemonic/seed pair along with
 // their public keys. Takes a key struct to fill in.
-func GenerateSeed(newKey *key) {
-   var entropy, entropySquirt = GetBipEntropy()
-   var seed = make([]byte, 32)
+func GenerateSeed(newKey *Key) {
+   var entropy = GetBipEntropy()
+   var seed = make([]byte, BYTES_IN_KEY)
 
    if (newKey.initialized) {
       fmt.Println("Key already initialized. Delete key first!")
@@ -115,7 +125,7 @@ func GenerateSeed(newKey *key) {
    }
    newKey.seed = append(newKey.seed, seed...)
 
-   newKey.mnemonic = SeedToMnemonic(entropySquirt)
+   newKey.mnemonic = SeedToMnemonic(seed)
 
    SeedToKeys(newKey);
 
@@ -130,9 +140,9 @@ func GenerateSeed(newKey *key) {
 
 // SeedToMnemonic takes a nano seed and returns the corresponding BIP39
 // compliant mnemonic.
-func SeedToMnemonic(seed bitSquirt) string {
+func SeedToMnemonic(seed []byte) string {
    var file, err = os.Open("bip39-English.txt")
-   var wordlist [2048]string
+   var wordlist [NUMBER_OF_MNEMONICS]string
    var mnemonic = make([]string, 0)
 
    if (err != nil) {
@@ -144,22 +154,36 @@ func SeedToMnemonic(seed bitSquirt) string {
    var scanner = bufio.NewScanner(file)
 
    // Read wordlist from file called "bip39-English.txt"
-   for i := 0; i < 2048 && scanner.Scan(); i++ {
+   for i := 0; i < NUMBER_OF_MNEMONICS && scanner.Scan(); i++ {
       wordlist[i] = scanner.Text()
    }
 
-   // TODO caculate checksum instead of letting entropy function do it.
-   // get the mnemoic
-   for i := 0; i < 24; i++ {
-      index := seed.squirtBits(11)
-      mnemonic = append(mnemonic, wordlist[index])
+   // Caclulate checksum and append it onto seed
+   seed = append(seed, ChecksumSha(seed))
+
+   var bucket bitSquirt
+   for _, bite := range seed {
+      bucket.slurpBits(int64(bite), 8)
+   }
+
+   // Transcribe to mnemonic
+   for {
+      index, numRead := bucket.squirtBits(BITS_IN_ONE_WORD)
+      if (numRead == BITS_IN_ONE_WORD) {
+         mnemonic = append(mnemonic, wordlist[index])
+      } else if (numRead > 0) {
+         mnemonic = append(mnemonic, wordlist[index])
+         break
+      } else {
+         break
+      }
    }
 
    return strings.Join(mnemonic, " ")
 }
 
 // GenerateSeedFromMnemonic converts an exisiting BIP39 mnemonic to a nano seed.
-func GenerateSeedFromMnemonic(mnemonic string, newKey *key) {
+func GenerateSeedFromMnemonic(mnemonic string, newKey *Key) {
    var seed []byte
    var squirt bitSquirt
 
@@ -168,8 +192,8 @@ func GenerateSeedFromMnemonic(mnemonic string, newKey *key) {
       return
    }
 
-   if (len(strings.Split(mnemonic, " ")) != 24) {
-      fmt.Println("Invalid Mnemonic, 24 entries required!")
+   if (len(strings.Split(mnemonic, " ")) != MNEMNOIC_WORDS) {
+      fmt.Println("Invalid Mnemonic,", MNEMNOIC_WORDS, "entries required!")
       return
    } else {
       mnemonic = strings.Trim(mnemonic, "\n\r")
@@ -186,32 +210,37 @@ func GenerateSeedFromMnemonic(mnemonic string, newKey *key) {
       var scanner = bufio.NewScanner(file)
 
       // Read wordlist from file called "bip39-English.txt"
-      for i := 0; i < 2048 && scanner.Scan(); i++ {
+      for i := 0; i < NUMBER_OF_MNEMONICS && scanner.Scan(); i++ {
          wordlist[scanner.Text()] = i
       }
 
-      for i := 0; i < 24; i++ {
-         squirt.slurpBits(int64(wordlist[mnemonicArray[i]]), 11)
+      for i := 0; i < MNEMNOIC_WORDS; i++ {
+         squirt.slurpBits(int64(wordlist[mnemonicArray[i]]), BITS_IN_ONE_WORD)
       }
-      squirt.restartBitSquirt()
 
-      for i :=0; i < squirt.getBitSquirtLength(); i++ {
-         seed = append(seed, (byte)(squirt.squirtBits(8)))
+      for {
+         bits, numRead := squirt.squirtBits(8)
+         if (numRead == 8) {
+            seed = append(seed, byte(bits))
+         } else if (numRead > 0) {
+            seed = append(seed, byte(bits))
+            break
+         } else {
+            break
+         }
       }
 
       // Check checksum
       var checksum byte
-      if (len(seed) == 33) {
-         // Remove checksum from seed imputed from mnemonic
+      if (len(seed) == BYTES_IN_KEY + 1) {
+         // Remove checksum from seed obtained from mnemonic
          checksum = seed[len(seed)-1]
          seed = seed[:len(seed)-1]
 
          // Recalculate checksum
-         hash := sha256.New()
-         hash.Write(seed)
-         calculatedChecksum := hash.Sum(nil)
+         calculatedChecksum := ChecksumSha(seed)
 
-         if (checksum != calculatedChecksum[0]) {
+         if (checksum != calculatedChecksum) {
             fmt.Println("ERROR! Checksum mismatch!")
          } else {
             // Everything checks out, proceed to save key
@@ -233,7 +262,7 @@ func GenerateSeedFromMnemonic(mnemonic string, newKey *key) {
 
 // SeedToKeys takes a prepopulated seed from a key struct and gernerates the
 // corresponding private key, public key, and public nano address.
-func SeedToKeys(seed *key) {
+func SeedToKeys(seed *Key) {
 
    var index = seed.index
 
@@ -251,16 +280,12 @@ func SeedToKeys(seed *key) {
    seed.privateKey = make([]byte, 0)
    seed.privateKey = append(seed.privateKey, address[:]...)
 
-   h := blake2b.Sum512(address[:])
-   s, _ := edwards25519.NewScalar().SetBytesWithClamping(h[:32])
-   A := (&edwards25519.Point{}).ScalarBaseMult(s)
-   // TODO Error check variable "_"
+   seed.publicKey = NanoED25519PublicKey(address[:])
 
-   seed.publicKey = A.Bytes()
    var pubCopy = make([]byte, len(seed.publicKey))
    _ = copy(pubCopy, seed.publicKey)
 
-   checksum := Checksum(pubCopy)
+   checksum := NanoAddressChecksum(pubCopy)
    pubCopy = append([]byte{0, 0, 0}, pubCopy...)
    b32 := base32.NewEncoding(NANO_ADDRESS_ENCODING)
 
@@ -269,18 +294,6 @@ func SeedToKeys(seed *key) {
    return
 }
 
-
-func Checksum(pubkey []byte) (checksum []byte) {
-   hash, err := blake2b.New(5, nil)
-   if err != nil {
-      return
-   }
-   hash.Write(pubkey)
-   for _, b := range hash.Sum(nil) {
-      checksum = append([]byte{b}, checksum...)
-   }
-   return
-}
 
 // AddressToPubKey takes a nano address and converts it to the corresponding
 // public key.
@@ -313,7 +326,7 @@ func AddressToPubKey(nanoAddress string) (pubKey []byte, err error) {
 
    pubKey = pubKey[3:]
 
-   checksum := Checksum(pubKey)
+   checksum := NanoAddressChecksum(pubKey)
 
    if (b32.EncodeToString(checksum) != address[52:]) {
       err = errors.New("checksum mismatch")
@@ -322,34 +335,49 @@ func AddressToPubKey(nanoAddress string) (pubKey []byte, err error) {
    return
 }
 
-//TODO look into import crypto/rand for entropy generation
 // Generate array of 11 bit ints to be used for bip39 word generation
-// TODO Don't generate checksum in entropy
-func GetBipEntropy() ([]byte, bitSquirt) {
-
+func GetBipEntropy() []byte {
    // Seeds are 32 bytes long
-   var entropy = make([]byte, 32)
+   var entropy = make([]byte, BYTES_IN_KEY)
    rand.Read(entropy)
 
-   hash := sha256.New()
-   hash.Write(entropy)
-   checksum := hash.Sum(nil)
-
-   entropy = append(entropy, checksum[0])
-
-   //structContainer := newBitSquirt(entropy)
-   //storedData = *structContainer
-
-   var squirt bitSquirt
-
-   for _, bite := range entropy {
-      squirt.slurpBits(int64(bite), 8)
-   }
-   squirt.restartBitSquirt()
-
-   return entropy, squirt
+   return entropy
 }
 
-func ReturnActiveSeed() *key {
+// ChecksumSha uses the sha256 algorithm to hash the data and returns one byte
+// to use as a checksum
+func ChecksumSha(data []byte) byte{
+   hash := sha256.New()
+   hash.Write(data)
+   return hash.Sum(nil)[0]
+}
+
+// NanoAddressChecksum finds the checksum for the public nano address from a
+// public key. It derives 5 bytes using the blake2b algorithm and reverses the
+// order.
+func NanoAddressChecksum(pubkey []byte) (checksum []byte) {
+   hash, err := blake2b.New(5, nil)
+   if err != nil {
+      return
+   }
+   hash.Write(pubkey)
+   for _, b := range hash.Sum(nil) {
+      checksum = append([]byte{b}, checksum...)
+   }
+   return
+}
+
+// NanoED25519PublicKey uses the ED25519 curve to derive public key. Nano uses
+// blake2b instead of sha.
+func NanoED25519PublicKey(privateKey []byte) []byte {
+   h := blake2b.Sum512(privateKey)
+   s, _ := edwards25519.NewScalar().SetBytesWithClamping(h[:BYTES_IN_KEY])
+   A := (&edwards25519.Point{}).ScalarBaseMult(s)
+   // TODO Error check variable "_"
+
+   return A.Bytes()
+}
+
+func ReturnActiveSeed() *Key {
    return &activeSeed
 }
