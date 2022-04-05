@@ -91,7 +91,7 @@ func main() {
             fmt.Println("ERROR: No active seed!")
          }
       case "5":
-         var blarg bitSquirt
+         var blarg bitBucket
          blarg.slurpBits(0b101001, 6)
          blarg.slurpBits(0b101001, 6)
          blarg.slurpBits(0b101001, 6)
@@ -161,7 +161,7 @@ func SeedToMnemonic(seed []byte) string {
    // Caclulate checksum and append it onto seed
    seed = append(seed, ChecksumSha(seed))
 
-   var bucket bitSquirt
+   var bucket bitBucket
    for _, bite := range seed {
       bucket.slurpBits(int64(bite), 8)
    }
@@ -185,7 +185,7 @@ func SeedToMnemonic(seed []byte) string {
 // GenerateSeedFromMnemonic converts an exisiting BIP39 mnemonic to a nano seed.
 func GenerateSeedFromMnemonic(mnemonic string, newKey *Key) {
    var seed []byte
-   var squirt bitSquirt
+   var bucket bitBucket
 
    if (newKey.initialized) {
       fmt.Println("Error! Delete current active seed first")
@@ -215,11 +215,11 @@ func GenerateSeedFromMnemonic(mnemonic string, newKey *Key) {
       }
 
       for i := 0; i < MNEMNOIC_WORDS; i++ {
-         squirt.slurpBits(int64(wordlist[mnemonicArray[i]]), BITS_IN_ONE_WORD)
+         bucket.slurpBits(int64(wordlist[mnemonicArray[i]]), BITS_IN_ONE_WORD)
       }
 
       for {
-         bits, numRead := squirt.squirtBits(8)
+         bits, numRead := bucket.squirtBits(8)
          if (numRead == 8) {
             seed = append(seed, byte(bits))
          } else if (numRead > 0) {

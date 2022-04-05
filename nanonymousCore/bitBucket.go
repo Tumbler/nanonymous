@@ -4,7 +4,7 @@ import (
    "math"
 )
 
-type bitSquirt struct {
+type bitBucket struct {
    bits []byte
    currentBit int
    maxBits int
@@ -14,13 +14,13 @@ type bitSquirt struct {
 
 // setBitSquirtPosition sets the internal variables of the bitBucket so that the
 // next time squirtBits is used it will start at the given index.
-func (storedData *bitSquirt) setBitSquirtPosition(position int) {
+func (storedData *bitBucket) setBitSquirtPosition(position int) {
    storedData.currentBit = position;
 }
 
 // squirtBits returns the next numBits bits in the bucket. If there were less
 // than numBits left, it will return the remaining bits and how many there were.
-func (storedData *bitSquirt) squirtBits(numBits int) (int, int){
+func (storedData *bitBucket) squirtBits(numBits int) (int, int){
    var bits int
    var tmp byte
 
@@ -54,7 +54,7 @@ func (storedData *bitSquirt) squirtBits(numBits int) (int, int){
 
 // slurpBits takes an arbitrary number of bits and stores them into its internal
 // storage.
-func (storedData *bitSquirt) slurpBits(bitSoup int64, numBits int) {
+func (storedData *bitBucket) slurpBits(bitSoup int64, numBits int) {
    var tmp int64
 
    for i := 0; i < numBits; i++ {
