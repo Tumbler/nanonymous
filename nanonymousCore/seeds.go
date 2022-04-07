@@ -32,6 +32,7 @@ type Key struct {
 }
 
 var activeSeed Key
+var verbose bool
 
 func main() {
 
@@ -152,27 +153,17 @@ func GenerateSeed(newKey *Key) error {
       return fmt.Errorf("GenerateSeed: %w", err)
    }
 
-   fmt.Println("mnemonic is:\"", newKey.mnemonic, "\"")
-   fmt.Print("Seed: 0x", strings.ToUpper(hex.EncodeToString(newKey.seed)), "\n")
-   fmt.Print("Index 0\n")
-   fmt.Print("Private key:  0x", strings.ToUpper(hex.EncodeToString(newKey.privateKey[:])), "\n")
-   fmt.Print("Public  key:  0x", strings.ToUpper(hex.EncodeToString(newKey.publicKey[:])), "\n")
-   fmt.Print("Nano Address: ", newKey.nanoAddress, "\n")
+   if (verbose) {
+      fmt.Println("mnemonic is:\"", newKey.mnemonic, "\"")
+      fmt.Print("Seed: 0x", strings.ToUpper(hex.EncodeToString(newKey.seed)), "\n")
+      fmt.Print("Index 0\n")
+      fmt.Print("Private key:  0x", strings.ToUpper(hex.EncodeToString(newKey.privateKey[:])), "\n")
+      fmt.Print("Public  key:  0x", strings.ToUpper(hex.EncodeToString(newKey.publicKey[:])), "\n")
+      fmt.Print("Nano Address: ", newKey.nanoAddress, "\n")
+   }
 
    newKey.initialized = true
    return nil
-}
-
-// ReinitSeed returns the given Key to all its default values
-func ReinitSeed(activeSeed *Key) {
-   activeSeed.initialized = false
-   activeSeed.keyType = 0
-   activeSeed.seed = make([]byte, 0)
-   activeSeed.index = 0
-   activeSeed.mnemonic = ""
-   activeSeed.privateKey = make([]byte, 0)
-   activeSeed.publicKey = make([]byte, 0)
-   activeSeed.nanoAddress = ""
 }
 
 // SeedToMnemonic takes a nano seed and returns the corresponding BIP39
@@ -183,7 +174,6 @@ func SeedToMnemonic(seed []byte) (string, error) {
    var mnemonic = make([]string, 0)
 
    if (err != nil) {
-      fmt.Println("bip39-English.txt not found")
       return "", fmt.Errorf("SeedToMnemonic: %w", err)
    }
 
@@ -302,12 +292,14 @@ func GenerateSeedFromMnemonic(mnemonic string, newKey *Key) error {
       return fmt.Errorf("GenerateSeedFromMnemonic: %w", err)
    }
 
-   fmt.Println("mnemonic is:\"", newKey.mnemonic, "\"")
-   fmt.Print("Seed: 0x", strings.ToUpper(hex.EncodeToString(newKey.seed)), "\n")
-   fmt.Print("Index 0\n")
-   fmt.Print("Private key:  0x", strings.ToUpper(hex.EncodeToString(newKey.privateKey[:])), "\n")
-   fmt.Print("Public  key:  0x", strings.ToUpper(hex.EncodeToString(newKey.publicKey[:])), "\n")
-   fmt.Print("Nano Address: ", newKey.nanoAddress, "\n")
+   if (verbose) {
+      fmt.Println("mnemonic is:\"", newKey.mnemonic, "\"")
+      fmt.Print("Seed: 0x", strings.ToUpper(hex.EncodeToString(newKey.seed)), "\n")
+      fmt.Print("Index 0\n")
+      fmt.Print("Private key:  0x", strings.ToUpper(hex.EncodeToString(newKey.privateKey[:])), "\n")
+      fmt.Print("Public  key:  0x", strings.ToUpper(hex.EncodeToString(newKey.publicKey[:])), "\n")
+      fmt.Print("Nano Address: ", newKey.nanoAddress, "\n")
+   }
 
    newKey.initialized = true
    return nil
@@ -456,3 +448,20 @@ func NanoED25519PublicKey(privateKey []byte) ([]byte, error){
 func ReturnActiveSeed() *Key {
    return &activeSeed
 }
+
+func WalletVerbose(setting bool) {
+   verbose = setting
+}
+
+// ReinitSeed returns the given Key to all its default values
+func ReinitSeed(activeSeed *Key) {
+   activeSeed.initialized = false
+   activeSeed.keyType = 0
+   activeSeed.seed = make([]byte, 0)
+   activeSeed.index = 0
+   activeSeed.mnemonic = ""
+   activeSeed.privateKey = make([]byte, 0)
+   activeSeed.publicKey = make([]byte, 0)
+   activeSeed.nanoAddress = ""
+}
+
