@@ -1,6 +1,8 @@
 package main
 
 import (
+   "fmt"
+   "errors"
    "math"
 )
 
@@ -8,7 +10,6 @@ type bitBucket struct {
    bits []byte
    currentBit int
    maxBits int
-   initialized bool
    slurpLocation int
 }
 
@@ -20,17 +21,21 @@ func (storedData *bitBucket) setBitSquirtPosition(position int) {
 
 // squirtBits returns the next numBits bits in the bucket. If there were less
 // than numBits left, it will return the remaining bits and how many there were.
-func (storedData *bitBucket) squirtBits(numBits int) (int, int){
+func (storedData *bitBucket) squirtBits(numBits int) (int, int) {
    var bits int
    var tmp byte
 
    for i := 0; i < numBits; i++ {
 
+      // If there are no bits left, return early
       if (storedData.currentBit >= storedData.maxBits) {
          return bits, i
       }
 
       index := storedData.currentBit / 8
+
+      // The very last byte must be treated differently because it might not be
+      // completly full.
       var mask byte
       if (index == (len(storedData.bits) - 1)) {
          // This case only matters if we have a number of bits not divisible by 8.
@@ -54,7 +59,7 @@ func (storedData *bitBucket) squirtBits(numBits int) (int, int){
 
 // slurpBits takes an arbitrary number of bits and stores them into its internal
 // storage.
-func (storedData *bitBucket) slurpBits(bitSoup int64, numBits int) {
+func (storedData *bitBucket) slurpBits(bitSoup int64, numBits int) error{
    var tmp int64
 
    for i := 0; i < numBits; i++ {
@@ -67,6 +72,13 @@ func (storedData *bitBucket) slurpBits(bitSoup int64, numBits int) {
          storedData.bits = append(storedData.bits, 0)
       }
 
+      // Can only get here if slurpLocation has been messed with outside this
+      // function.
+      if (len(storedData.bits) <= index) {
+         err := errors.New(fmt.Sprint("index ", index, " out of bounds for bitBucket"))
+         return fmt.Errorf("slurpBits: %w", err)
+      }
+
       storedData.bits[index] = storedData.bits[index] << 1
       if (tmp >= 1) {
          storedData.bits[index] |= 1
@@ -76,4 +88,6 @@ func (storedData *bitBucket) slurpBits(bitSoup int64, numBits int) {
    }
 
    storedData.maxBits += numBits
+
+   return nil
 }
