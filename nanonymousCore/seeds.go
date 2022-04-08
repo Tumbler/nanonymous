@@ -31,6 +31,8 @@ type Key struct {
    nanoAddress string
 }
 
+var ChecksumMismatch = errors.New("checksum mismatch")
+
 var activeSeed Key
 var verbose bool
 
@@ -280,8 +282,7 @@ func GenerateSeedFromMnemonic(mnemonic string, newKey *Key) error {
    calculatedChecksum := ChecksumSha(seed)
 
    if (checksum != calculatedChecksum) {
-      err = errors.New("checksum mismatch!")
-      return fmt.Errorf("GenerateSeedFromMnemonic: %w", err);
+      return fmt.Errorf("GenerateSeedFromMnemonic: %w", ChecksumMismatch);
    }
 
    // Everything checks out, proceed to save key
@@ -388,8 +389,7 @@ func AddressToPubKey(nanoAddress string) ([]byte, error) {
    }
 
    if (b32.EncodeToString(checksum) != address[52:]) {
-      err = errors.New("checksum mismatch")
-      return nil, fmt.Errorf("AddressToPubKey: %w", err)
+      return nil, fmt.Errorf("AddressToPubKey: %w", ChecksumMismatch)
    }
 
    return pubKey, nil
