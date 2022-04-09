@@ -151,3 +151,53 @@ func TestSeedToKeys(t *testing.T) {
       }
    }
 }
+
+// TODO get new input from keys tools
+func TestAddressToPubKey(t *testing.T) {
+   test1 := []struct {
+      nanoAddress string
+      pubKey string
+   }{
+      {"nano_1csagu6xr1ximp7oqqxdybd1scu7epxpra943n4jf9op8okstdw1rquwusrc",
+       "2B2876C9DC03B09D8B5BDFABF2560CAB6565BB6C20E20D05169EB635659D2F80"},
+      {"nano_1yqu9dt8yzmh8dq1dw9wi9ziyp4cxo717zjba6oiomoxr6qj9at8sze7zzt3",
+       "7AFB3AF46F7E6F32EE05F0FC81FF0F584AED4A02FE29412B0ACEBDC12F13A346"},
+      {"nano_3x8wi561fh8bzsk3ysasmx9w6bniebah68485jattphcnedwnk7or7py9iho",
+       "F4DC80C806BCC9FE641F65199F4FC226906250F218461C51AD59EAA317CA48B5"},
+   }
+   test2 := []struct {
+      nanoAddress string
+   }{
+      {"nano_33abgezpdmxy9ey1twkcifooc4ow4nznqsq9h4zoqhy4n91hfrtidt857ray"},
+      {"nano_3u1q4k31trmfkq3his63nnrzhs8k4bx1yheb3miu9ftrwm6815ker9td8sd8"},
+      {"nano_3fzt5u4opy84jzuhusgx6yos817r3jjhdcyfwrgwyp1x91y7d9ocjdb1syxx"},
+   }
+
+   for _, test := range test1 {
+      pubkey, err := AddressToPubKey(test.nanoAddress)
+
+      if (err != nil) {
+         t.Errorf("Error in execution: %s", err.Error())
+      } else {
+         if (test.pubKey != strings.ToUpper(hex.EncodeToString(pubkey))) {
+            t.Errorf("Invalid public key\r\n want: %s\r\n got:  %s", test.pubKey, strings.ToUpper(hex.EncodeToString(pubkey)))
+         }
+      }
+   }
+
+   // Test checksum detection
+   for _, test := range test2 {
+      // Inputs have malformed addresses. Should fail here.
+      _, err := AddressToPubKey(test.nanoAddress)
+
+      if !(errors.Is(err, ChecksumMismatch)) {
+         t.Errorf("Bad checksum detection failed; expected checksum error on \"%s\"", test.nanoAddress)
+      }
+   }
+}
+
+//func TestChecksumSha(t *testing.T) {
+   //test1 := []struct {
+      //{}
+   //}
+//}

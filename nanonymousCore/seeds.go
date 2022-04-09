@@ -50,6 +50,7 @@ func main() {
                 "6. Nano address to pubkey\n")
       fmt.Scan(&usr)
 
+      WalletVerbose(true)
       switch (usr) {
       case "1":
          err := GenerateSeed(&activeSeed)
@@ -117,6 +118,7 @@ func main() {
       default:
          break menu
       }
+      WalletVerbose(false)
    }
 
    fmt.Println("Peace!")
