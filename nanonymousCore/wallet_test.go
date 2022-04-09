@@ -196,8 +196,42 @@ func TestAddressToPubKey(t *testing.T) {
    }
 }
 
+// TODO test checksums
 //func TestChecksumSha(t *testing.T) {
    //test1 := []struct {
       //{}
    //}
 //}
+
+//func TestNanoAddressChecksum(t *testing.T) {
+//}
+
+// TODO get new input from keys tools
+func TestNanoED25519PublicKey(t *testing.T) {
+   test1 := []struct {
+      privateKey string
+      publicKey string
+   }{
+      {"2835308381D823CE083C4DF12140C8A8855EF642BDCA4ED36EF7FC438A3728D8",
+       "2B2876C9DC03B09D8B5BDFABF2560CAB6565BB6C20E20D05169EB635659D2F80"},
+      {"F89BF8E93811CC70A52219F0CCE058622975F8AE3371D3BAB9DD63B7B5A266D6",
+       "7AFB3AF46F7E6F32EE05F0FC81FF0F584AED4A02FE29412B0ACEBDC12F13A346"},
+      {"F2EE208CB377C38544F07FFEF2D3667B1D23CA7836AAC1522763791646ADC221",
+       "F4DC80C806BCC9FE641F65199F4FC226906250F218461C51AD59EAA317CA48B5"},
+    }
+
+   for _, test := range test1 {
+      privateKeyBytes, _ := hex.DecodeString(test.privateKey)
+      generatedpublicKey, err := NanoED25519PublicKey(privateKeyBytes)
+
+      generatedpublicKeyString := strings.ToUpper(hex.EncodeToString(generatedpublicKey))
+
+      if (err != nil) {
+         t.Errorf("Error in execution: %s", err.Error())
+      } else {
+         if (test.publicKey != generatedpublicKeyString) {
+            t.Errorf("Public key incorrect:\r\n want: %s \r\n got:  %s", test.publicKey, generatedpublicKeyString)
+         }
+      }
+   }
+}
