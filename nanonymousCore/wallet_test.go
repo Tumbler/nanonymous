@@ -5,6 +5,7 @@ import (
    "strings"
    "encoding/hex"
    "errors"
+   "reflect"
 )
 
 
@@ -196,28 +197,69 @@ func TestAddressToPubKey(t *testing.T) {
    }
 }
 
-// TODO test checksums
-//func TestChecksumSha(t *testing.T) {
-   //test1 := []struct {
-      //{}
-   //}
-//}
+func TestChecksumSha(t *testing.T) {
+   test1 := []struct {
+      input string
+      output string
+   }{
+      {"CE104A38563B568251CA3AA38FC7ED10FFB6E32BF79F28E3D0517C5912427C3B",
+       "B0"},
+      {"C6013A11B1144820974611BEB7200E9790ADB587D8A909B9AB5CDDB4E6642396",
+       "BA"},
+      {"82EBADD6C7FB2EA14EBE",
+       "02"},
+   }
 
-//func TestNanoAddressChecksum(t *testing.T) {
-//}
+   for _, test := range test1 {
+      inputbytes, _ := hex.DecodeString(test.input)
+      bite := ChecksumSha(inputbytes)
 
-// TODO get new input from keys tools
+      expectedBite, _ := hex.DecodeString(test.output)
+      if (bite != expectedBite[0]) {
+         t.Errorf("Bad SHA checksum\r\n want: %x\r\n got:  %x", expectedBite, bite)
+      }
+   }
+}
+
+func TestNanoAddressChecksum(t *testing.T) {
+   test1 := []struct {
+      publicKey string
+      checksum []byte
+   }{
+      {"D40AD7C3617FBBA92BE6B528DD5D47527502E8DAB9774BA7C5B1C96D46BF06B7",
+      []byte{0xA1, 0xE0, 0xF3, 0xBA, 0xC1}},
+      {"021D3EB06E65538F324E4985A15A16E511ACD7BAA90226DFFBAE2CC55B5D97DC",
+      []byte{0x57, 0xDD, 0xB5, 0x79, 0xEF}},
+      {"5DE44E0C67F7208C8DB7F37EE439D8BA5F8A6DC9B17180B4EE6AB18999FE281A",
+      []byte{0x22, 0xEF, 0xDE, 0x20, 0x16}},
+   }
+
+   for _, test := range test1 {
+      publicKeyByte, _ := hex.DecodeString(test.publicKey)
+      newChecksum, err := NanoAddressChecksum(publicKeyByte)
+
+      if (err != nil) {
+         t.Errorf("Error in execution: %s", err.Error())
+      } else {
+         if (!reflect.DeepEqual(newChecksum, test.checksum)) {
+            t.Errorf("Bad BLAKE checksum\r\n want: %x\r\n got:  %x", test.checksum, newChecksum)
+         }
+      }
+   }
+
+}
+
 func TestNanoED25519PublicKey(t *testing.T) {
    test1 := []struct {
       privateKey string
       publicKey string
    }{
-      {"2835308381D823CE083C4DF12140C8A8855EF642BDCA4ED36EF7FC438A3728D8",
-       "2B2876C9DC03B09D8B5BDFABF2560CAB6565BB6C20E20D05169EB635659D2F80"},
-      {"F89BF8E93811CC70A52219F0CCE058622975F8AE3371D3BAB9DD63B7B5A266D6",
-       "7AFB3AF46F7E6F32EE05F0FC81FF0F584AED4A02FE29412B0ACEBDC12F13A346"},
-      {"F2EE208CB377C38544F07FFEF2D3667B1D23CA7836AAC1522763791646ADC221",
-       "F4DC80C806BCC9FE641F65199F4FC226906250F218461C51AD59EAA317CA48B5"},
+      {"7FB019CF97ABF40A9CAE666C75FEBDC63E07451FE0F7A7D4BF881E1A244D673D",
+       "27BB04B055B73D8C3D1C2746C9B2D5983E68DAEB3BDAAC3604FA9FD1791A8D60"},
+      {"97E8CC6BBB2E4637291F5B7EA34F58367403F577526BDE4C9866114BFEAB100F",
+       "26B537E1BF707E2CF4969583F100EEB6F778FF2C795DDC9CCAD3C0EEEE85AC4C"},
+      {"3DCA4EBC021E655EDD6A28BD61E0F7568A793B7612E13CF3FC8ADAA62D8C66CB",
+       "6C94AA7D9B36EA6885F7BCD3E6B11F7E66A0E8D7ECC50A6ABB7869589AE19031"},
     }
 
    for _, test := range test1 {
