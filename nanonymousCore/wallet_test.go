@@ -277,3 +277,29 @@ func TestNanoED25519PublicKey(t *testing.T) {
       }
    }
 }
+
+func TestBitBucket(t *testing.T) {
+   test1 := []int64 {
+       3242339803082304,
+       4750080550102598,
+       8362602201806792,
+       41,
+       9223372036854775807,
+   }
+
+   for _, test := range test1 {
+      var bucket bitBucket
+      err := bucket.slurpBits(test, 64)
+
+      if (err != nil) {
+         t.Errorf("Error in execution: %s", err.Error())
+         return
+      }
+
+      output, _ := bucket.squirtBits(64)
+
+      if (output != test) {
+         t.Errorf("BitBucket produced wrong int\r\n want: %d\r\n got:  %d", test, output)
+      }
+   }
+}

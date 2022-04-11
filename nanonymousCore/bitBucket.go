@@ -21,8 +21,8 @@ func (storedData *bitBucket) setBitSquirtPosition(position int) {
 
 // squirtBits returns the next numBits bits in the bucket. If there were less
 // than numBits left, it will return the remaining bits and how many there were.
-func (storedData *bitBucket) squirtBits(numBits int) (int, int) {
-   var bits int
+func (storedData *bitBucket) squirtBits(numBits int) (int64, int) {
+   var bits int64
    var tmp byte
 
    for i := 0; i < numBits; i++ {
