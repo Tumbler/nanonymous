@@ -1,4 +1,4 @@
-package main
+package nanoKeyManager
 
 import (
    "testing"
@@ -36,7 +36,7 @@ func TestGenerateSeedFromMnemonic(t *testing.T) {
       if (err != nil) {
          t.Errorf("Error in execution: %s", err.Error())
       } else {
-         generatedSeed := strings.ToUpper(hex.EncodeToString(key.seed))
+         generatedSeed := strings.ToUpper(hex.EncodeToString(key.Seed))
 
          if (generatedSeed != test.seed) {
             t.Errorf("Generation from \"%s\" was incorrect, \n\rgot:  %s, \n\rwant: %s", test.mnemonic, generatedSeed, test.seed)
@@ -64,20 +64,20 @@ func TestGenerateSeed(t *testing.T) {
       return
    }
 
-   if        (!key.initialized) {
+   if        (!key.Initialized) {
       t.Errorf("Key not initialized")
-   } else if (key.keyType != 0) {
-      t.Errorf("Keytype not expected type, want: 0, got: %d", key.keyType)
-   } else if (len(key.seed) != 32) {
-      t.Errorf("Malformed seed, len: %d", len(key.seed))
-   } else if (!(len(key.mnemonic) > 0)) {
+   } else if (key.KeyType != 0) {
+      t.Errorf("Keytype not expected type, want: 0, got: %d", key.KeyType)
+   } else if (len(key.Seed) != 32) {
+      t.Errorf("Malformed seed, len: %d", len(key.Seed))
+   } else if (!(len(key.Mnemonic) > 0)) {
       t.Errorf("Empty mnemonic")
-   } else if (len(key.privateKey) != 32) {
-      t.Errorf("Malformed privateKey, len: %d", len(key.privateKey))
-   } else if (len(key.publicKey) != 32) {
-      t.Errorf("Malformed mnemonic, len: %d", len(key.publicKey))
-   } else if (len(key.nanoAddress) != 65) {
-      t.Errorf("Malformed nano Address, len: %d", len(key.nanoAddress))
+   } else if (len(key.PrivateKey) != 32) {
+      t.Errorf("Malformed privateKey, len: %d", len(key.PrivateKey))
+   } else if (len(key.PublicKey) != 32) {
+      t.Errorf("Malformed mnemonic, len: %d", len(key.PublicKey))
+   } else if (len(key.NanoAddress) != 65) {
+      t.Errorf("Malformed nano Address, len: %d", len(key.NanoAddress))
    }
 }
 
@@ -132,22 +132,22 @@ func TestSeedToKeys(t *testing.T) {
 
    for _, test := range test1 {
       seedBytes, _ := hex.DecodeString(test.seed)
-      key := Key{seed: seedBytes}
+      key := Key{Seed: seedBytes}
       err := SeedToKeys(&key)
 
       if (err != nil) {
          t.Errorf("Error in execution: %s", err.Error())
       } else {
-         var privateKeyString = strings.ToUpper(hex.EncodeToString(key.privateKey))
+         var privateKeyString = strings.ToUpper(hex.EncodeToString(key.PrivateKey))
          if (test.privateKey != privateKeyString) {
             t.Errorf("Invalid private key\r\n want: %s\r\n got:  %s", test.privateKey, privateKeyString)
          }
-         var publicKeyString = strings.ToUpper(hex.EncodeToString(key.publicKey))
+         var publicKeyString = strings.ToUpper(hex.EncodeToString(key.PublicKey))
          if (test.publicKey != publicKeyString) {
             t.Errorf("Invalid public key\r\n want: %s\r\n got:  %s", test.publicKey, publicKeyString)
          }
-         if (test.nanoAddress != key.nanoAddress) {
-            t.Errorf("Invalid nano address\r\n want: %s\r\n got:  %s", test.nanoAddress, key.nanoAddress)
+         if (test.nanoAddress != key.NanoAddress) {
+            t.Errorf("Invalid nano address\r\n want: %s\r\n got:  %s", test.nanoAddress, key.NanoAddress)
          }
       }
    }
