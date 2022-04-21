@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS seeds(
 CREATE TABLE IF NOT EXISTS wallets(
    parent_seed INT,
    index BIGINT NOT NULL,
-   balence NUMERIC(40, 0),
+   balance NUMERIC(40, 0) NOT NULL,
+   hash BYTEA NOT NULL,
    CONSTRAINT seed
       FOREIGN KEY(parent_seed)
       REFERENCES seeds(id)
