@@ -1,1 +1,0 @@
-postgres://postgres:folliCle99@localhost:5432/nanonymousdb
