@@ -7,6 +7,7 @@ import (
    "encoding/hex"
    "strings"
    "math/big"
+   "strconv"
    _"embed"
 
    // Local packages
@@ -20,11 +21,23 @@ import (
    "golang.org/x/crypto/blake2b"
 )
 
+// TODO IP lock transactions 1 per 30 seconds??
+
 //go:embed databaseUrl.txt
 var databaseUrl string
 // Need to trim later
 
 const MAX_INDEX = 4294967295
+
+//type activeTransaction struct {
+   //parentSeed int,
+   //index int,
+   //publicAddress []byte,
+//}
+
+var activeTransactionList = make(map[string][]byte)
+
+var password = "aweqoiuoiasdfho"
 
 func main() {
    fmt.Println("Starting nanonymous Core on ", time.Now())
@@ -40,7 +53,8 @@ func main() {
                 "3. Insert into database\n",
                 "4. Send pretend request for new address\n",
                 "5. Find total balance\n",
-                "6. Pretend nano receive\n")
+                "6. Pretend nano receive\n",
+                "7. Rando\n")
       fmt.Scan(&usr)
 
       switch (usr) {
@@ -102,8 +116,7 @@ func main() {
 
          _, err = insertSeed(conn, newSeed.Seed)
 
-         if (err != nil) {
-            fmt.Println("main: ", err)
+         if (err != nil) { fmt.Println("main: ", err)
             break //menu
          }
 
@@ -119,12 +132,53 @@ func main() {
             fmt.Println("err: ", err.Error())
          }
       case "6":
-         adhocAddress := "nano_183t7xkm6is3ge3dedfuxepyhd36i9qmehc9yenjzd8ahytu8xjw5pt7eec3"
+         adhocAddress := []string{
+            "nano_183t7xkm6is3ge3dedfuxepyhd36i9qmehc9yenjzd8ahytu8xjw5pt7eec3",
+            "lkjlkj",
+         }
          nanoRecieved := new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)
-         err := receivedNano(adhocAddress, nanoRecieved)
+         err := receivedNano(adhocAddress[0], nanoRecieved)
          if (err != nil) {
             fmt.Println("err: ", err.Error())
          }
+
+      case "7":
+
+         keyMan.WalletVerbose(true)
+         var seed keyMan.Key
+         keyMan.GenerateSeed(&seed)
+         conn, _ := pgx.Connect(context.Background(), databaseUrl)
+
+         id, _ := insertSeed(conn, seed.Seed)
+
+         fmt.Println("ID: ", id)
+
+         queryString :=
+         "SELECT " +
+            "pgp_sym_decrypt_bytea(seed, $1)" +
+         "FROM " +
+            "seeds " +
+         "WHERE " +
+            "id = $2;"
+
+         var seed2 keyMan.Key
+         row, _ := conn.Query(context.Background(), queryString, password, id)
+         //if (err != nil) {
+            //return true, fmt.Errorf("checkBlackList: seed query: %w", err)
+         //}
+         if (row.Next()) {
+            row.Scan(&seed2.Seed)
+            row.Close()
+            //if (err != nil) {
+               //return true, fmt.Errorf("checkBlacklist: %w", err)
+            //}
+         } else {
+            //return true, fmt.Errorf("checkBlacklist: No such seed found: %d", parentSeed)
+         }
+         row.Close()
+         keyMan.SeedToKeys(&seed2)
+         fmt.Println("wallet: ", seed2.NanoAddress)
+
 
       default:
          break //menu
@@ -142,10 +196,10 @@ func insertSeed(conn *pgx.Conn, seed []byte) (int, error) {
    "INSERT INTO " +
      "seeds (seed, current_index) " +
    "VALUES " +
-     "($1, -1) " +
+     "(pgp_sym_encrypt_bytea($1, $2), -1) " +
    "RETURNING id;"
 
-   rows, err := conn.Query(context.Background(), queryString, seed)
+   rows, err := conn.Query(context.Background(), queryString, seed, password)
    if (err != nil) {
       return -1, fmt.Errorf("insertSeed: %w", err)
    }
@@ -174,17 +228,17 @@ func userRequestsNewAddress(receivingAddress string) error {
    queryString :=
    "SELECT " +
       "id, " +
-      "seed, " +
+      "pgp_sym_decrypt_bytea(seed, $1), " +
       "current_index " +
    "FROM " +
       "seeds " +
    "WHERE " +
-      "current_index < $1" +
+      "current_index < $2" +
    "ORDER BY " +
       "id;"
 
    // TODO start a tranasction and increment current_index. Only commit after everthing checks out
-   rows, err := conn.Query(context.Background(), queryString, MAX_INDEX)
+   rows, err := conn.Query(context.Background(), queryString, password, MAX_INDEX)
    if (err != nil) {
       return fmt.Errorf("userRequestsNewAddress: Query seed: ", err)
    }
@@ -264,6 +318,8 @@ func userRequestsNewAddress(receivingAddress string) error {
       return fmt.Errorf("userRequestsNewAddress: Blacklist falied: %w", err)
    }
 
+   setClientAddress(id, seed.Index, receivingAddressByte)
+
    return nil
 }
 
@@ -301,6 +357,11 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    }
    defer conn.Close(context.Background())
 
+   tx, _ := conn.BeginTx(context.Background(), pgx.TxOptions{})
+   defer tx.Rollback(context.Background())
+
+   // TODO Don't accept if we don't have an active transaction available
+
    queryString :=
    "SELECT " +
       "* " +
@@ -316,7 +377,7 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
 
    recivedHash := blake2b.Sum256(pubkey)
 
-   row, err := conn.Query(context.Background(), queryString, recivedHash[:])
+   row, err := tx.Query(context.Background(), queryString, recivedHash[:])
    if (err != nil) {
       return fmt.Errorf("receiviedNano: %w", err)
    }
@@ -335,17 +396,26 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
       return fmt.Errorf("receivedNano: address not found in active wallets")
    }
 
+   // TODO This is just for testing
+   clientPub, _ := keyMan.AddressToPubKey("nano_157gdx49th7w6yrtgi6ciys9kfcs49iew5fa64j8584178p5zjaum33jfut6")
+   setClientAddress(parentSeed, index, clientPub)
+   // TODO end of test code
+
+   // Get client address for later use. TODO check for nil
+   clientAddress := getClientAddress(parentSeed, index)
+
+   // Add funds we got into our database of wallets
    queryString =
    "UPDATE " +
       "wallets "+
    "SET " +
-      "\"balance\" = $1 " +
+      "\"balance\" = \"balance\" + $1 " +
    "WHERE " +
       "\"parent_seed\" = $2 AND " +
       "\"index\" = $3;"
 
-   newBalance := balance.Add(decimal.NewFromBigInt(payment, 0))
-   rowsAffected, err := conn.Exec(context.Background(), queryString, newBalance, parentSeed, index)
+   paymentDecimal := decimal.NewFromBigInt(payment, 0)
+   rowsAffected, err := tx.Exec(context.Background(), queryString, paymentDecimal, parentSeed, index)
    if (err != nil) {
       return fmt.Errorf("receivedNano: Update: %w", err)
    }
@@ -360,6 +430,8 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    amountToSend := new(big.Int).Sub(payment, fee)
    amountToSendDecimal := decimal.NewFromBigInt(amountToSend, 0)
 
+   // Find all wallets that have enough funds to send out the payment that
+   // aren't the wallet we just received in.
    queryString =
    "SELECT " +
       "parent_seed, " +
@@ -368,25 +440,63 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    "FROM " +
       "wallets " +
    "WHERE " +
-      "balance >= $1 " +
+      "balance >= $1 AND NOT" +
+      "( parent_seed = $2 AND " +
+      "  index = $3 )" +
    "ORDER BY " +
-      "balance;"
+      "balance, " +
+      "index;"
 
-   rows, err := conn.Query(context.Background(), queryString, amountToSendDecimal)
+   rows, err := tx.Query(context.Background(), queryString, amountToSendDecimal, parentSeed, index)
    if (err != nil) {
       return fmt.Errorf("receiviedNano: Query: %w", err)
    }
 
+   var foundAddress bool
    for rows.Next() {
       err = rows.Scan(&parentSeed, &index, &balance)
       if (err != nil) {
          return fmt.Errorf("receivedNano: Scan: %w", err)
       }
 
-      fmt.Println(parentSeed, index, ":", balance.BigInt())
+      // Check the blacklist before accepting
+      foundEntry, err := checkBlackList(parentSeed, index, clientAddress)
+      if (err != nil) {
+         return fmt.Errorf("receivedNano: %w", err)
+      }
+      if (!foundEntry) {
+         // Uset this address
+         foundAddress = true
+         break
+      }
    }
-   row.Close()
+   rows.Close()
 
+   if (!foundAddress) {
+      // TODO add support for multi wallet sending
+      return fmt.Errorf("receivedNano: Not enough funds in a single wallet")
+   }
+
+   // TODO do a send trasaction to specified wallet stored activeTransactionList
+
+   queryString =
+   "UPDATE " +
+      "wallets "+
+   "SET " +
+      "\"balance\" = \"balance\" - $1 " +
+   "WHERE " +
+      "\"parent_seed\" = $2 AND " +
+      "\"index\" = $3;"
+
+   rowsAffected, err = tx.Exec(context.Background(), queryString, amountToSendDecimal, parentSeed, index)
+   if (err != nil) {
+      return fmt.Errorf("receivedNano: Update: %w", err)
+   }
+   if (rowsAffected.RowsAffected() < 1) {
+      return fmt.Errorf("receivedNano: no rows affected during index incrament")
+   }
+
+   tx.Commit(context.Background())
 
    return nil
 }
@@ -441,3 +551,79 @@ func rawToNANO(raw *big.Int) float64{
 
    return NanoFloat64
 }
+
+func checkBlackList(parentSeed int, index int, clientAddress []byte) (bool, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return true, fmt.Errorf("checkBlackList: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   // Generate the hash
+   queryString :=
+   "SELECT " +
+      "pgp_sym_decrypt_bytea(seed, $1)" +
+   "FROM " +
+      "seeds " +
+   "WHERE " +
+      "id = $2;"
+
+   var seed keyMan.Key
+   row, err := conn.Query(context.Background(), queryString, password, parentSeed)
+   if (err != nil) {
+      return true, fmt.Errorf("checkBlackList: seed query: %w", err)
+   }
+   if (row.Next()) {
+      err = row.Scan(&seed.Seed)
+      row.Close()
+      if (err != nil) {
+         return true, fmt.Errorf("checkBlacklist: %w", err)
+      }
+   } else {
+      return true, fmt.Errorf("checkBlacklist: No such seed found: %d", parentSeed)
+   }
+   row.Close()
+
+   seed.Index = index
+   err = keyMan.SeedToKeys(&seed)
+   if (err != nil) {
+      return true, fmt.Errorf("checkBlackList: %w", err)
+   }
+
+   concat := append(seed.PublicKey, clientAddress[:]...)
+   blackListHash := blake2b.Sum256(concat)
+
+   fmt.Println("check blacklist for:", hex.EncodeToString(blackListHash[:]))
+
+   // Check hash against the blacklist
+   queryString =
+   "SELECT " +
+      "hash " +
+   "FROM " +
+      "blacklist " +
+   "WHERE " +
+      "\"hash\" = $1;"
+
+   blacklistRows, err := conn.Query(context.Background(), queryString, blackListHash[:])
+   if (err != nil) {
+      return true, fmt.Errorf("checkBlackList: blacklist query: %w", err)
+   }
+
+   if (blacklistRows.Next()) {
+      // Found entry in blacklist
+      return true, nil
+   } else {
+      return false, nil
+   }
+}
+
+func getClientAddress(parentSeed int, index int) []byte {
+   key := strconv.Itoa(parentSeed) + strconv.Itoa(index)
+   return activeTransactionList[key]
+}
+
+func setClientAddress(parentSeed int, index int, clientAddress []byte) {
+   key := strconv.Itoa(parentSeed) + strconv.Itoa(index)
+   activeTransactionList[key] = clientAddress
+}
+
