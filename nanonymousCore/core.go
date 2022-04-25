@@ -23,9 +23,12 @@ import (
 
 // TODO IP lock transactions 1 per 30 seconds??
 
-//go:embed databaseUrl.txt
+//go:embed embed.txt
+var embeddedData string
+// "db = [url]" in embed.txt to set this value
 var databaseUrl string
-// Need to trim later
+// "pass = [pass]" in embed.txt to set this value
+var databasePassword string
 
 const MAX_INDEX = 4294967295
 
@@ -37,11 +40,10 @@ const MAX_INDEX = 4294967295
 
 var activeTransactionList = make(map[string][]byte)
 
-var password = "aweqoiuoiasdfho"
 
 func main() {
-   fmt.Println("Starting nanonymous Core on ", time.Now())
-   databaseUrl = strings.Trim(databaseUrl, "\r\n")
+
+   initNanoymousCore()
 
    var usr string
    var seed keyMan.Key
@@ -162,7 +164,7 @@ func main() {
             "id = $2;"
 
          var seed2 keyMan.Key
-         row, _ := conn.Query(context.Background(), queryString, password, id)
+         row, _ := conn.Query(context.Background(), queryString, databasePassword, id)
          //if (err != nil) {
             //return true, fmt.Errorf("checkBlackList: seed query: %w", err)
          //}
@@ -189,6 +191,7 @@ func main() {
 }
 
 
+// inserSeed saves an encrytped version of the seed given into the database.
 func insertSeed(conn *pgx.Conn, seed []byte) (int, error) {
    var id int
 
@@ -199,7 +202,7 @@ func insertSeed(conn *pgx.Conn, seed []byte) (int, error) {
      "(pgp_sym_encrypt_bytea($1, $2), -1) " +
    "RETURNING id;"
 
-   rows, err := conn.Query(context.Background(), queryString, seed, password)
+   rows, err := conn.Query(context.Background(), queryString, seed, databasePassword)
    if (err != nil) {
       return -1, fmt.Errorf("insertSeed: %w", err)
    }
@@ -238,7 +241,7 @@ func userRequestsNewAddress(receivingAddress string) error {
       "id;"
 
    // TODO start a tranasction and increment current_index. Only commit after everthing checks out
-   rows, err := conn.Query(context.Background(), queryString, password, MAX_INDEX)
+   rows, err := conn.Query(context.Background(), queryString, databasePassword, MAX_INDEX)
    if (err != nil) {
       return fmt.Errorf("userRequestsNewAddress: Query seed: ", err)
    }
@@ -323,6 +326,16 @@ func userRequestsNewAddress(receivingAddress string) error {
    return nil
 }
 
+// blacklist takes two public addresses, hashes them and stores them in the
+// database. The purpose of the blacklist is to securely store a transaction
+// pair that should never happen. If, for example, Alice sends nano from address
+// A to address B in order to receive it ananomously at another address C, then
+// Alice wants to be sure that her address A and address C are never associated.
+// However, if she later orders another transaction to address C, nanonymous
+// would run the risk of using address B to send to C. Before doing such a
+// transaction, nanonymous regenerates the blacklist hash and checks the
+// blacklist. If it doesn't exist, then we can be sure that there will be no
+// unintentional associations.
 func blacklist(conn *pgx.Conn, sendingAddress []byte, receivingAddress []byte) error {
 
    concat := append(sendingAddress, receivingAddress[:]...)
@@ -453,6 +466,7 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    }
 
    var foundAddress bool
+   var sendingKey *keyMan.Key
    for rows.Next() {
       err = rows.Scan(&parentSeed, &index, &balance)
       if (err != nil) {
@@ -460,12 +474,13 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
       }
 
       // Check the blacklist before accepting
-      foundEntry, err := checkBlackList(parentSeed, index, clientAddress)
+      foundEntry, tmpKey, err := checkBlackList(parentSeed, index, clientAddress)
       if (err != nil) {
          return fmt.Errorf("receivedNano: %w", err)
       }
       if (!foundEntry) {
          // Uset this address
+         sendingKey = tmpKey
          foundAddress = true
          break
       }
@@ -478,6 +493,7 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    }
 
    // TODO do a send trasaction to specified wallet stored activeTransactionList
+   sendNano(sendingKey.PrivateKey, clientAddress, big.NewInt(4100))
 
    queryString =
    "UPDATE " +
@@ -552,10 +568,10 @@ func rawToNANO(raw *big.Int) float64{
    return NanoFloat64
 }
 
-func checkBlackList(parentSeed int, index int, clientAddress []byte) (bool, error) {
+func checkBlackList(parentSeed int, index int, clientAddress []byte) (bool, *keyMan.Key, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return true, fmt.Errorf("checkBlackList: %w", err)
+      return true, nil, fmt.Errorf("checkBlackList: %w", err)
    }
    defer conn.Close(context.Background())
 
@@ -569,25 +585,25 @@ func checkBlackList(parentSeed int, index int, clientAddress []byte) (bool, erro
       "id = $2;"
 
    var seed keyMan.Key
-   row, err := conn.Query(context.Background(), queryString, password, parentSeed)
+   row, err := conn.Query(context.Background(), queryString, databasePassword, parentSeed)
    if (err != nil) {
-      return true, fmt.Errorf("checkBlackList: seed query: %w", err)
+      return true, nil, fmt.Errorf("checkBlackList: seed query: %w", err)
    }
    if (row.Next()) {
       err = row.Scan(&seed.Seed)
       row.Close()
       if (err != nil) {
-         return true, fmt.Errorf("checkBlacklist: %w", err)
+         return true, nil, fmt.Errorf("checkBlacklist: %w", err)
       }
    } else {
-      return true, fmt.Errorf("checkBlacklist: No such seed found: %d", parentSeed)
+      return true, nil, fmt.Errorf("checkBlacklist: No such seed found: %d", parentSeed)
    }
    row.Close()
 
    seed.Index = index
    err = keyMan.SeedToKeys(&seed)
    if (err != nil) {
-      return true, fmt.Errorf("checkBlackList: %w", err)
+      return true, nil, fmt.Errorf("checkBlackList: %w", err)
    }
 
    concat := append(seed.PublicKey, clientAddress[:]...)
@@ -606,14 +622,14 @@ func checkBlackList(parentSeed int, index int, clientAddress []byte) (bool, erro
 
    blacklistRows, err := conn.Query(context.Background(), queryString, blackListHash[:])
    if (err != nil) {
-      return true, fmt.Errorf("checkBlackList: blacklist query: %w", err)
+      return true, nil, fmt.Errorf("checkBlackList: blacklist query: %w", err)
    }
 
    if (blacklistRows.Next()) {
       // Found entry in blacklist
-      return true, nil
+      return true, nil, nil
    } else {
-      return false, nil
+      return false, &seed, nil
    }
 }
 
@@ -627,3 +643,24 @@ func setClientAddress(parentSeed int, index int, clientAddress []byte) {
    activeTransactionList[key] = clientAddress
 }
 
+func initNanoymousCore() {
+   fmt.Println("Starting nanonymous Core on ", time.Now())
+
+   // Grab embedded data
+   for _, line := range strings.Split(embeddedData, "\n") {
+      word := strings.Split(line, " = ")
+
+      switch word[0] {
+         case "db":
+            databaseUrl = strings.Trim(word[1], "\r\n")
+         case "pass":
+            databasePassword = strings.Trim(word[1], "\r\n")
+      }
+   }
+
+   // TODO hardcode a hash to make sure the password is correct
+}
+
+func sendNano(fromPrivateKey []byte, toPublicKey []byte, amount *big.Int) bool {
+   return true
+}
