@@ -15,8 +15,8 @@ import (
 
    // 3rd party packages
    pgx "github.com/jackc/pgx/v4"
-   //"github.com/jackc/pgtype"
    pgxErr "github.com/jackc/pgerrcode"
+   "github.com/jackc/pgconn"
    "github.com/shopspring/decimal"
    "golang.org/x/crypto/blake2b"
 )
@@ -40,10 +40,22 @@ const MAX_INDEX = 4294967295
 
 var activeTransactionList = make(map[string][]byte)
 
+type psqlDB interface {
+   Begin(ctx context.Context) (pgx.Tx, error)
+   Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error)
+   Query(ctx context.Context, sql string, optionsAndArgs ...interface{}) (pgx.Rows, error)
+   QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
+}
 
+var verbose bool
 func main() {
+   fmt.Println("Starting nanonymous Core on ", time.Now())
 
-   initNanoymousCore()
+   err := initNanoymousCore()
+   if (err != nil) {
+      fmt.Println(err.Error())
+      return
+   }
 
    var usr string
    var seed keyMan.Key
@@ -56,7 +68,8 @@ func main() {
                 "4. Send pretend request for new address\n",
                 "5. Find total balance\n",
                 "6. Pretend nano receive\n",
-                "7. Rando\n")
+                "7. Get Wallet Info\n",
+                "8. Add nano to wallet\n")
       fmt.Scan(&usr)
 
       switch (usr) {
@@ -124,10 +137,11 @@ func main() {
 
       case "4":
          adhocAddress := "nano_157gdx49th7w6yrtgi6ciys9kfcs49iew5fa64j8584178p5zjaum33jfut6"
-         err := userRequestsNewAddress(adhocAddress)
+         blarg, _, err := getNewAddress(adhocAddress)
          if (err != nil) {
             fmt.Println(err)
          }
+         fmt.Println("New address: ", blarg.NanoAddress)
       case "5":
          _, err := findTotalBalance()
          if (err != nil) {
@@ -135,7 +149,7 @@ func main() {
          }
       case "6":
          adhocAddress := []string{
-            "nano_183t7xkm6is3ge3dedfuxepyhd36i9qmehc9yenjzd8ahytu8xjw5pt7eec3",
+            "nano_39tep37adxofrrparfdcmicbfxm81ytnzn84gp7qt8y4jy9zhz6c4hia5atm",
             "lkjlkj",
          }
          nanoRecieved := new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)
@@ -145,42 +159,29 @@ func main() {
          }
 
       case "7":
-
          keyMan.WalletVerbose(true)
-         var seed keyMan.Key
-         keyMan.GenerateSeed(&seed)
-         conn, _ := pgx.Connect(context.Background(), databaseUrl)
+         fmt.Scan(&usr)
+         seed, _ := strconv.Atoi(usr)
+         fmt.Scan(&usr)
+         index, _ := strconv.Atoi(usr)
 
-         id, _ := insertSeed(conn, seed.Seed)
-
-         fmt.Println("ID: ", id)
-
-         queryString :=
-         "SELECT " +
-            "pgp_sym_decrypt_bytea(seed, $1)" +
-         "FROM " +
-            "seeds " +
-         "WHERE " +
-            "id = $2;"
-
-         var seed2 keyMan.Key
-         row, _ := conn.Query(context.Background(), queryString, databasePassword, id)
-         //if (err != nil) {
-            //return true, fmt.Errorf("checkBlackList: seed query: %w", err)
-         //}
-         if (row.Next()) {
-            row.Scan(&seed2.Seed)
-            row.Close()
-            //if (err != nil) {
-               //return true, fmt.Errorf("checkBlacklist: %w", err)
-            //}
-         } else {
-            //return true, fmt.Errorf("checkBlacklist: No such seed found: %d", parentSeed)
+         _, err := getWalletInfo(seed, index)
+         if (err != nil) {
+            fmt.Println(err.Error())
          }
-         row.Close()
-         keyMan.SeedToKeys(&seed2)
-         fmt.Println("wallet: ", seed2.NanoAddress)
 
+      case "8":
+         fmt.Print("Seed: ")
+         fmt.Scan(&usr)
+         seed, _ := strconv.Atoi(usr)
+         fmt.Print("Index: ")
+         fmt.Scan(&usr)
+         index, _ := strconv.Atoi(usr)
+         fmt.Print("Nano: ")
+         fmt.Scan(&usr)
+         nano, _ := strconv.Atoi(usr)
+
+         manualWalletUpdate(seed, index, nano)
 
       default:
          break //menu
@@ -210,7 +211,7 @@ func insertSeed(conn *pgx.Conn, seed []byte) (int, error) {
    if (rows.Next()) {
       err = rows.Scan(&id)
       if (err != nil) {
-         return -1, fmt.Errorf("inserSeed: &w ", err)
+         return -1, fmt.Errorf("insertSeed: %w ", err)
       }
    }
 
@@ -219,12 +220,12 @@ func insertSeed(conn *pgx.Conn, seed []byte) (int, error) {
    return id, nil
 }
 
-func userRequestsNewAddress(receivingAddress string) error {
+func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
    var seed keyMan.Key
 
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return fmt.Errorf("userRequestsNewAddress: %w", err)
+      return nil, 0, fmt.Errorf("getNewAddress: %w", err)
    }
    defer conn.Close(context.Background())
 
@@ -243,7 +244,7 @@ func userRequestsNewAddress(receivingAddress string) error {
    // TODO start a tranasction and increment current_index. Only commit after everthing checks out
    rows, err := conn.Query(context.Background(), queryString, databasePassword, MAX_INDEX)
    if (err != nil) {
-      return fmt.Errorf("userRequestsNewAddress: Query seed: ", err)
+      return nil, 0, fmt.Errorf("getNewAddress: Query seed: %w", err)
    }
 
    // Get a current seed. If it fails, generate a new one.
@@ -251,7 +252,7 @@ func userRequestsNewAddress(receivingAddress string) error {
    if (rows.Next()) {
       err = rows.Scan(&id, &seed.Seed, &seed.Index)
       if (err != nil) {
-         return fmt.Errorf("userRequestsNewAddress: &w ", err)
+         return nil, 0, fmt.Errorf("getNewAddress: %w ", err)
       } else {
          rows.Close()
 
@@ -265,16 +266,14 @@ func userRequestsNewAddress(receivingAddress string) error {
       // No valid seeds in database. Generate a new one.
       err = keyMan.GenerateSeed(&seed)
       if (err != nil) {
-         return fmt.Errorf("userRequestsNewAddress: &w ", err)
+         return nil, 0, fmt.Errorf("getNewAddress: %w ", err)
       }
 
       id, err = insertSeed(conn, seed.Seed)
       if (err != nil) {
-         return fmt.Errorf("userRequestsNewAddress: &w ", err)
+         return nil, 0, fmt.Errorf("getNewAddress: %w ", err)
       }
    }
-   fmt.Println("seed ID: ", id)
-
 
    // Add to list of managed wallets
    queryString =
@@ -286,13 +285,11 @@ func userRequestsNewAddress(receivingAddress string) error {
    hash := blake2b.Sum256(seed.PublicKey)
    rowsAffected, err := conn.Exec(context.Background(), queryString, id, seed.Index, hash[:])
    if (err != nil) {
-      return fmt.Errorf("userRequestsNewAddress: %w", err)
+      return nil, 0, fmt.Errorf("getNewAddress: %w", err)
    }
    if (rowsAffected.RowsAffected() < 1) {
-      return fmt.Errorf("userRequestsNewAddress: no rows affected in insert")
+      return nil, 0, fmt.Errorf("getNewAddress: no rows affected in insert")
    }
-
-   fmt.Println("Next address retrieved: ", seed.NanoAddress)
 
    queryString =
    "UPDATE " +
@@ -304,26 +301,27 @@ func userRequestsNewAddress(receivingAddress string) error {
 
    rowsAffected, err = conn.Exec(context.Background(), queryString, seed.Index, id)
    if (err != nil) {
-      return fmt.Errorf("userRequestsNewAddress: Update: %w", err)
    }
    if (rowsAffected.RowsAffected() < 1) {
-      return fmt.Errorf("userRequestsNewAddress: no rows affected during index incrament")
+      return nil, 0, fmt.Errorf("getNewAddress: no rows affected during index incrament")
    }
 
-   // Blacklist new addres with the receiving address
-   receivingAddressByte, err := keyMan.AddressToPubKey(receivingAddress)
-   if (err != nil) {
-      return fmt.Errorf("userRequestsNewAddress: %w", err)
+   // blacklist new addres with the receiving address
+   if (receivingAddress != "") {
+      receivingAddressByte, err := keyMan.AddressToPubKey(receivingAddress)
+      if (err != nil) {
+         return nil, 0, fmt.Errorf("getNewAddress: %w", err)
+      }
+
+      err = blacklist(conn, seed.PublicKey, receivingAddressByte)
+      if (err != nil) {
+         return nil, 0, fmt.Errorf("getNewAddress: Blacklist falied: %w", err)
+      }
+
+      setClientAddress(id, seed.Index, receivingAddressByte)
    }
 
-   err = blacklist(conn, seed.PublicKey, receivingAddressByte)
-   if (err != nil) {
-      return fmt.Errorf("userRequestsNewAddress: Blacklist falied: %w", err)
-   }
-
-   setClientAddress(id, seed.Index, receivingAddressByte)
-
-   return nil
+   return &seed, id, nil
 }
 
 // blacklist takes two public addresses, hashes them and stores them in the
@@ -373,11 +371,10 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    tx, _ := conn.BeginTx(context.Background(), pgx.TxOptions{})
    defer tx.Rollback(context.Background())
 
-   // TODO Don't accept if we don't have an active transaction available
-
    queryString :=
    "SELECT " +
-      "* " +
+      "parent_seed, " +
+      "index " +
    "FROM " +
       "wallets " +
    "WHERE " +
@@ -397,10 +394,8 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
 
    var parentSeed int
    var index int
-   var balance decimal.Decimal
-   var hash []byte
    if (row.Next()) {
-      err = row.Scan(&parentSeed, &index, &balance, &hash)
+      err = row.Scan(&parentSeed, &index)
       row.Close()
       if (err != nil) {
          return fmt.Errorf("receivedNano: %w", err)
@@ -410,12 +405,17 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    }
 
    // TODO This is just for testing
-   clientPub, _ := keyMan.AddressToPubKey("nano_157gdx49th7w6yrtgi6ciys9kfcs49iew5fa64j8584178p5zjaum33jfut6")
+   clientPub, _ := keyMan.AddressToPubKey("nano_36uqf39z8nydejhehihtkopyd8hjouqi7su9ccxw85dwft3mtm15myzgz3mx")
    setClientAddress(parentSeed, index, clientPub)
    // TODO end of test code
 
    // Get client address for later use. TODO check for nil
    clientAddress := getClientAddress(parentSeed, index)
+   if (clientAddress == nil) {
+      // No active transaction, send the funds back to owner
+      // TODO sendNano()
+      return fmt.Errorf("receivedNano: no active transaction available")
+   }
 
    // Add funds we got into our database of wallets
    queryString =
@@ -442,6 +442,7 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    fee := new(big.Int).Div(payment, big.NewInt(feePercent))
    amountToSend := new(big.Int).Sub(payment, fee)
    amountToSendDecimal := decimal.NewFromBigInt(amountToSend, 0)
+   fmt.Println("amount to send: ", amountToSendDecimal)
 
    // Find all wallets that have enough funds to send out the payment that
    // aren't the wallet we just received in.
@@ -466,50 +467,122 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    }
 
    var foundAddress bool
-   var sendingKey *keyMan.Key
+   var sendingKeys []*keyMan.Key
+   var walletSeed []int
+   var walletBalance []decimal.Decimal
+   var tmpSeed int
+   var tmpIndex int
+   var tmpBalance decimal.Decimal
    for rows.Next() {
-      err = rows.Scan(&parentSeed, &index, &balance)
+      err = rows.Scan(&tmpSeed, &tmpIndex, &tmpBalance)
       if (err != nil) {
          return fmt.Errorf("receivedNano: Scan: %w", err)
       }
 
       // Check the blacklist before accepting
-      foundEntry, tmpKey, err := checkBlackList(parentSeed, index, clientAddress)
+      foundEntry, tmpKey, err := checkBlackList(tmpSeed, tmpIndex, clientAddress)
       if (err != nil) {
          return fmt.Errorf("receivedNano: %w", err)
       }
       if (!foundEntry) {
          // Uset this address
-         sendingKey = tmpKey
+         sendingKeys = append(sendingKeys, tmpKey)
+         walletSeed = append(walletSeed, tmpSeed)
+         walletBalance = append(walletBalance, tmpBalance)
          foundAddress = true
+         fmt.Println("sending from:", tmpSeed, tmpIndex)
          break
       }
    }
    rows.Close()
 
    if (!foundAddress) {
-      // TODO add support for multi wallet sending
-      return fmt.Errorf("receivedNano: Not enough funds in a single wallet")
+      // No single wallet has enough, try to combine several.
+      queryString =
+      "SELECT " +
+         "parent_seed, " +
+         "index, " +
+         "balance " +
+      "FROM " +
+         "wallets " +
+      "WHERE " +
+         "balance > 0 AND NOT (" +
+         "parent_seed = $1 AND " +
+         "index = $2)" +
+      "ORDER BY " +
+         "balance, " +
+         "index;"
+
+      rows, err := tx.Query(context.Background(), queryString, parentSeed, index)
+      if (err != nil) {
+         return fmt.Errorf("receiviedNano: Query: %w", err)
+      }
+
+      var enough bool
+      var totalBalance decimal.Decimal
+      for rows.Next() {
+         fmt.Println(" 1")
+         err = rows.Scan(&tmpSeed, &tmpIndex, &tmpBalance)
+         if (err != nil) {
+            return fmt.Errorf("receivedNano: Scan: %w", err)
+         }
+
+         // Check the blacklist before adding to the list
+         foundEntry, tmpKey, err := checkBlackList(tmpSeed, tmpIndex, clientAddress)
+         if (err != nil) {
+            return fmt.Errorf("receivedNano: %w", err)
+         }
+         if (!foundEntry) {
+            sendingKeys = append(sendingKeys, tmpKey)
+            walletSeed = append(walletSeed, tmpSeed)
+            walletBalance = append(walletBalance, tmpBalance)
+            totalBalance = totalBalance.Add(tmpBalance)
+            if (totalBalance.Cmp(amountToSendDecimal) >= 0) {
+               // We've found enough
+               enough = true
+               break
+            }
+         }
+      }
+      rows.Close()
+      if (!enough) {
+         return fmt.Errorf("receivedNano: not enough funds")
+      }
    }
 
-   // TODO do a send trasaction to specified wallet stored activeTransactionList
-   sendNano(sendingKey.PrivateKey, clientAddress, big.NewInt(4100))
+   // Send nano to client
+   if (len(sendingKeys) == 1) {
+      sendNano(sendingKeys[0].PrivateKey, clientAddress, big.NewInt(4100))
+      sendInDatabase(walletSeed[0], sendingKeys[0].Index, amountToSendDecimal, 0, 0, tx)
+   } else if (len(sendingKeys) > 1) {
+      fmt.Println(" 2")
+      // Need to do a multi-send; Get a new wallet to combine all funds into
+      transitionalAddress, transitionSeedId, err := getNewAddress("")
+      if (err != nil) {
+         return fmt.Errorf("receivedNano: %w", err)
+      }
 
-   queryString =
-   "UPDATE " +
-      "wallets "+
-   "SET " +
-      "\"balance\" = \"balance\" - $1 " +
-   "WHERE " +
-      "\"parent_seed\" = $2 AND " +
-      "\"index\" = $3;"
+      var totalSent decimal.Decimal
+      var currentSend decimal.Decimal
+      for i, key := range sendingKeys {
 
-   rowsAffected, err = tx.Exec(context.Background(), queryString, amountToSendDecimal, parentSeed, index)
-   if (err != nil) {
-      return fmt.Errorf("receivedNano: Update: %w", err)
-   }
-   if (rowsAffected.RowsAffected() < 1) {
-      return fmt.Errorf("receivedNano: no rows affected during index incrament")
+         // if (total + balance) > payment
+         if (totalSent.Add(walletBalance[i]).Cmp(amountToSendDecimal) > 0) {
+            currentSend = amountToSendDecimal.Sub(totalSent)
+         } else {
+            currentSend = walletBalance[i]
+         }
+         sendNano(key.PrivateKey, transitionalAddress.PublicKey, currentSend.BigInt())
+         sendInDatabase(walletSeed[i], key.Index, currentSend, transitionSeedId, transitionalAddress.Index, tx)
+         totalSent = totalSent.Add(currentSend)
+         fmt.Println("Sending", currentSend.BigInt(), "from", walletSeed[i], key.Index, "to", transitionSeedId, transitionalAddress.Index)
+      }
+      // Now send to client
+      fmt.Println("Sending", amountToSend, "from", transitionSeedId, transitionalAddress.Index, "to client.")
+      sendNano(transitionalAddress.PrivateKey, clientAddress, big.NewInt(4100))
+      sendInDatabase(transitionSeedId, transitionalAddress.Index, amountToSendDecimal, 0, 0, tx)
+   } else {
+      return fmt.Errorf("receivedNano: not enough funds(2)")
    }
 
    tx.Commit(context.Background())
@@ -609,7 +682,9 @@ func checkBlackList(parentSeed int, index int, clientAddress []byte) (bool, *key
    concat := append(seed.PublicKey, clientAddress[:]...)
    blackListHash := blake2b.Sum256(concat)
 
-   fmt.Println("check blacklist for:", hex.EncodeToString(blackListHash[:]))
+   if (verbose) {
+      fmt.Println("check blacklist for:", hex.EncodeToString(blackListHash[:]))
+   }
 
    // Check hash against the blacklist
    queryString =
@@ -643,9 +718,7 @@ func setClientAddress(parentSeed int, index int, clientAddress []byte) {
    activeTransactionList[key] = clientAddress
 }
 
-func initNanoymousCore() {
-   fmt.Println("Starting nanonymous Core on ", time.Now())
-
+func initNanoymousCore() error {
    // Grab embedded data
    for _, line := range strings.Split(embeddedData, "\n") {
       word := strings.Split(line, " = ")
@@ -658,9 +731,127 @@ func initNanoymousCore() {
       }
    }
 
-   // TODO hardcode a hash to make sure the password is correct
+   // Check all data is as expected
+   if (databaseUrl == "") {
+      return fmt.Errorf("initNanoymousCore: database Url not found! (Use \"db = {yourdb}\" in embed.txt)")
+   }
+   if (databasePassword == "") {
+      return fmt.Errorf("initNanoymousCore: database password not found! (Use \"pass = {yourpassword}\" in embed.txt)")
+   }
+
+
+   return nil
 }
 
 func sendNano(fromPrivateKey []byte, toPublicKey []byte, amount *big.Int) bool {
+   // TODO TODO TODO
    return true
+}
+
+func sendInDatabase(fromSeed int, fromIndex int, amount decimal.Decimal, toSeed int, toIndex int, conn psqlDB) error {
+
+   queryString :=
+   "UPDATE " +
+      "wallets "+
+   "SET " +
+      "\"balance\" = \"balance\" - $1 " +
+   "WHERE " +
+      "\"parent_seed\" = $2 AND " +
+      "\"index\" = $3;"
+
+   rowsAffected, err := conn.Exec(context.Background(), queryString, amount, fromSeed, fromIndex)
+   if (err != nil) {
+      return fmt.Errorf("sendInDatabase: Update: %w", err)
+   }
+   if (rowsAffected.RowsAffected() < 1) {
+      return fmt.Errorf("sendInDatabase: no rows affected during index incrament")
+   }
+
+   if (toSeed != 0) {
+      queryString =
+      "UPDATE " +
+         "wallets "+
+      "SET " +
+         "\"balance\" = \"balance\" + $1 " +
+      "WHERE " +
+         "\"parent_seed\" = $2 AND " +
+         "\"index\" = $3;"
+      rowsAffected, err := conn.Exec(context.Background(), queryString, amount, toSeed, toIndex)
+      if (err != nil) {
+         return fmt.Errorf("sendInDatabase: Update: %w", err)
+      }
+      if (rowsAffected.RowsAffected() < 1) {
+         return fmt.Errorf("sendInDatabase: no rows affected during index incrament")
+      }
+   }
+
+   return nil
+}
+
+func getWalletInfo(seed int, index int) (*keyMan.Key, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, fmt.Errorf("getWalletInfo: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "pgp_sym_decrypt_bytea(seed, $1)" +
+   "FROM " +
+      "seeds " +
+   "WHERE " +
+      "id = $2;"
+
+   row, err := conn.Query(context.Background(), queryString, databasePassword, seed)
+   if (err != nil) {
+      return nil, fmt.Errorf("getWalletInfo: %w", err)
+   }
+
+   var key keyMan.Key
+   if (row.Next()) {
+      err = row.Scan(&key.Seed)
+      if (err != nil) {
+         return nil, fmt.Errorf("getWalletInfo: %w ", err)
+      } else {
+         row.Close()
+
+         key.Index = index
+         err = keyMan.SeedToKeys(&key)
+         if (err != nil) {
+            return nil, fmt.Errorf("getWalletInfo: %w", err)
+         }
+      }
+   }
+
+   return &key, nil
+}
+
+func manualWalletUpdate(seed int, index int, nano int) error {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return fmt.Errorf("receivedNano: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   amount := decimal.NewFromBigInt(new(big.Int).Mul(big.NewInt(int64(nano)), new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)), 0)
+
+   queryString :=
+   "UPDATE " +
+      "wallets " +
+   "SET " +
+      "\"balance\" = \"balance\" + $1 " +
+   "WHERE " +
+      "\"parent_seed\" = $2 AND " +
+      "\"index\" = $3;"
+
+   rowsAffected, err := conn.Exec(context.Background(), queryString, amount, seed, index)
+   if (err != nil) {
+      return fmt.Errorf("manualWalletUpdate: Update: %w", err)
+   }
+   if (rowsAffected.RowsAffected() < 1) {
+      return fmt.Errorf("manualWalletUpdate: no rows affected during index incrament")
+   }
+
+   return nil
 }
