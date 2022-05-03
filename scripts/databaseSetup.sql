@@ -1,6 +1,10 @@
 
 -- run with:
--- psql postgres -d nanonymousdb -f databaseSetup.sql
+-- psql -U postgres -f databaseSetup.sql
+
+SELECT 'CREATE DATABASE nanonymousdb'
+WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nanonymousdb')\gexec
+\c nanonymousdb
 
 CREATE TABLE IF NOT EXISTS seeds(
    id SERIAL PRIMARY KEY,
@@ -26,4 +30,12 @@ CREATE TABLE IF NOT EXISTS blacklist(
 );
 
 CREATE EXTENSION pgcrypto;
+
+CREATE USER go WITH PASSWORD 'my_password';
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO go;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO go;
+GRANT INSERT ON ALL TABLES IN SCHEMA public TO go;
+GRANT UPDATE ON ALL TABLES IN SCHEMA public TO go;
+GRANT REFERENCES ON ALL TABLES IN SCHEMA public TO go;
+GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO go;
 

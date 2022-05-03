@@ -131,7 +131,8 @@ func main() {
 
          _, err = insertSeed(conn, newSeed.Seed)
 
-         if (err != nil) { fmt.Println("main: ", err)
+         if (err != nil) {
+            fmt.Println("main: ", err)
             break //menu
          }
 

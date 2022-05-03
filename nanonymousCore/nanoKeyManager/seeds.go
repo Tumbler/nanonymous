@@ -156,7 +156,11 @@ func GenerateSeed(newKey *Key) error {
       return fmt.Errorf("GenerateSeed: %w", err)
    }
 
+   saveBehaviour := verbose
+   verbose = false
    err = SeedToKeys(newKey);
+   verbose = saveBehaviour
+
    if (err != nil) {
       return fmt.Errorf("GenerateSeed: %w", err)
    }
