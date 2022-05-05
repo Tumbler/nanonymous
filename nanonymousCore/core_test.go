@@ -7,11 +7,17 @@ import (
    "context"
    "os/exec"
    "strings"
+   "math/big"
+
+   // Local packages
+   keyMan "nanoKeyManager"
 
    // 3rd party packages
    pgx "github.com/jackc/pgx/v4"
+   "github.com/shopspring/decimal"
 )
 
+const resetScript = "../scripts/resetTestDatabase.sql"
 
 func Test_Password(t *testing.T) {
    const SALT = "E29A8053962DB8E76A7"
@@ -37,7 +43,7 @@ func Test_insertSeed(t *testing.T) {
    databasePassword = "testing"
 
    // Reset database to known state
-   script := exec.Command("psql", "-f", "../scripts/resetTestDatabase.sql", "-U", "test", "-d", "gotests")
+   script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
    script.Run()
 
    test1 := []struct {
@@ -92,7 +98,7 @@ func Test_getNewAddress(t *testing.T) {
    databasePassword = "testing"
 
    // Reset database to known state
-   script := exec.Command("psql", "-f", "../scripts/resetTestDatabase.sql", "-U", "test", "-d", "gotests")
+   script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
    script.Run()
 
    test1 := []struct {
@@ -100,15 +106,15 @@ func Test_getNewAddress(t *testing.T) {
       outputBlacklist string
       outputAddress string
    }{
-      {"nano_397i3mizjznjinko3b6rz5szigc18jrogzqd9pxz7meo4mqsuwjyshoxm3xq",
-       "23776c9dc9ebad79157db84d28f15fe542c40b9a900382d25e1e8268ff3258d1",
-       "nano_3f4pznen4utfxmeu7jmucnhg6ut4rd9fk87s7xnnrkr4okph65158j4xciqf" },
       {"nano_3qis7ubfx8ebmybeoks4f3cied1pzfykgp8ejj8gxk3pkdpmjo74gmhzjeba",
        "012c5241ea1d55a3a4d01e4689ffd86cb81ae995be222c1e412f41f6a5970988",
        "nano_1osskweb73zsqnjj638st4cjmf9s56hdnb7bh941iwkb9qszamxg5seeadhw" },
       {"nano_1b9opg96jquha58fueg8g8zjofauw5ua3pqfer6bdnjjj34x51s6j8dq83hh",
        "64d89bab0dca839602b7194cdc8620fff3db11353c71f5fc3393f374ce6ab30b",
        "nano_3whzcsaf9xq56dftxxnc1z554s7ii6gdp8r1jti5sdarh73qcfaj6xxpd5ui" },
+      {"nano_34jz5qi36gkemhncpu3hbnzfjg1pam4b49fhg8oo9g96c795q9dz3e3n19bb",
+       "25b16d3f62c5f93d2a4ffff8da3cc7c28fe714d374329973b569c7e08e7475a5",
+       "nano_3gwfb61goagc5pftnghkpy85rf4qszkcp5e1pczo9qhqgxqwzoiby75ybwuj" },
    }
 
    for _, test := range test1 {
@@ -146,3 +152,253 @@ func Test_getNewAddress(t *testing.T) {
 
    }
 }
+
+func Test_findTotalBalance(t *testing.T) {
+   databaseUrl = "postgres://test:testing@localhost:5432/gotests"
+   databasePassword = "testing"
+
+   // Reset database to known state
+   script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
+   script.Run()
+
+   balance, err := findTotalBalance()
+   if (err != nil) {
+      t.Errorf("Error during execution: %s", err.Error())
+   }
+
+   if (balance != 44.8) {
+      t.Errorf("Bad balance, want: %.1f, got %.1f", 45.8, balance)
+   }
+}
+
+func Test_receivedNano(t *testing.T) {
+   databaseUrl = "postgres://test:testing@localhost:5432/gotests"
+   databasePassword = "testing"
+
+   // Reset database to known state
+   script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
+   script.Run()
+
+   test1 := []struct {
+      nanoAddress string
+      clientAddress string
+      seedId int
+      index int
+      nanoReceived *big.Int
+      balances []*big.Int
+   }{
+      {"nano_3f4pznen4utfxmeu7jmucnhg6ut4rd9fk87s7xnnrkr4okph65158j4xciqf",
+       "nano_1bgho34hpofn4sxencbr8916sbbyyoosr5mmepewyguo8te15qkq8hefnrdn",
+       1,
+       3,
+       new(big.Int).Mul(big.NewInt(10), new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)),
+[]*big.Int{new(big.Int).Mul(big.NewInt(3102), new(big.Int).Exp(big.NewInt(10), big.NewInt(28), nil)),
+           new(big.Int).Mul(big.NewInt(6),    new(big.Int).Exp(big.NewInt(10), big.NewInt(29), nil)),
+           new(big.Int).Mul(big.NewInt(32),   new(big.Int).Exp(big.NewInt(10), big.NewInt(29), nil)),
+           new(big.Int).Mul(big.NewInt(10),   new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil))},
+      },
+      {"nano_1ts8ejswbndstgp6r4wgi7yr593rg7ryab4wuzburmay3pxbrgu3i5f1fz3n",
+       "nano_14gfu8wkz48o3xf869ehp7rd9oah1993d1deguqknkksidp5s4b46czn86sw",
+       1,
+       0,
+       new(big.Int).Mul(big.NewInt(9), new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)),
+[]*big.Int{new(big.Int).Mul(big.NewInt(4002), new(big.Int).Exp(big.NewInt(10), big.NewInt(28), nil)),
+           new(big.Int).Mul(big.NewInt(6),    new(big.Int).Exp(big.NewInt(10), big.NewInt(29), nil)),
+           new(big.Int).Mul(big.NewInt(32),   new(big.Int).Exp(big.NewInt(10), big.NewInt(29), nil)),
+           new(big.Int).Mul(big.NewInt(1018), new(big.Int).Exp(big.NewInt(10), big.NewInt(27), nil))},
+      },
+      {"nano_1ie4own1s5qmmyd33u9a64169ox54kdb3khs1yt84gfgd7n7dshgcjkegxei",
+       "nano_14gfu8wkz48o3xf869ehp7rd9oah1993d1deguqknkksidp5s4b46czn86sw",
+       1,
+       1,
+       new(big.Int).Mul(big.NewInt(53), new(big.Int).Exp(big.NewInt(10), big.NewInt(29), nil)),
+[]*big.Int{new(big.Int).Mul(big.NewInt(347306), new(big.Int).Exp(big.NewInt(10), big.NewInt(26), nil)),
+           new(big.Int).Mul(big.NewInt(59),     new(big.Int).Exp(big.NewInt(10), big.NewInt(29), nil)),
+           new(big.Int).Mul(big.NewInt(32),     new(big.Int).Exp(big.NewInt(10), big.NewInt(29), nil)),
+           new(big.Int).Mul(big.NewInt(1018),   new(big.Int).Exp(big.NewInt(10), big.NewInt(27), nil))},
+      },
+      {"nano_1c73mmx64sxpudp1d46w56ct8kynnzt5bdufocfkspn8beknbb3mngj3a6br",
+       // This address is blacklisted from address 1,0. That's why it won't take from there
+       "nano_3gickb6kgex966fs9666jghehh7bwrpcmqmdbyqa1441i83dwufrr9uojn81",
+       1,
+       2,
+       new(big.Int).Mul(big.NewInt(6), new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)),
+[]*big.Int{new(big.Int).Mul(big.NewInt(347306), new(big.Int).Exp(big.NewInt(10), big.NewInt(26), nil)),
+           new(big.Int).Mul(big.NewInt(93),     new(big.Int).Exp(big.NewInt(10), big.NewInt(28), nil)),
+           new(big.Int).Mul(big.NewInt(92),     new(big.Int).Exp(big.NewInt(10), big.NewInt(29), nil)),
+           new(big.Int).Mul(big.NewInt(0),      new(big.Int).Exp(big.NewInt(10), big.NewInt(28), nil)),
+           new(big.Int).Mul(big.NewInt(0),      new(big.Int).Exp(big.NewInt(10), big.NewInt(28), nil))},
+      },
+   }
+
+   for _, test := range test1 {
+      // Add address to client list
+      clientPub, err := keyMan.AddressToPubKey(test.clientAddress)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+      setClientAddress(test.seedId, test.index, clientPub)
+
+      err = receivedNano(test.nanoAddress, test.nanoReceived)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+
+      // Now check that the database is as we expect
+      conn, err := pgx.Connect(context.Background(), databaseUrl)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+      queryString :=
+      "SELECT " +
+         "balance, " +
+         "parent_seed, " +
+         "index " +
+      "FROM " +
+         "wallets " +
+      "ORDER BY " +
+         "index;"
+
+      rows, err := conn.Query(context.Background(), queryString)
+
+      var balance decimal.Decimal
+      var seedId int
+      var index int
+      for i := 0; rows.Next(); i++ {
+         err = rows.Scan(&balance, &seedId, &index)
+         if (err != nil) {
+            t.Errorf("Error during execution: %s", err.Error())
+         }
+         if (i >= len(test.balances)) {
+            t.Errorf("Too many wallets in database")
+            return
+         }
+
+         if (balance.Cmp(decimal.NewFromBigInt(test.balances[i], 0)) != 0) {
+            t.Errorf("Wrong balance at %d,%d\r\n want: %d\r\n got:  %d", seedId, index, balance.BigInt(), test.balances[i])
+         }
+      }
+   }
+
+}
+
+func Test_RawToNano(t *testing.T) {
+
+   test1 := []struct {
+      input *big.Int
+      output float64
+   }{
+      {new(big.Int).Mul(big.NewInt(41), new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)),
+       41},
+      {new(big.Int).Mul(big.NewInt(917), new(big.Int).Exp(big.NewInt(10), big.NewInt(28), nil)),
+       9.17},
+      {new(big.Int).Mul(big.NewInt(148), new(big.Int).Exp(big.NewInt(10), big.NewInt(27), nil)),
+       0.148},
+      {new(big.Int).Mul(big.NewInt(314), new(big.Int).Exp(big.NewInt(10), big.NewInt(28), nil)),
+       3.14},
+      {new(big.Int).Mul(big.NewInt(4857), new(big.Int).Exp(big.NewInt(10), big.NewInt(29), nil)),
+       485.7},
+   }
+
+   for _, test := range test1 {
+
+      check := rawToNANO(test.input)
+      if (check != test.output) {
+         t.Errorf("Conversion incorrect, want: %f, got, %f", test.output, check)
+      }
+   }
+}
+
+// Blacklist in test database:
+// nano_1ts8ejswbndstgp6r4wgi7yr593rg7ryab4wuzburmay3pxbrgu3i5f1fz3n
+// nano_3gickb6kgex966fs9666jghehh7bwrpcmqmdbyqa1441i83dwufrr9uojn81
+//
+// nano_1ie4own1s5qmmyd33u9a64169ox54kdb3khs1yt84gfgd7n7dshgcjkegxei
+// nano_1x6r8jefor8z4sswemkqqcnognf3m7wu7u53jbe5auqpg8rrakbjbrit3xg9
+//
+// nano_1c73mmx64sxpudp1d46w56ct8kynnzt5bdufocfkspn8beknbb3mngj3a6br
+// nano_1i7jmxg4t4jdqha8rnmoep6gst36d57r7c97p3amazyjdb45wkizp161fs6f
+//
+// nano_3f4pznen4utfxmeu7jmucnhg6ut4rd9fk87s7xnnrkr4okph65158j4xciqf
+// nano_3gq8fhso1ukbegs63tu5nk7p8mum7z58qgi9iibkh8tc3jqptt8ds7k9jj9h
+
+func Test_checkBlackList(t *testing.T) {
+   databaseUrl = "postgres://test:testing@localhost:5432/gotests"
+   databasePassword = "testing"
+
+   // Reset database to known state
+   script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
+   script.Run()
+
+   // Check to make sure they're there
+   test1 := []struct {
+      seedId int
+      index int
+      clientAddress string
+   }{
+      {1,
+       0,
+      "nano_3gickb6kgex966fs9666jghehh7bwrpcmqmdbyqa1441i83dwufrr9uojn81"},
+      {1,
+       1,
+      "nano_1x6r8jefor8z4sswemkqqcnognf3m7wu7u53jbe5auqpg8rrakbjbrit3xg9"},
+      {1,
+       2,
+      "nano_1i7jmxg4t4jdqha8rnmoep6gst36d57r7c97p3amazyjdb45wkizp161fs6f"},
+      {1,
+       3,
+      "nano_3gq8fhso1ukbegs63tu5nk7p8mum7z58qgi9iibkh8tc3jqptt8ds7k9jj9h"},
+   }
+
+   // Check for false positives
+   test2 := []struct {
+      seedId int
+      index int
+      clientAddress string
+   }{
+      {1,
+       0,
+      "nano_35iadfbqk7r7purmds56fmqkeffo6se4zpncyy6ftun7wr7p9rg4r8k9wr44"},
+      {1,
+       1,
+      "nano_3m91gkpno5s46gquu6upxrknk3zamrwiibd35ryioz6zwuq5kyx4m36t35u6"},
+      {1,
+       2,
+      "nano_1rscbkzpacdz49ujso1eh7xm5hkui8ee1hgienhk8z64r9byzdeqwko3tio1"},
+      {1,
+       3,
+      "nano_3jcq5bk5i3idpyw9hozrnuksy96jn9jyy3f8auhdr7ozbudc43rrnrdcy5er"},
+   }
+
+   for _, test := range test1 {
+
+      clientPub, err := keyMan.AddressToPubKey(test.clientAddress)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+      check, _, err := checkBlackList(test.seedId, test.index, clientPub)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+      if !(check) {
+         t.Errorf("Expected blacklist, but could not find. %d,%d", test.seedId, test.index)
+      }
+   }
+
+   for _, test := range test2 {
+
+      clientPub, err := keyMan.AddressToPubKey(test.clientAddress)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+      check, _, err := checkBlackList(test.seedId, test.index, clientPub)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+      if (check) {
+         t.Errorf("No blacklist exists but function returned true. %d,%d", test.seedId, test.index)
+      }
+   }
+
+}
+

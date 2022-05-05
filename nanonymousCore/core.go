@@ -8,6 +8,7 @@ import (
    "strings"
    "math/big"
    "strconv"
+   "math"
    _"embed"
 
    // Local packages
@@ -32,12 +33,11 @@ var databasePassword string
 
 const MAX_INDEX = 4294967295
 
-//type activeTransaction struct {
-   //parentSeed int,
-   //index int,
-   //publicAddress []byte,
-//}
+// Fee in %
+const FEE_PERCENT = float64(0.2)
+var feeDividend int64
 
+// TODO what happens when there is a collision? (I.E 2 keys are identical)
 var activeTransactionList = make(map[string][]byte)
 
 type psqlDB interface {
@@ -69,7 +69,8 @@ func main() {
                 "5. Find total balance\n",
                 "6. Pretend nano receive\n",
                 "7. Get Wallet Info\n",
-                "8. Add nano to wallet\n")
+                "8. Add nano to wallet\n",
+             )
       fmt.Scan(&usr)
 
       switch (usr) {
@@ -137,7 +138,7 @@ func main() {
          }
 
       case "4":
-         adhocAddress := "nano_157gdx49th7w6yrtgi6ciys9kfcs49iew5fa64j8584178p5zjaum33jfut6"
+         adhocAddress := "nano_1hiqiw6j9wo33moia3scoajhheweysiq5w1xjqeqt8m6jx6so6gj39pae5ea"
          blarg, _, err := getNewAddress(adhocAddress)
          if (err != nil) {
             fmt.Println(err)
@@ -161,6 +162,7 @@ func main() {
 
       case "7":
          keyMan.WalletVerbose(true)
+         verbose = true
          fmt.Scan(&usr)
          seed, _ := strconv.Atoi(usr)
          fmt.Scan(&usr)
@@ -192,6 +194,35 @@ func main() {
 
 }
 
+// initNanoymousCore sets up our variables that need to preexist before other
+// functions can be called.
+func initNanoymousCore() error {
+   // Grab embedded data
+   for _, line := range strings.Split(embeddedData, "\n") {
+      word := strings.Split(line, " = ")
+
+      switch word[0] {
+         case "db":
+            databaseUrl = strings.Trim(word[1], "\r\n")
+         case "pass":
+            databasePassword = strings.Trim(word[1], "\r\n")
+      }
+   }
+
+   // Check all data is as expected
+   if (databaseUrl == "") {
+      return fmt.Errorf("initNanoymousCore: database Url not found! (Use \"db = {yourdb}\" in embed.txt)")
+   }
+   if (databasePassword == "") {
+      return fmt.Errorf("initNanoymousCore: database password not found! (Use \"pass = {yourpassword}\" in embed.txt)")
+   }
+   //databaseUrl = "postgres://test:testing@localhost:5432/gotests"
+   //databasePassword = "testing"
+
+   feeDividend = int64(math.Trunc(100/FEE_PERCENT))
+
+   return nil
+}
 
 // inserSeed saves an encrytped version of the seed given into the database.
 func insertSeed(conn *pgx.Conn, seed []byte) (int, error) {
@@ -221,6 +252,9 @@ func insertSeed(conn *pgx.Conn, seed []byte) (int, error) {
    return id, nil
 }
 
+// getNewAddress finds the next availalbe address given the keys stored in the
+// database and returns address B. If "receivingAddress" A is not an empty
+// string, then it will also place A->B into the blacklist.
 func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
    var seed keyMan.Key
 
@@ -362,6 +396,14 @@ func blacklist(conn *pgx.Conn, sendingAddress []byte, receivingAddress []byte) e
    return nil
 }
 
+// receivedNano is a large function that does most of the work for nanonymous.
+// Upon receiving nano it does 5 distinct things:
+//    (1) Updates the database with the newly recived nano
+//    (2) Checks if we were expecting the tranaction
+//    (3) Calculates the fee
+//    (4) Finds the wallet(s) with enough funds to support the transaction
+//        (minus the blacklisted ones)
+//    (5) Sends the funds to the client
 func receivedNano(nanoAddress string, payment *big.Int) error {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
@@ -372,6 +414,7 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    tx, _ := conn.BeginTx(context.Background(), pgx.TxOptions{})
    defer tx.Rollback(context.Background())
 
+   // Find which address just received funds based on the hash
    queryString :=
    "SELECT " +
       "parent_seed, " +
@@ -406,8 +449,8 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    }
 
    // TODO This is just for testing
-   clientPub, _ := keyMan.AddressToPubKey("nano_36uqf39z8nydejhehihtkopyd8hjouqi7su9ccxw85dwft3mtm15myzgz3mx")
-   setClientAddress(parentSeed, index, clientPub)
+   //clientPub, _ := keyMan.AddressToPubKey("nano_36uqf39z8nydejhehihtkopyd8hjouqi7su9ccxw85dwft3mtm15myzgz3mx")
+   //setClientAddress(parentSeed, index, clientPub)
    // TODO end of test code
 
    // Get client address for later use. TODO check for nil
@@ -437,13 +480,12 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
       return fmt.Errorf("receivedNano: no rows affected during index incrament")
    }
 
-
-   var feePercent int64
-   feePercent = 10
-   fee := new(big.Int).Div(payment, big.NewInt(feePercent))
+   fee := new(big.Int).Div(payment, big.NewInt(feeDividend))
    amountToSend := new(big.Int).Sub(payment, fee)
    amountToSendDecimal := decimal.NewFromBigInt(amountToSend, 0)
-   fmt.Println("amount to send: ", amountToSendDecimal)
+   if (verbose) {
+      fmt.Println("amount to send: ", amountToSendDecimal)
+   }
 
    // Find all wallets that have enough funds to send out the payment that
    // aren't the wallet we just received in.
@@ -491,7 +533,9 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
          walletSeed = append(walletSeed, tmpSeed)
          walletBalance = append(walletBalance, tmpBalance)
          foundAddress = true
-         fmt.Println("sending from:", tmpSeed, tmpIndex)
+         if (verbose) {
+            fmt.Println("sending from:", tmpSeed, tmpIndex)
+         }
          break
       }
    }
@@ -522,7 +566,6 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
       var enough bool
       var totalBalance decimal.Decimal
       for rows.Next() {
-         fmt.Println(" 1")
          err = rows.Scan(&tmpSeed, &tmpIndex, &tmpBalance)
          if (err != nil) {
             return fmt.Errorf("receivedNano: Scan: %w", err)
@@ -556,13 +599,13 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
       sendNano(sendingKeys[0].PrivateKey, clientAddress, big.NewInt(4100))
       sendInDatabase(walletSeed[0], sendingKeys[0].Index, amountToSendDecimal, 0, 0, tx)
    } else if (len(sendingKeys) > 1) {
-      fmt.Println(" 2")
       // Need to do a multi-send; Get a new wallet to combine all funds into
       transitionalAddress, transitionSeedId, err := getNewAddress("")
       if (err != nil) {
          return fmt.Errorf("receivedNano: %w", err)
       }
 
+      // Go through list of wallets and send to interim address
       var totalSent decimal.Decimal
       var currentSend decimal.Decimal
       for i, key := range sendingKeys {
@@ -576,10 +619,14 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
          sendNano(key.PrivateKey, transitionalAddress.PublicKey, currentSend.BigInt())
          sendInDatabase(walletSeed[i], key.Index, currentSend, transitionSeedId, transitionalAddress.Index, tx)
          totalSent = totalSent.Add(currentSend)
-         fmt.Println("Sending", currentSend.BigInt(), "from", walletSeed[i], key.Index, "to", transitionSeedId, transitionalAddress.Index)
+         if (verbose) {
+            fmt.Println("Sending", currentSend.BigInt(), "from", walletSeed[i], key.Index, "to", transitionSeedId, transitionalAddress.Index)
+         }
       }
       // Now send to client
-      fmt.Println("Sending", amountToSend, "from", transitionSeedId, transitionalAddress.Index, "to client.")
+      if (verbose) {
+         fmt.Println("Sending", amountToSend, "from", transitionSeedId, transitionalAddress.Index, "to client.")
+      }
       sendNano(transitionalAddress.PrivateKey, clientAddress, big.NewInt(4100))
       sendInDatabase(transitionSeedId, transitionalAddress.Index, amountToSendDecimal, 0, 0, tx)
    } else {
@@ -591,6 +638,8 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    return nil
 }
 
+// findTotalBalace is a simple function that adds up all the nano there is
+// amongst all the wallets and returns the amount in Nano.
 func findTotalBalance() (float64, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
@@ -619,7 +668,9 @@ func findTotalBalance() (float64, error) {
 
       nanoBalance = rawToNANO(rawBalance.BigInt())
 
-      fmt.Println("Total Balance is: Ӿ", nanoBalance)
+      if (verbose) {
+         fmt.Println("Total Balance is: Ӿ", nanoBalance)
+      }
    }
 
    return nanoBalance, nil
@@ -629,7 +680,7 @@ func findTotalBalance() (float64, error) {
 // this a nano). We don't have a conversion to go the other way as all
 // operations should be done in raw to avoid rounding errors. We only want to
 // convert when outputing for human readable format.
-func rawToNANO(raw *big.Int) float64{
+func rawToNANO(raw *big.Int) float64 {
    // 1 NANO is 10^30 raw
    rawConv := new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)
    rawConvFloat := new(big.Float).SetInt(rawConv)
@@ -642,6 +693,8 @@ func rawToNANO(raw *big.Int) float64{
    return NanoFloat64
 }
 
+// checkBlackList back referances our maintainted wallets, hashes them with with
+// a given wallet and finds out if the result is already in the blacklist.
 func checkBlackList(parentSeed int, index int, clientAddress []byte) (bool, *keyMan.Key, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
@@ -719,36 +772,12 @@ func setClientAddress(parentSeed int, index int, clientAddress []byte) {
    activeTransactionList[key] = clientAddress
 }
 
-func initNanoymousCore() error {
-   // Grab embedded data
-   for _, line := range strings.Split(embeddedData, "\n") {
-      word := strings.Split(line, " = ")
-
-      switch word[0] {
-         case "db":
-            databaseUrl = strings.Trim(word[1], "\r\n")
-         case "pass":
-            databasePassword = strings.Trim(word[1], "\r\n")
-      }
-   }
-
-   // Check all data is as expected
-   if (databaseUrl == "") {
-      return fmt.Errorf("initNanoymousCore: database Url not found! (Use \"db = {yourdb}\" in embed.txt)")
-   }
-   if (databasePassword == "") {
-      return fmt.Errorf("initNanoymousCore: database password not found! (Use \"pass = {yourpassword}\" in embed.txt)")
-   }
-
-
-   return nil
-}
-
 func sendNano(fromPrivateKey []byte, toPublicKey []byte, amount *big.Int) bool {
    // TODO TODO TODO
    return true
 }
 
+// sendInDatabase does the same work that sendNano does, but just in our local database instead.
 func sendInDatabase(fromSeed int, fromIndex int, amount decimal.Decimal, toSeed int, toIndex int, conn psqlDB) error {
 
    queryString :=
@@ -823,6 +852,10 @@ func getWalletInfo(seed int, index int) (*keyMan.Key, error) {
             return nil, fmt.Errorf("getWalletInfo: %w", err)
          }
       }
+   }
+
+   if (key.NanoAddress == "") {
+      return nil, fmt.Errorf("getWalletInfo: nil key: either bad address or password")
    }
 
    return &key, nil
