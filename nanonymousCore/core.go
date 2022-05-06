@@ -30,6 +30,8 @@ var embeddedData string
 var databaseUrl string
 // "pass = [pass]" in embed.txt to set this value
 var databasePassword string
+// "nodeIP = [ip]" in embed.txt to set this value
+var nodeIP string
 
 const MAX_INDEX = 4294967295
 
@@ -206,6 +208,8 @@ func initNanoymousCore() error {
             databaseUrl = strings.Trim(word[1], "\r\n")
          case "pass":
             databasePassword = strings.Trim(word[1], "\r\n")
+         case "nodeIP":
+            nodeIP = strings.Trim(word[1], "\r\n")
       }
    }
 
@@ -216,10 +220,20 @@ func initNanoymousCore() error {
    if (databasePassword == "") {
       return fmt.Errorf("initNanoymousCore: database password not found! (Use \"pass = {yourpassword}\" in embed.txt)")
    }
+   if (nodeIP == "") {
+      return fmt.Errorf("initNanoymousCore: node IP nout found! (Use \"nodeIP = {IP_Address}\" in embed.txt)")
+   }
    //databaseUrl = "postgres://test:testing@localhost:5432/gotests"
    //databasePassword = "testing"
 
    feeDividend = int64(math.Trunc(100/FEE_PERCENT))
+
+   var blarg *big.Int
+   blarg, err := getAddressBalance("nano_1s3dw5dn1m74hm73wxj96i5eouigp1w7nesw83tjo8kchrx8t6ekaymp6dgs")
+   if (err != nil) {
+     fmt.Println("initNanoymousCore: %s", err.Error())
+   }
+   fmt.Println("Balance of the thing I checked is:", blarg)
 
    return nil
 }
