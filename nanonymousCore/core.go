@@ -9,6 +9,7 @@ import (
    "math/big"
    "strconv"
    "math"
+   //"reflect"
    _"embed"
 
    // Local packages
@@ -72,10 +73,13 @@ func main() {
                 "6. Pretend nano receive\n",
                 "7. Get Wallet Info\n",
                 "8. Add nano to wallet\n",
+                "9. Get block count\n",
+                "A. Peers\n",
+                "B. Telemetry\n",
              )
       fmt.Scan(&usr)
 
-      switch (usr) {
+      switch (strings.ToUpper(usr)) {
       case "1":
          keyMan.WalletVerbose(true)
 
@@ -93,11 +97,12 @@ func main() {
          }
          defer conn.Close(context.Background())
 
-         var id int
-         var seed []byte
-         var current_index int
+         var parent_seed int
+         var index int
+         var balance keyMan.Raw
+         var hash keyMan.HexData
 
-         rows, err := conn.Query(context.Background(), "SELECT * FROM seeds")
+         rows, err := conn.Query(context.Background(), "SELECT * FROM wallets")
 
          if (err != nil) {
             fmt.Println("QueryRow failed: ", err)
@@ -105,12 +110,12 @@ func main() {
          }
 
          for rows.Next() {
-            err = rows.Scan(&id, &seed, &current_index)
+            err = rows.Scan(&parent_seed, &index, &balance, &hash)
             if (err != nil) {
                fmt.Println("Scan failed: ", err)
                return
             }
-            fmt.Println("ID: ", id, "Name: ", seed, "Number: ", current_index)
+            fmt.Println("parent: ", parent_seed, "index: ", index, "balance: ", balance.String())
          }
 
       case "3":
@@ -152,15 +157,25 @@ func main() {
             fmt.Println("err: ", err.Error())
          }
       case "6":
+   fmt.Println("100")
          adhocAddress := []string{
             "nano_39tep37adxofrrparfdcmicbfxm81ytnzn84gp7qt8y4jy9zhz6c4hia5atm",
             "lkjlkj",
          }
-         nanoRecieved := new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)
+   fmt.Println("101")
+         intRecieved  := new(big.Int).Exp   (big.NewInt(10),    big.NewInt(30),    nil)
+   fmt.Println("101.5")
+         nanoRecieved := new(keyMan.Raw).Exp(keyMan.NewRaw(10), keyMan.NewRaw(30), nil)
+   fmt.Println("102")
          err := receivedNano(adhocAddress[0], nanoRecieved)
+   fmt.Println("103")
          if (err != nil) {
             fmt.Println("err: ", err.Error())
          }
+   fmt.Println("104")
+   fmt.Println("105")
+
+   fmt.Println(intRecieved)
 
       case "7":
          keyMan.WalletVerbose(true)
@@ -188,6 +203,13 @@ func main() {
 
          manualWalletUpdate(seed, index, nano)
 
+      case "9":
+         verbose = true
+         getBlockCount()
+      case "A":
+         printPeers()
+      case "B":
+         telemetry()
       default:
          break //menu
       }
@@ -223,17 +245,8 @@ func initNanoymousCore() error {
    if (nodeIP == "") {
       return fmt.Errorf("initNanoymousCore: node IP nout found! (Use \"nodeIP = {IP_Address}\" in embed.txt)")
    }
-   //databaseUrl = "postgres://test:testing@localhost:5432/gotests"
-   //databasePassword = "testing"
 
    feeDividend = int64(math.Trunc(100/FEE_PERCENT))
-
-   var blarg *big.Int
-   blarg, err := getAddressBalance("nano_1s3dw5dn1m74hm73wxj96i5eouigp1w7nesw83tjo8kchrx8t6ekaymp6dgs")
-   if (err != nil) {
-     fmt.Println("initNanoymousCore: %s", err.Error())
-   }
-   fmt.Println("Balance of the thing I checked is:", blarg)
 
    return nil
 }
@@ -418,12 +431,14 @@ func blacklist(conn *pgx.Conn, sendingAddress []byte, receivingAddress []byte) e
 //    (4) Finds the wallet(s) with enough funds to support the transaction
 //        (minus the blacklisted ones)
 //    (5) Sends the funds to the client
-func receivedNano(nanoAddress string, payment *big.Int) error {
+func receivedNano(nanoAddress string, payment *keyMan.Raw) error {
+   fmt.Println("1")
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return fmt.Errorf("receivedNano: %w", err)
    }
    defer conn.Close(context.Background())
+   fmt.Println("2")
 
    tx, _ := conn.BeginTx(context.Background(), pgx.TxOptions{})
    defer tx.Rollback(context.Background())
@@ -437,11 +452,13 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
       "wallets " +
    "WHERE " +
       "hash = $1;"
+   fmt.Println("3")
 
    pubkey, err := keyMan.AddressToPubKey(nanoAddress)
    if (err != nil) {
       return fmt.Errorf("receivedNano: %w", err)
    }
+   fmt.Println("4")
 
    recivedHash := blake2b.Sum256(pubkey)
 
@@ -449,6 +466,7 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    if (err != nil) {
       return fmt.Errorf("receiviedNano: %w", err)
    }
+   fmt.Println("5")
 
    var parentSeed int
    var index int
@@ -461,6 +479,7 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
    } else {
       return fmt.Errorf("receivedNano: address not found in active wallets")
    }
+   fmt.Println("6")
 
    // TODO This is just for testing
    //clientPub, _ := keyMan.AddressToPubKey("nano_36uqf39z8nydejhehihtkopyd8hjouqi7su9ccxw85dwft3mtm15myzgz3mx")
@@ -474,6 +493,7 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
       // TODO sendNano()
       return fmt.Errorf("receivedNano: no active transaction available")
    }
+   fmt.Println("7")
 
    // Add funds we got into our database of wallets
    queryString =
@@ -485,20 +505,20 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
       "\"parent_seed\" = $2 AND " +
       "\"index\" = $3;"
 
-   paymentDecimal := decimal.NewFromBigInt(payment, 0)
-   rowsAffected, err := tx.Exec(context.Background(), queryString, paymentDecimal, parentSeed, index)
+   rowsAffected, err := tx.Exec(context.Background(), queryString, payment, parentSeed, index)
    if (err != nil) {
       return fmt.Errorf("receivedNano: Update: %w", err)
    }
    if (rowsAffected.RowsAffected() < 1) {
       return fmt.Errorf("receivedNano: no rows affected during index incrament")
    }
+   fmt.Println("8")
 
-   fee := new(big.Int).Div(payment, big.NewInt(feeDividend))
-   amountToSend := new(big.Int).Sub(payment, fee)
-   amountToSendDecimal := decimal.NewFromBigInt(amountToSend, 0)
+   fee := new(keyMan.Raw).Div(payment, keyMan.NewRaw(feeDividend))
+   amountToSend := new(keyMan.Raw).Sub(payment, fee)
+   //amountToSendDecimal := decimal.NewFromBigInt(amountToSend, 0)
    if (verbose) {
-      fmt.Println("amount to send: ", amountToSendDecimal)
+      fmt.Println("amount to send: ", amountToSend)
    }
 
    // Find all wallets that have enough funds to send out the payment that
@@ -518,18 +538,19 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
       "balance, " +
       "index;"
 
-   rows, err := tx.Query(context.Background(), queryString, amountToSendDecimal, parentSeed, index)
+   rows, err := tx.Query(context.Background(), queryString, amountToSend, parentSeed, index)
    if (err != nil) {
       return fmt.Errorf("receiviedNano: Query: %w", err)
    }
 
+   fmt.Println("9")
    var foundAddress bool
    var sendingKeys []*keyMan.Key
    var walletSeed []int
-   var walletBalance []decimal.Decimal
+   var walletBalance []*keyMan.Raw
    var tmpSeed int
    var tmpIndex int
-   var tmpBalance decimal.Decimal
+   var tmpBalance *keyMan.Raw
    for rows.Next() {
       err = rows.Scan(&tmpSeed, &tmpIndex, &tmpBalance)
       if (err != nil) {
@@ -553,6 +574,7 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
          break
       }
    }
+   fmt.Println("10")
    rows.Close()
 
    if (!foundAddress) {
@@ -577,8 +599,9 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
          return fmt.Errorf("receiviedNano: Query: %w", err)
       }
 
+   fmt.Println("11")
       var enough bool
-      var totalBalance decimal.Decimal
+      var totalBalance *keyMan.Raw
       for rows.Next() {
          err = rows.Scan(&tmpSeed, &tmpIndex, &tmpBalance)
          if (err != nil) {
@@ -594,14 +617,15 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
             sendingKeys = append(sendingKeys, tmpKey)
             walletSeed = append(walletSeed, tmpSeed)
             walletBalance = append(walletBalance, tmpBalance)
-            totalBalance = totalBalance.Add(tmpBalance)
-            if (totalBalance.Cmp(amountToSendDecimal) >= 0) {
+            totalBalance.Add(totalBalance, tmpBalance)
+            if (totalBalance.Cmp(amountToSend) >= 0) {
                // We've found enough
                enough = true
                break
             }
          }
       }
+   fmt.Println("12")
       rows.Close()
       if (!enough) {
          return fmt.Errorf("receivedNano: not enough funds")
@@ -610,8 +634,8 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
 
    // Send nano to client
    if (len(sendingKeys) == 1) {
-      sendNano(sendingKeys[0].PrivateKey, clientAddress, big.NewInt(4100))
-      sendInDatabase(walletSeed[0], sendingKeys[0].Index, amountToSendDecimal, 0, 0, tx)
+      sendNano(sendingKeys[0].PrivateKey, clientAddress, keyMan.NewRaw(4100))
+      sendInDatabase(walletSeed[0], sendingKeys[0].Index, amountToSend, 0, 0, tx)
    } else if (len(sendingKeys) > 1) {
       // Need to do a multi-send; Get a new wallet to combine all funds into
       transitionalAddress, transitionSeedId, err := getNewAddress("")
@@ -620,35 +644,38 @@ func receivedNano(nanoAddress string, payment *big.Int) error {
       }
 
       // Go through list of wallets and send to interim address
-      var totalSent decimal.Decimal
-      var currentSend decimal.Decimal
+      var totalSent *keyMan.Raw
+      var currentSend *keyMan.Raw
       for i, key := range sendingKeys {
 
          // if (total + balance) > payment
-         if (totalSent.Add(walletBalance[i]).Cmp(amountToSendDecimal) > 0) {
-            currentSend = amountToSendDecimal.Sub(totalSent)
+         if (totalSent.Add(totalSent, walletBalance[i]).Cmp(amountToSend) > 0) {
+            currentSend = amountToSend.Sub(amountToSend, totalSent)
          } else {
             currentSend = walletBalance[i]
          }
-         sendNano(key.PrivateKey, transitionalAddress.PublicKey, currentSend.BigInt())
+   fmt.Println("13")
+         sendNano(key.PrivateKey, transitionalAddress.PublicKey, currentSend)
          sendInDatabase(walletSeed[i], key.Index, currentSend, transitionSeedId, transitionalAddress.Index, tx)
-         totalSent = totalSent.Add(currentSend)
+         totalSent.Add(totalSent, currentSend)
          if (verbose) {
-            fmt.Println("Sending", currentSend.BigInt(), "from", walletSeed[i], key.Index, "to", transitionSeedId, transitionalAddress.Index)
+            fmt.Println("Sending", currentSend.Int, "from", walletSeed[i], key.Index, "to", transitionSeedId, transitionalAddress.Index)
          }
       }
       // Now send to client
       if (verbose) {
          fmt.Println("Sending", amountToSend, "from", transitionSeedId, transitionalAddress.Index, "to client.")
       }
-      sendNano(transitionalAddress.PrivateKey, clientAddress, big.NewInt(4100))
-      sendInDatabase(transitionSeedId, transitionalAddress.Index, amountToSendDecimal, 0, 0, tx)
+      sendNano(transitionalAddress.PrivateKey, clientAddress, keyMan.NewRaw(4100))
+      sendInDatabase(transitionSeedId, transitionalAddress.Index, amountToSend, 0, 0, tx)
    } else {
       return fmt.Errorf("receivedNano: not enough funds(2)")
    }
+   fmt.Println("14")
 
    tx.Commit(context.Background())
 
+   fmt.Println("15")
    return nil
 }
 
@@ -667,7 +694,7 @@ func findTotalBalance() (float64, error) {
    "FROM " +
       "wallets;"
 
-   var rawBalance decimal.Decimal
+   var rawBalance *keyMan.Raw
    var nanoBalance float64
    row, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
@@ -680,7 +707,7 @@ func findTotalBalance() (float64, error) {
          return -1.0, fmt.Errorf("findTotalBalance: %w", err)
       }
 
-      nanoBalance = rawToNANO(rawBalance.BigInt())
+      nanoBalance = rawToNANO(rawBalance)
 
       if (verbose) {
          fmt.Println("Total Balance is: Ӿ", nanoBalance)
@@ -694,11 +721,11 @@ func findTotalBalance() (float64, error) {
 // this a nano). We don't have a conversion to go the other way as all
 // operations should be done in raw to avoid rounding errors. We only want to
 // convert when outputing for human readable format.
-func rawToNANO(raw *big.Int) float64 {
+func rawToNANO(raw *keyMan.Raw) float64 {
    // 1 NANO is 10^30 raw
    rawConv := new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)
    rawConvFloat := new(big.Float).SetInt(rawConv)
-   rawFloat := new(big.Float).SetInt(raw)
+   rawFloat := new(big.Float).SetInt(raw.Int)
 
    NanoFloat := new(big.Float).Quo(rawFloat, rawConvFloat)
 
@@ -786,13 +813,13 @@ func setClientAddress(parentSeed int, index int, clientAddress []byte) {
    activeTransactionList[key] = clientAddress
 }
 
-func sendNano(fromPrivateKey []byte, toPublicKey []byte, amount *big.Int) bool {
+func sendNano(fromPrivateKey []byte, toPublicKey []byte, amount *keyMan.Raw) bool {
    // TODO TODO TODO
    return true
 }
 
 // sendInDatabase does the same work that sendNano does, but just in our local database instead.
-func sendInDatabase(fromSeed int, fromIndex int, amount decimal.Decimal, toSeed int, toIndex int, conn psqlDB) error {
+func sendInDatabase(fromSeed int, fromIndex int, amount *keyMan.Raw, toSeed int, toIndex int, conn psqlDB) error {
 
    queryString :=
    "UPDATE " +
@@ -878,7 +905,7 @@ func getWalletInfo(seed int, index int) (*keyMan.Key, error) {
 func manualWalletUpdate(seed int, index int, nano int) error {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return fmt.Errorf("receivedNano: %w", err)
+      return fmt.Errorf("manualWalletUpdatn: %w", err)
    }
    defer conn.Close(context.Background())
 

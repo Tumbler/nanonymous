@@ -465,10 +465,6 @@ func NanoED25519PublicKey(privateKey []byte) ([]byte, error){
    return A.Bytes(), nil
 }
 
-func ReturnActiveSeed() *Key {
-   return &activeSeed
-}
-
 func WalletVerbose(setting bool) {
    verbose = setting
 }
@@ -484,4 +480,3 @@ func ReinitSeed(activeSeed *Key) {
    activeSeed.PublicKey = make([]byte, 0)
    activeSeed.NanoAddress = ""
 }
-
