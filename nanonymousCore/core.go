@@ -9,7 +9,7 @@ import (
    "math/big"
    "strconv"
    "math"
-   //"reflect"
+   "sync"
    _"embed"
 
    // Local packages
@@ -34,11 +34,16 @@ var databasePassword string
 // "nodeIP = [ip]" in embed.txt to set this value
 var nodeIP string
 
+// Should only be set to true in test functions
+var testing = false
+
 const MAX_INDEX = 4294967295
 
 // Fee in %
 const FEE_PERCENT = float64(0.2)
 var feeDividend int64
+
+var wg sync.WaitGroup
 
 // TODO what happens when there is a collision? (I.E 2 keys are identical)
 var activeTransactionList = make(map[string][]byte)
@@ -80,6 +85,7 @@ func main() {
                 "D. Sign Block\n",
                 "E. Block Info\n",
                 "H. OpenAccount 0, 1\n",
+                "I. GenerateWork\n",
              )
       fmt.Scan(&usr)
 
@@ -149,6 +155,7 @@ func main() {
          }
 
       case "4":
+         verbose = true
          adhocAddress := "nano_1hiqiw6j9wo33moia3scoajhheweysiq5w1xjqeqt8m6jx6so6gj39pae5ea"
          blarg, _, err := getNewAddress(adhocAddress)
          if (err != nil) {
@@ -236,49 +243,18 @@ func main() {
          fmt.Println("3rd   :  5794D0B497EF171F036A43661ECC08FB65184F418BAA8C1F70B4AF35582F355E8BF9BA7C13BE2C47163F6CE9C62C974FC99E197EF21C116C8060143073255C07")
 
       case "H":
-         //var block keyMan.Block
+         if (verbose) {
+            fmt.Println(" verbose == true")
+         }
+         pending, err := OpenAccount("nano_3j7pzwsg999gpx99fm4xcwndfdpcsyxu91ed5nq6dmpdots6nfj1hkp8ahsk")
+         if (err != nil) {
+            fmt.Println("Error: ", err.Error())
+         }
+         fmt.Println("Pending after transaction: ", pending)
 
-         account := "nano_3pwsg1enmhf77ai6d87fppu9rfjua5qgshya4muduoo879b87fjwyy8oxr33"
-
-         //var tmpBlock keyMan.HexData
-         //tmpBlock, _ = hex.DecodeString("D4EED51DDA5B88C611115E62EBB8C8C2115A2BA89B16C84FA8C2738AD0CFB23F")
-
+      case "I":
          verbose = true
-         getAccountInfo(account)
-         getAccountHistory(account)
-         getAccountBalance(account)
-         getPendingHash(account)
-         //if (len(pendingHashes[account]) == 1 ) {
-            ////sendersBlock, _ := getBlockInfo(pendingHashes[account][0])
-//
-            //block.Previous = make([]byte, 32)
-            //block.Account = account
-            //block.Representative = "nano_1s3dw5dn1m74hm73wxj96i5eouigp1w7nesw83tjo8kchrx8t6ekaymp6dgs"
-            //block.Balance = receivable
-            //// Link is not an addres!!!!!
-            //block.Link = pendingHashes[account][0]
-            //block.Seed, _ = getSeedFromAddress(account)
-//
-            //sig, err := block.Sign()
-            //if (err != nil) {
-               //fmt.Println("Error: ", err.Error())
-            //}
-//
-            ////fmt.Println("account:", block.Account)
-            ////fmt.Println("representative:", block.Representative)
-            ////fmt.Println("balance:", block.Balance)
-            ////fmt.Println("link:", strings.ToUpper(hex.EncodeToString(block.Link)))
-            ////fmt.Println("link as account:", block.LinkAsAccount)
-            //h, _ := block.Hash()
-            ////fmt.Println("hash:", strings.ToUpper(hex.EncodeToString(h)))
-            ////fmt.Println("private:", strings.ToUpper(hex.EncodeToString(block.Seed.PrivateKey)))
-            ////fmt.Println("pub:", strings.ToUpper(hex.EncodeToString(block.Seed.PublicKey)))
-            ////fmt.Println("Sig:", strings.ToUpper(hex.EncodeToString(sig)))
-//
-            //PoW := "fdedd6ec9ac01300"
-            //openAccount(block, sig, PoW)
-//
-         //}
+         go preCalculateNextPoW("nano_3j7pzwsg999gpx99fm4xcwndfdpcsyxu91ed5nq6dmpdots6nfj1hkp8ahsk")
 
       default:
          break //menu
@@ -286,7 +262,9 @@ func main() {
    //}
    // TODO work only needs frontier to generate next PoW, or if it's an open block, the pubKey
 
+   // work for next nano_3pwsg1enmhf77ai6d87fppu9rfjua5qgshya4muduoo879b87fjwyy8oxr33: 7d00f6d81793ccdd
 
+   wg.Wait()
 }
 
 // initNanoymousCore sets up our variables that need to preexist before other
@@ -424,6 +402,9 @@ func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
       return nil, 0, fmt.Errorf("getNewAddress: no rows affected in insert")
    }
 
+   // Generate work for first use
+   go preCalculateNextPoW(seed.NanoAddress)
+
    queryString =
    "UPDATE " +
       "\"seeds\"" +
@@ -434,6 +415,7 @@ func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
 
    rowsAffected, err = conn.Exec(context.Background(), queryString, seed.Index, id)
    if (err != nil) {
+      return nil, 0, fmt.Errorf("getNewAddress: %w", err)
    }
    if (rowsAffected.RowsAffected() < 1) {
       return nil, 0, fmt.Errorf("getNewAddress: no rows affected during index incrament")
@@ -546,10 +528,10 @@ func receivedNano(nanoAddress string, payment *keyMan.Raw) error {
       return fmt.Errorf("receivedNano: address not found in active wallets")
    }
 
-   // TODO This is just for testing
+   // TODO This is just for debugging
    //clientPub, _ := keyMan.AddressToPubKey("nano_36uqf39z8nydejhehihtkopyd8hjouqi7su9ccxw85dwft3mtm15myzgz3mx")
    //setClientAddress(parentSeed, index, clientPub)
-   // TODO end of test code
+   // TODO end of debugging code
 
    // Get client address for later use. TODO check for nil
    clientAddress := getClientAddress(parentSeed, index)
@@ -991,6 +973,9 @@ func getSeedFromAddress(nanoAddress string) (keyMan.Key, error) {
    if (err != nil) {
       return key, fmt.Errorf("getSeedFromAddress: %w", err)
    }
+   if (parentSeed == 0) {
+      return key, fmt.Errorf("getSeedFromAddress: address not found in database")
+   }
 
    key.Seed, _ = getSeedFromDatabase(parentSeed)
    key.Index = index
@@ -1048,4 +1033,173 @@ func manualWalletUpdate(seed int, index int, nano int64) error {
    }
 
    return nil
+}
+
+func OpenAccount(account string) (int, error) {
+   var block keyMan.Block
+   var err error
+
+   _, receivable, err := getAccountBalance(account)
+   if (err != nil) {
+      return -1, fmt.Errorf("OpenAccount: %w", err)
+   }
+   // if (receivable == 0)
+   if (receivable.Cmp(keyMan.NewRaw(0)) == 0) {
+      return -1, fmt.Errorf("OpenAccount: no receiveable nano in account %s", account)
+   }
+
+   key, err := getSeedFromAddress(account)
+   if (err != nil) {
+      return -1, fmt.Errorf("OpenAccount: %w", err)
+   }
+   pendingHashes := getPendingHash(account)
+   pendingTransactions := len(pendingHashes[account])
+   if (pendingTransactions > 0 ) {
+
+      // Fill block with relavent information
+      block.Previous = make([]byte, 32)
+      block.Account = account
+      block.Representative = getRepresentative()
+      block.Balance = receivable
+      // Link is not an addres!!!!!
+      block.Link = pendingHashes[account][0]
+      block.Seed = key
+      if (err != nil) {
+         return -1, fmt.Errorf("OpenAccount: %w", err)
+      }
+
+      sig, err := block.Sign()
+      if (err != nil) {
+         return -1, fmt.Errorf("OpenAccount: %w", err)
+      }
+
+      if (verbose) {
+         fmt.Println("account:", block.Account)
+         fmt.Println("representative:", block.Representative)
+         fmt.Println("balance:", block.Balance)
+         fmt.Println("link:", strings.ToUpper(hex.EncodeToString(block.Link)))
+         h, _ := block.Hash()
+         fmt.Println("hash:", strings.ToUpper(hex.EncodeToString(h)))
+         fmt.Println("private:", strings.ToUpper(hex.EncodeToString(block.Seed.PrivateKey)))
+         fmt.Println("Sig:", strings.ToUpper(hex.EncodeToString(sig)))
+      }
+
+      PoW, err := getPoW(block.Seed.NanoAddress)
+      if (err != nil) {
+         return -1, fmt.Errorf("OpenAccount: %w", err)
+      }
+
+      // Send RCP request
+      newHash, err := openAccount(block, sig, PoW)
+      if (err != nil){
+         return -1, fmt.Errorf("OpenAccount: %w", err)
+      }
+      if (len(newHash) != 32){
+         return -1, fmt.Errorf("OpenAccount: no block hash returned from node", err)
+      }
+
+      // We'ved used any stored PoW, clear it out for next use
+      clearPoW(block.Account)
+      go preCalculateNextPoW(block.Account)
+   }
+
+   // Update database records
+   err = updateBalance(block.Account, block.Balance)
+
+   return pendingTransactions - 1, err
+}
+func getRepresentative() string {
+   return  "nano_1s3dw5dn1m74hm73wxj96i5eouigp1w7nesw83tjo8kchrx8t6ekaymp6dgs"
+}
+
+func preCalculateNextPoW(nanoAddress string) {
+   wg.Add(1)
+   defer wg.Done()
+   if (testing) {
+      return
+   }
+
+   var hash keyMan.BlockHash
+   accountInfo, _ := getAccountInfo(nanoAddress)
+
+   if (len(accountInfo.Frontier) == 32) {
+      hash = accountInfo.Frontier
+   } else {
+      // New account, just use pubKey
+      hash, _ = keyMan.AddressToPubKey(nanoAddress)
+   }
+
+   work, _ := generateWorkOnNode(hash)
+   if (verbose) {
+      fmt.Println("Work generated for address", nanoAddress, ":", work)
+   }
+
+   conn, _ := pgx.Connect(context.Background(), databaseUrl)
+
+   queryString :=
+   "UPDATE " +
+      "wallets " +
+   "SET " +
+      "\"pow\" = $1 " +
+   "WHERE " +
+      "\"hash\" = $2;"
+
+   pubKey,  _ := keyMan.AddressToPubKey(nanoAddress)
+   nanoAddressHash := blake2b.Sum256(pubKey)
+   conn.Exec(context.Background(), queryString, work, nanoAddressHash[:])
+}
+
+func calculateNextPoW(nanoAddress string, addressHash []byte) string {
+   if (testing) {
+      return ""
+   }
+
+   var hash keyMan.BlockHash
+   accountInfo, _ := getAccountInfo(nanoAddress)
+
+   if (len(accountInfo.Frontier) == 32) {
+      hash = accountInfo.Frontier
+   } else {
+      // New account, just use pubKey
+      hash, _ = keyMan.AddressToPubKey(nanoAddress)
+   }
+
+   work, _ := generateWorkOnNode(hash)
+   if (verbose) {
+      fmt.Println("Work generated for address", nanoAddress, ":", work)
+   }
+
+   return work
+}
+
+func getPoW(nanoAddress string) (string, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return "", fmt.Errorf("getPoW: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   // Check to see if we have pre computed PoW stored on the database
+   queryString :=
+   "SELECT " +
+      "pow " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "\"hash\" = $1;"
+
+   pubKey,  _ := keyMan.AddressToPubKey(nanoAddress)
+   nanoAddressHash := blake2b.Sum256(pubKey)
+   var PoW string
+   err = conn.QueryRow(context.Background(), queryString, nanoAddressHash[:]).Scan(&PoW)
+   if (err != nil) {
+      return "", fmt.Errorf("getPoW: %w", err)
+   }
+
+   if (PoW == "") {
+      // none stored; need to generate it
+      PoW = calculateNextPoW(nanoAddress, nanoAddressHash[:])
+   }
+
+   return PoW, nil
 }

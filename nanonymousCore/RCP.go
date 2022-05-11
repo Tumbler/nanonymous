@@ -182,7 +182,7 @@ func publishSend(block keyMan.Block, signature []byte) error {
    return nil
 }
 
-func openAccount(block keyMan.Block, signature []byte, proofOfWork string) error {
+func openAccount(block keyMan.Block, signature []byte, proofOfWork string) (keyMan.BlockHash, error) {
 
    sig := strings.ToUpper(hex.EncodeToString(signature))
 
@@ -206,18 +206,30 @@ func openAccount(block keyMan.Block, signature []byte, proofOfWork string) error
    fmt.Println("request:\r\n", request)
 
    response := struct {
-      Hash string
+      Hash keyMan.BlockHash
    }{}
 
    err := rcpCall(request, &response)
    if (err != nil) {
-      return fmt.Errorf("publishSend: %w", err)
+      return nil, fmt.Errorf("publishSend: %w", err)
    }
 
-   return nil
+   return response.Hash, nil
 }
 
-func getAccountInfo(nanoAddress string) error {
+type AccountInfo struct {
+   Frontier keyMan.BlockHash
+   OpenBlock keyMan.BlockHash         `json:"open_block"`
+   RepresentativeBlock keyMan.HexData `json:"representative_block"`
+   Balance *keyMan.Raw
+   ModifiedTimestamp int64            `json:"modified_timestamp"`
+   BlockCount int64                   `json:"block_count"`
+   Account_Version int64              `json:"account_version"`
+   ConfirmationHeight int64           `json:"confirmation_height"`
+   ConfirmationHeightFrontier int64   `json:"confirmation_height_frontier"`
+}
+
+func getAccountInfo(nanoAddress string) (AccountInfo, error) {
 
    request :=
    `{
@@ -225,25 +237,14 @@ func getAccountInfo(nanoAddress string) error {
       "account": "`+ nanoAddress +`"
     }`
 
-   response := struct {
-      Frontier keyMan.HexData
-      OpenBlock keyMan.HexData           `json:"open_block"`
-      RepresentativeBlock keyMan.HexData `json:"representative_block"`
-      Balance *keyMan.Raw
-      ModifiedTimestamp int              `json:"modified_timestamp"`
-      BlockCount int64                   `json:"block_count"`
-      Account_Version int64              `json:"account_version"`
-      ConfirmationHeight int64           `json:"confirmation_height"`
-      ConfirmationHeightFrontier int64   `json:"confirmation_height_frontier"`
-   }{}
+   var response AccountInfo
 
-   verbose = true
    err := rcpCall(request, &response)
    if (err != nil) {
-      return fmt.Errorf("getAccountInfo: %w", err)
+      return response, fmt.Errorf("getAccountInfo: %w", err)
    }
 
-   return nil
+   return response, nil
 }
 
 func getAccountHistory(nanoAddress string) error {
@@ -267,7 +268,6 @@ func getAccountHistory(nanoAddress string) error {
       ConfirmationHeightFrontier int64   `json:"confirmation_height_frontier"`
    }{}
 
-   verbose = true
    err := rcpCall(request, &response)
    if (err != nil) {
       return fmt.Errorf("getAccountInfo: %w", err)
@@ -291,7 +291,6 @@ func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
 
    //var response map[string]interface{}
 
-   verbose = true
    err := rcpCall(request, &response)
    if (err != nil) {
       //return fmt.Errorf("getAccountInfo: %w", err)
@@ -314,13 +313,37 @@ func getBlockInfo(hash keyMan.BlockHash) (keyMan.Block, error) {
        Contents keyMan.Block
     }{}
 
-   verbose = true
    err := rcpCall(request, &response)
    if (err != nil) {
       return response.Contents, fmt.Errorf("getAccountInfo: %w", err)
    }
 
    return response.Contents, nil
+}
+
+func generateWorkOnNode(hash keyMan.BlockHash) (string, error) {
+
+   request :=
+   `{
+      "action": "work_generate",
+      "use_peers": "true",
+      "hash": "`+ hash.String() +`"
+    }`
+    fmt.Println("request: ", request)
+
+    response := struct {
+       Work string
+       Difficulty string
+       Multiplier string
+    }{}
+
+   err := rcpCall(request, &response)
+   if (err != nil) {
+      return "", fmt.Errorf("generateWorkOnNode: %w", err)
+   }
+
+   return response.Work, nil
+
 }
 
 func rcpCall(request string, response any) error {

@@ -67,7 +67,6 @@ func (b *Block) Hash() (hash BlockHash, err error) {
    h.Write(b.Link)
    return h.Sum(nil), nil
 }
-
 func (b *Block) Sign() ([]byte, error) {
 
    if (b.Seed.KeyType > 1 || !b.Seed.Initialized) {
@@ -198,6 +197,10 @@ func (r *Raw) Add(x, y *Raw) *Raw {
    return r
 }
 
+// Cmp compares r and x and returns:
+// -1 if x <  y
+//  0 if x == y
+// +1 if x >  y
 func (r *Raw) Cmp(x *Raw) int {
    return r.Int.Cmp(x.Int)
 }

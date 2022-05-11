@@ -2,8 +2,6 @@ package nanoKeyManager
 
 import (
    "fmt"
-   "bufio"
-   "os"
    "strings"
    "encoding/hex"
    "filippo.io/edwards25519"
@@ -39,94 +37,6 @@ var verbose bool
 
 //go:embed bip39-English.txt
 var bipWordFile string
-
-func main() {
-
-   var usr string
-
-   menu:
-   for {
-      fmt.Print("1. Generate Seed\n",
-                "2. Input Mnomonic\n",
-                "3. Get next address\n",
-                "4. Delete stored seed\n",
-                "5. Test stuff\n",
-                "6. Nano address to pubkey\n")
-      fmt.Scan(&usr)
-
-      WalletVerbose(true)
-      switch (usr) {
-      case "1":
-         err := GenerateSeed(&activeSeed)
-         if (err != nil){
-            fmt.Println(err.Error())
-         }
-      case "2":
-         inputReader := bufio.NewReader(os.Stdin)
-         fmt.Print("Mnemonic: ")
-         input1, _ := inputReader.ReadString('\n')
-         input1 += input1
-         input, _ := inputReader.ReadString('\n')
-         GenerateSeedFromMnemonic(input, &activeSeed)
-      case "3":
-         if (activeSeed.Initialized) {
-            if (activeSeed.KeyType < 2) {
-               activeSeed.Index++
-               err := SeedToKeys(&activeSeed)
-               if (err != nil) {
-                  fmt.Println(err.Error())
-                  break
-               }
-
-               fmt.Print("Index ", activeSeed.Index, ":\n")
-               fmt.Print("Private key:  0x", strings.ToUpper(hex.EncodeToString(activeSeed.PrivateKey[:])), "\n")
-               fmt.Print("Public  key:  0x", strings.ToUpper(hex.EncodeToString(activeSeed.PublicKey[:])), "\n")
-               fmt.Print("Nano Address: ", activeSeed.NanoAddress, "\n")
-            } else {
-               fmt.Println("ERROR: Key doesn't support this operatoin!")
-            }
-         } else {
-            fmt.Println("ERROR: No active seed!")
-         }
-      case "4":
-         if (activeSeed.Initialized) {
-            fmt.Println("Are you sure??? y/n")
-            fmt.Scan(&usr)
-
-            if (usr == "y") {
-               ReinitSeed(&activeSeed)
-            }
-         } else {
-            fmt.Println("ERROR: No active seed!")
-         }
-      case "5":
-         var blarg bitBucket
-         blarg.slurpBits(0b101001, 6)
-         blarg.slurpBits(0b101001, 6)
-         blarg.slurpBits(0b101001, 6)
-         err := blarg.slurpBits(0b10, 2)
-         if (err != nil) {
-            fmt.Println(err.Error())
-         }
-
-         bits, num := blarg.squirtBits(23)
-         fmt.Println("number is:", bits, "read ", num, "bits")
-      case "6":
-         inputReader := bufio.NewReader(os.Stdin)
-         fmt.Print("nano Address: ")
-         input1, _ := inputReader.ReadString('\n')
-         input1 += input1
-         input, _ := inputReader.ReadString('\n')
-         var blarg, _ = AddressToPubKey(input)
-         fmt.Print("Public  key:  0x", strings.ToUpper(hex.EncodeToString(blarg)), "\n")
-      default:
-         break menu
-      }
-      WalletVerbose(false)
-   }
-
-   fmt.Println("Peace!")
-}
 
 // GenerateSeed gets entropy and generates a new mnemonic/seed pair along with
 // their public keys. Takes a key struct to fill in.
