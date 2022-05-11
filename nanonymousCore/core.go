@@ -76,6 +76,10 @@ func main() {
                 "9. Get block count\n",
                 "A. Peers\n",
                 "B. Telemetry\n",
+                "C. Get Account Info\n",
+                "D. Sign Block\n",
+                "E. Block Info\n",
+                "H. OpenAccount 0, 1\n",
              )
       fmt.Scan(&usr)
 
@@ -200,10 +204,87 @@ func main() {
          printPeers()
       case "B":
          telemetry()
+      case "C":
+         getAccountInfo("nano_1s3dw5dn1m74hm73wxj96i5eouigp1w7nesw83tjo8kchrx8t6ekaymp6dgs")
+      case "E":
+         h, _ := hex.DecodeString("A77C8B3CAE8DAEEDC2A2C9A52778175A1621AAB4EA6C3766F440C9712D45B4BA")
+         block, _ := getBlockInfo(h)
+
+         fmt.Println("balance:", block.Balance)
+         fmt.Println("linke account:", block.LinkAsAccount)
+
+         block.Balance.Sub(block.Balance, keyMan.NewRaw(72))
+         fmt.Println("New balance:", block.Balance)
+         block.Previous = h
+
+         hash, _ := block.Hash()
+         fmt.Println("New balance:", hash)
+
+         s, _ := hex.DecodeString("6698E42FFDD05E83212CDEBED6FE0B021DEA7C865C436DC566D4E43214F2A89E")
+         block.Seed.Seed = s
+         keyMan.SeedToKeys(&block.Seed)
+
+         fmt.Println("private key len:", len(block.Seed.PrivateKey))
+         fmt.Println("private key:", strings.ToUpper(hex.EncodeToString(block.Seed.PrivateKey)))
+         fmt.Println("hash:", strings.ToUpper(hex.EncodeToString(hash)))
+
+         sig, err := block.Sign()
+         if (err != nil) {
+            fmt.Println("Error: %s", err.Error())
+         }
+         fmt.Println("Signed: ", strings.ToUpper(hex.EncodeToString(sig)))
+         fmt.Println("3rd   :  5794D0B497EF171F036A43661ECC08FB65184F418BAA8C1F70B4AF35582F355E8BF9BA7C13BE2C47163F6CE9C62C974FC99E197EF21C116C8060143073255C07")
+
+      case "H":
+         //var block keyMan.Block
+
+         account := "nano_3pwsg1enmhf77ai6d87fppu9rfjua5qgshya4muduoo879b87fjwyy8oxr33"
+
+         //var tmpBlock keyMan.HexData
+         //tmpBlock, _ = hex.DecodeString("D4EED51DDA5B88C611115E62EBB8C8C2115A2BA89B16C84FA8C2738AD0CFB23F")
+
+         verbose = true
+         getAccountInfo(account)
+         getAccountHistory(account)
+         getAccountBalance(account)
+         getPendingHash(account)
+         //if (len(pendingHashes[account]) == 1 ) {
+            ////sendersBlock, _ := getBlockInfo(pendingHashes[account][0])
+//
+            //block.Previous = make([]byte, 32)
+            //block.Account = account
+            //block.Representative = "nano_1s3dw5dn1m74hm73wxj96i5eouigp1w7nesw83tjo8kchrx8t6ekaymp6dgs"
+            //block.Balance = receivable
+            //// Link is not an addres!!!!!
+            //block.Link = pendingHashes[account][0]
+            //block.Seed, _ = getSeedFromAddress(account)
+//
+            //sig, err := block.Sign()
+            //if (err != nil) {
+               //fmt.Println("Error: ", err.Error())
+            //}
+//
+            ////fmt.Println("account:", block.Account)
+            ////fmt.Println("representative:", block.Representative)
+            ////fmt.Println("balance:", block.Balance)
+            ////fmt.Println("link:", strings.ToUpper(hex.EncodeToString(block.Link)))
+            ////fmt.Println("link as account:", block.LinkAsAccount)
+            //h, _ := block.Hash()
+            ////fmt.Println("hash:", strings.ToUpper(hex.EncodeToString(h)))
+            ////fmt.Println("private:", strings.ToUpper(hex.EncodeToString(block.Seed.PrivateKey)))
+            ////fmt.Println("pub:", strings.ToUpper(hex.EncodeToString(block.Seed.PublicKey)))
+            ////fmt.Println("Sig:", strings.ToUpper(hex.EncodeToString(sig)))
+//
+            //PoW := "fdedd6ec9ac01300"
+            //openAccount(block, sig, PoW)
+//
+         //}
+
       default:
          break //menu
       }
    //}
+   // TODO work only needs frontier to generate next PoW, or if it's an open block, the pubKey
 
 
 }
@@ -877,6 +958,67 @@ func getWalletInfo(seed int, index int) (*keyMan.Key, error) {
    }
 
    return &key, nil
+}
+
+func getSeedFromAddress(nanoAddress string) (keyMan.Key, error) {
+   var key keyMan.Key
+
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return key, fmt.Errorf("getSeedFromAddress: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "parent_seed, " +
+      "index " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "hash = $1;"
+
+   pubkey, err := keyMan.AddressToPubKey(nanoAddress)
+   if (err != nil) {
+      return key, fmt.Errorf("getSeedFromAddress: %w", err)
+   }
+
+   recivedHash := blake2b.Sum256(pubkey)
+
+   var parentSeed int
+   var index int
+   err = conn.QueryRow(context.Background(), queryString, recivedHash[:]).Scan(&parentSeed, &index)
+   if (err != nil) {
+      return key, fmt.Errorf("getSeedFromAddress: %w", err)
+   }
+
+   key.Seed, _ = getSeedFromDatabase(parentSeed)
+   key.Index = index
+   keyMan.SeedToKeys(&key)
+
+   return key, nil
+}
+
+func getSeedFromDatabase(id int) ([]byte, error) {
+
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, fmt.Errorf("getNewAddress: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "pgp_sym_decrypt_bytea(seed, $1) " +
+   "FROM " +
+      "seeds " +
+   "WHERE " +
+      "id = $2;"
+
+   var seed []byte
+   _ = conn.QueryRow(context.Background(), queryString, databasePassword, id).Scan(&seed)
+
+   return seed, nil
 }
 
 func manualWalletUpdate(seed int, index int, nano int64) error {

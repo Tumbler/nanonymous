@@ -357,6 +357,8 @@ func SeedToKeys(seed *Key) error {
 
    seed.NanoAddress = "nano_" + b32.EncodeToString(pubCopy)[4:] + b32.EncodeToString(checksum)
 
+   seed.Initialized = true
+
    if (verbose) {
       fmt.Println("mnemonic is:\"", seed.Mnemonic, "\"")
       fmt.Print("Seed: 0x", strings.ToUpper(hex.EncodeToString(seed.Seed)), "\n")

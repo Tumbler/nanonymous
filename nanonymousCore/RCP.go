@@ -6,6 +6,7 @@ import (
    "strings"
    "io/ioutil"
    "encoding/json"
+   "encoding/hex"
    "math/big"
 
    // Local packages
@@ -16,7 +17,7 @@ import (
    //curl "github.com/andelf/go-curl"
 )
 
-func getAddressBalance(nanoAddress string) (*big.Int, error) {
+func getAccountBalance(nanoAddress string) (*keyMan.Raw, *keyMan.Raw, error) {
 
    request :=
    `{
@@ -25,16 +26,16 @@ func getAddressBalance(nanoAddress string) (*big.Int, error) {
     }`
 
    response := struct {
-      Balance keyMan.Raw
-      Receivable keyMan.Raw
+      Balance *keyMan.Raw
+      Receivable *keyMan.Raw
    }{}
 
    err := rcpCall(request, &response)
    if (err != nil) {
-      return nil, fmt.Errorf("getAddressBalance: %w", err)
+      return nil, nil, fmt.Errorf("getAddressBalance: %w", err)
    }
 
-   return response.Balance.Int, nil
+   return response.Balance, response.Receivable, nil
 }
 
 // TODO test
@@ -148,14 +149,7 @@ func telemetry() error {
    return nil
 }
 
-func publishSend(nanoAddress string) error {
-
-   previousHash := "4567896456"
-   rep := "nano_33t5by1653nt196hfwm5q3wq7oxtaix97r7bhox5zn8eratrzoqsny49ftsd"
-   newBalance := big.NewInt(41)
-   receiveAddressPub := "345678976546789900003250235023502350"
-   receiveAddress := "nano133895sd6645876ds875s8dfsd8fas8df75"
-   blockSignature := "45678987656789875456789"
+func publishSend(block keyMan.Block, signature []byte) error {
    proofOfWork := "00bfb848"
 
    request :=
@@ -165,13 +159,13 @@ func publishSend(nanoAddress string) error {
       "subype": "send",
       "block": {
          "type": "state",
-         "account": "`+ nanoAddress +`",
-         "previous": "`+ previousHash +`",
-         "representative": "`+ rep +`",
-         "balance": "`+ newBalance.String() +`",
-         "link": "`+ receiveAddressPub +`",
-         "link_as_account"": "`+ receiveAddress +`",
-         "signature": "`+ blockSignature +`",
+         "account": "`+ block.Account +`",
+         "previous": "`+ block.Previous.String() +`",
+         "representative": "`+ block.Representative +`",
+         "balance": "`+ block.Balance.String() +`",
+         "link": "`+ block.Link.String() +`",
+         "link_as_account"": "`+ block.LinkAsAccount +`",
+         "signature": "`+ string(signature) +`",
          "work": "`+ proofOfWork +`"
       }
     }`
@@ -186,6 +180,147 @@ func publishSend(nanoAddress string) error {
    }
 
    return nil
+}
+
+func openAccount(block keyMan.Block, signature []byte, proofOfWork string) error {
+
+   sig := strings.ToUpper(hex.EncodeToString(signature))
+
+   request :=
+   `{
+      "action":  "process",
+      "json_block":  "true",
+      "subype": "receive",
+      "block": {
+         "type": "state",
+         "account": "`+ block.Account +`",
+         "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+         "representative": "`+ block.Representative +`",
+         "balance": "`+ block.Balance.String() +`",
+         "link": "`+ block.Link.String() +`",
+         "signature": "`+ sig +`",
+         "work": "`+ proofOfWork +`"
+      }
+    }`
+
+   fmt.Println("request:\r\n", request)
+
+   response := struct {
+      Hash string
+   }{}
+
+   err := rcpCall(request, &response)
+   if (err != nil) {
+      return fmt.Errorf("publishSend: %w", err)
+   }
+
+   return nil
+}
+
+func getAccountInfo(nanoAddress string) error {
+
+   request :=
+   `{
+      "action": "account_info",
+      "account": "`+ nanoAddress +`"
+    }`
+
+   response := struct {
+      Frontier keyMan.HexData
+      OpenBlock keyMan.HexData           `json:"open_block"`
+      RepresentativeBlock keyMan.HexData `json:"representative_block"`
+      Balance *keyMan.Raw
+      ModifiedTimestamp int              `json:"modified_timestamp"`
+      BlockCount int64                   `json:"block_count"`
+      Account_Version int64              `json:"account_version"`
+      ConfirmationHeight int64           `json:"confirmation_height"`
+      ConfirmationHeightFrontier int64   `json:"confirmation_height_frontier"`
+   }{}
+
+   verbose = true
+   err := rcpCall(request, &response)
+   if (err != nil) {
+      return fmt.Errorf("getAccountInfo: %w", err)
+   }
+
+   return nil
+}
+
+func getAccountHistory(nanoAddress string) error {
+
+   request :=
+   `{
+      "action": "account_history",
+      "account": "`+ nanoAddress +`",
+      "count": "1"
+    }`
+
+   response := struct {
+      Frontier keyMan.HexData
+      OpenBlock keyMan.HexData           `json:"open_block"`
+      RepresentativeBlock keyMan.HexData `json:"representative_block"`
+      Balance *keyMan.Raw
+      ModifiedTimestamp int              `json:"modified_timestamp"`
+      BlockCount int64                   `json:"block_count"`
+      Account_Version int64              `json:"account_version"`
+      ConfirmationHeight int64           `json:"confirmation_height"`
+      ConfirmationHeightFrontier int64   `json:"confirmation_height_frontier"`
+   }{}
+
+   verbose = true
+   err := rcpCall(request, &response)
+   if (err != nil) {
+      return fmt.Errorf("getAccountInfo: %w", err)
+   }
+
+   return nil
+}
+
+func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
+
+   request :=
+   `{
+      "action": "accounts_pending",
+      "accounts": ["`+ nanoAddress +`"],
+      "count": "1"
+    }`
+
+   response := struct {
+      Blocks map[string][]keyMan.BlockHash
+   }{}
+
+   //var response map[string]interface{}
+
+   verbose = true
+   err := rcpCall(request, &response)
+   if (err != nil) {
+      //return fmt.Errorf("getAccountInfo: %w", err)
+   }
+
+   return response.Blocks
+}
+
+func getBlockInfo(hash keyMan.BlockHash) (keyMan.Block, error) {
+
+   request :=
+   `{
+      "action": "block_info",
+      "json_block": "true",
+      "hash": "`+ hash.String() +`"
+    }`
+    fmt.Println("request: ", request)
+
+    response := struct {
+       Contents keyMan.Block
+    }{}
+
+   verbose = true
+   err := rcpCall(request, &response)
+   if (err != nil) {
+      return response.Contents, fmt.Errorf("getAccountInfo: %w", err)
+   }
+
+   return response.Contents, nil
 }
 
 func rcpCall(request string, response any) error {

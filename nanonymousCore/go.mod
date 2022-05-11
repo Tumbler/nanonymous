@@ -13,6 +13,7 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.0.0-rc.1 // indirect
+	github.com/hectorchu/gonano v0.1.17 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

@@ -2,17 +2,17 @@ package nanoKeyManager
 
 import (
    "fmt"
-   "crypto/ed25519"
    "strings"
    "math/big"
+   "golang.org/x/crypto/blake2b"
    "encoding/hex"
    "encoding/json"
-   "golang.org/x/crypto/blake2b"
    "strconv"
    "database/sql/driver"
 
-   // Different file??
-   //"github.com/jackc/pgtype"
+   // Third party packages
+   "github.com/hectorchu/gonano/wallet/ed25519"
+
 )
 
 // Block corresponds to the JSON representation of a block.
@@ -21,7 +21,7 @@ type Block struct {
    Account        string     `json:"account"`
    Previous       BlockHash  `json:"previous"`
    Representative string     `json:"representative"`
-   Balance        Raw        `json:"balance"`
+   Balance        *Raw       `json:"balance"`
    Link           BlockHash  `json:"link"`
    LinkAsAccount  string     `json:"link_as_account"`
    Signature      HexData    `json:"signature"`
@@ -70,8 +70,8 @@ func (b *Block) Hash() (hash BlockHash, err error) {
 
 func (b *Block) Sign() ([]byte, error) {
 
-   if (b.Seed.KeyType != 0) {
-      return nil, fmt.Errorf("Sign: no seed in key struct")
+   if (b.Seed.KeyType > 1 || !b.Seed.Initialized) {
+      return nil, fmt.Errorf("Sign: no private key in key struct")
    }
 
    hash , err := b.Hash()
@@ -79,7 +79,8 @@ func (b *Block) Sign() ([]byte, error) {
       return nil, fmt.Errorf("Sign: %w", err)
    }
 
-   return ed25519.Sign(b.Seed.Seed, hash), nil
+   keyPair := append(b.Seed.PrivateKey, b.Seed.PublicKey...)
+   return ed25519.Sign(keyPair, hash), nil
 }
 
 // JSON BlockHash Marshaler
@@ -109,6 +110,10 @@ func (h *HexData) UnmarshalJSON(data []byte) (err error) {
    }
    *h, err = hex.DecodeString(s)
    return
+}
+
+func (h HexData) String() string {
+   return strings.ToUpper(hex.EncodeToString(h))
 }
 
 // JSON Raw Marshaler
@@ -146,6 +151,7 @@ func (r *Raw) Scan(src any) error {
    return nil
 }
 
+// Postgres Insert driver for Raw
 func (r *Raw) Value() (driver.Value, error) {
    return r.Int.String(), nil
 }
