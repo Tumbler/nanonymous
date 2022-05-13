@@ -34,6 +34,8 @@ type BlockHash []byte
 // HexData represents generic hex data.
 type HexData []byte
 
+type JInt int64
+
 // Raw represents an amount of raw nano.
 type Raw struct {
     *big.Int
@@ -41,7 +43,11 @@ type Raw struct {
 
 
 func (h BlockHash) String() string {
-   return strings.ToUpper(hex.EncodeToString(h))
+   if (len(h) == 0) {
+      return "0000000000000000000000000000000000000000000000000000000000000000"
+   } else {
+      return strings.ToUpper(hex.EncodeToString(h))
+   }
 }
 
 // Hash calculates the block hash.
@@ -115,6 +121,25 @@ func (h HexData) String() string {
    return strings.ToUpper(hex.EncodeToString(h))
 }
 
+// JSON TimeStamp Marshaler
+func (j JInt) MarshalJSON() ([]byte, error) {
+   return json.Marshal(int64(j))
+}
+
+func (j *JInt) UnmarshalJSON(data []byte) (err error) {
+   var s string
+   if err = json.Unmarshal(data, &s); err != nil {
+      return
+   }
+   i, err := strconv.Atoi(s)
+   *j = JInt(i)
+   return
+}
+
+func (j JInt) String() string {
+   return strconv.Itoa(int(j))
+}
+
 // JSON Raw Marshaler
 func (r Raw) MarshalJSON() ([]byte, error) {
     return []byte(r.String()), nil
@@ -169,6 +194,12 @@ func NewFromRaw(raw *Raw) *Raw {
    return r
 }
 
+func NewRawFromNano(nano float64) *Raw {
+   expanded := int64(nano * 1000000000000000)
+   raw := NewRaw(0).Mul(NewRaw(expanded), NewRaw(0).Exp(NewRaw(10), NewRaw(15), nil))
+   return raw
+}
+
 func (r Raw) String() string {
    return r.Int.String()
 }
@@ -198,9 +229,9 @@ func (r *Raw) Add(x, y *Raw) *Raw {
 }
 
 // Cmp compares r and x and returns:
-// -1 if x <  y
-//  0 if x == y
-// +1 if x >  y
+// -1 if r <  x
+//  0 if r == x
+// +1 if r >  x
 func (r *Raw) Cmp(x *Raw) int {
    return r.Int.Cmp(x.Int)
 }

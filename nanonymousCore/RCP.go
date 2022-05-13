@@ -19,6 +19,8 @@ import (
 
 func getAccountBalance(nanoAddress string) (*keyMan.Raw, *keyMan.Raw, error) {
 
+   url := "http://"+ nodeIP
+
    request :=
    `{
       "action":  "account_balance",
@@ -30,7 +32,7 @@ func getAccountBalance(nanoAddress string) (*keyMan.Raw, *keyMan.Raw, error) {
       Receivable *keyMan.Raw
    }{}
 
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    if (err != nil) {
       return nil, nil, fmt.Errorf("getAddressBalance: %w", err)
    }
@@ -40,6 +42,8 @@ func getAccountBalance(nanoAddress string) (*keyMan.Raw, *keyMan.Raw, error) {
 
 // TODO test
 func getOwnerOfBlock(hash string) (string, error) {
+
+   url := "http://"+ nodeIP
 
    hash = strings.ToUpper(hash)
 
@@ -53,7 +57,7 @@ func getOwnerOfBlock(hash string) (string, error) {
       Account string
    }{}
 
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    if (err != nil) {
       return "", fmt.Errorf("getAddressBalance: %w", err)
    }
@@ -63,6 +67,8 @@ func getOwnerOfBlock(hash string) (string, error) {
 
 // TODO test
 func confirmBlock(hash string) error {
+
+   url := "http://"+ nodeIP
 
    hash = strings.ToUpper(hash)
 
@@ -76,7 +82,7 @@ func confirmBlock(hash string) error {
       Started string
    }{}
 
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    if (err != nil) {
       return fmt.Errorf("getAddressBalance: %w", err)
    }
@@ -89,6 +95,8 @@ func confirmBlock(hash string) error {
 
 func getBlockCount() (*big.Int, *big.Int, *big.Int, error) {
 
+   url := "http://"+ nodeIP
+
    request :=
    `{
       "action":  "block_count"
@@ -100,7 +108,7 @@ func getBlockCount() (*big.Int, *big.Int, *big.Int, error) {
       Cemented keyMan.Raw
    }{}
 
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    if (err != nil) {
       return nil, nil, nil, fmt.Errorf("getAddressBalance: %w", err)
    }
@@ -109,6 +117,8 @@ func getBlockCount() (*big.Int, *big.Int, *big.Int, error) {
 }
 
 func printPeers() error {
+
+   url := "http://"+ nodeIP
 
    request :=
    `{
@@ -122,7 +132,7 @@ func printPeers() error {
 
    verboseSave := verbose
    verbose = true
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    verbose = verboseSave
    if (err != nil) {
       return fmt.Errorf("getAddressBalance: %w", err)
@@ -133,6 +143,8 @@ func printPeers() error {
 
 func telemetry() error {
 
+   url := "http://"+ nodeIP
+
    request :=
    `{
       "action": "telemetry"
@@ -140,7 +152,7 @@ func telemetry() error {
 
    verboseSave := verbose
    verbose = true
-   err := rcpCall(request, nil)
+   err := rcpCall(request, nil, url)
    verbose = verboseSave
    if (err != nil) {
       return fmt.Errorf("getAddressBalance: %w", err)
@@ -149,8 +161,11 @@ func telemetry() error {
    return nil
 }
 
-func publishSend(block keyMan.Block, signature []byte) error {
-   proofOfWork := "00bfb848"
+func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (keyMan.BlockHash, error) {
+
+   url := "http://"+ nodeIP
+
+   sig := strings.ToUpper(hex.EncodeToString(signature))
 
    request :=
    `{
@@ -164,25 +179,26 @@ func publishSend(block keyMan.Block, signature []byte) error {
          "representative": "`+ block.Representative +`",
          "balance": "`+ block.Balance.String() +`",
          "link": "`+ block.Link.String() +`",
-         "link_as_account"": "`+ block.LinkAsAccount +`",
-         "signature": "`+ string(signature) +`",
+         "signature": "`+ sig +`",
          "work": "`+ proofOfWork +`"
       }
     }`
 
    response := struct {
-      Hash string
+      Hash keyMan.BlockHash
    }{}
 
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    if (err != nil) {
-      return fmt.Errorf("publishSend: %w", err)
+      return nil, fmt.Errorf("publishSend: %w", err)
    }
 
-   return nil
+   return response.Hash ,nil
 }
 
-func openAccount(block keyMan.Block, signature []byte, proofOfWork string) (keyMan.BlockHash, error) {
+func publishReceive(block keyMan.Block, signature []byte, proofOfWork string) (keyMan.BlockHash, error) {
+
+   url := "http://"+ nodeIP
 
    sig := strings.ToUpper(hex.EncodeToString(signature))
 
@@ -194,7 +210,7 @@ func openAccount(block keyMan.Block, signature []byte, proofOfWork string) (keyM
       "block": {
          "type": "state",
          "account": "`+ block.Account +`",
-         "previous": "0000000000000000000000000000000000000000000000000000000000000000",
+         "previous": "`+ block.Previous.String() +`",
          "representative": "`+ block.Representative +`",
          "balance": "`+ block.Balance.String() +`",
          "link": "`+ block.Link.String() +`",
@@ -203,13 +219,11 @@ func openAccount(block keyMan.Block, signature []byte, proofOfWork string) (keyM
       }
     }`
 
-   fmt.Println("request:\r\n", request)
-
    response := struct {
       Hash keyMan.BlockHash
    }{}
 
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    if (err != nil) {
       return nil, fmt.Errorf("publishSend: %w", err)
    }
@@ -221,25 +235,29 @@ type AccountInfo struct {
    Frontier keyMan.BlockHash
    OpenBlock keyMan.BlockHash         `json:"open_block"`
    RepresentativeBlock keyMan.HexData `json:"representative_block"`
+   Representative string              `json:"representative"`
    Balance *keyMan.Raw
-   ModifiedTimestamp int64            `json:"modified_timestamp"`
-   BlockCount int64                   `json:"block_count"`
-   Account_Version int64              `json:"account_version"`
-   ConfirmationHeight int64           `json:"confirmation_height"`
-   ConfirmationHeightFrontier int64   `json:"confirmation_height_frontier"`
+   ModifiedTimestamp keyMan.JInt      `json:"modified_timestamp"`
+   BlockCount keyMan.JInt             `json:"block_count"`
+   Account_Version keyMan.JInt        `json:"account_version"`
+   ConfirmationHeight keyMan.JInt     `json:"confirmation_height"`
+   ConfirmationHeightFrontier keyMan.BlockHash `json:"confirmation_height_frontier"`
 }
 
 func getAccountInfo(nanoAddress string) (AccountInfo, error) {
 
+   url := "http://"+ nodeIP
+
    request :=
    `{
       "action": "account_info",
+      "representative": "true",
       "account": "`+ nanoAddress +`"
     }`
 
    var response AccountInfo
 
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    if (err != nil) {
       return response, fmt.Errorf("getAccountInfo: %w", err)
    }
@@ -248,6 +266,8 @@ func getAccountInfo(nanoAddress string) (AccountInfo, error) {
 }
 
 func getAccountHistory(nanoAddress string) error {
+
+   url := "http://"+ nodeIP
 
    request :=
    `{
@@ -261,14 +281,14 @@ func getAccountHistory(nanoAddress string) error {
       OpenBlock keyMan.HexData           `json:"open_block"`
       RepresentativeBlock keyMan.HexData `json:"representative_block"`
       Balance *keyMan.Raw
-      ModifiedTimestamp int              `json:"modified_timestamp"`
-      BlockCount int64                   `json:"block_count"`
-      Account_Version int64              `json:"account_version"`
-      ConfirmationHeight int64           `json:"confirmation_height"`
-      ConfirmationHeightFrontier int64   `json:"confirmation_height_frontier"`
+      ModifiedTimestamp keyMan.JInt      `json:"modified_timestamp"`
+      BlockCount keyMan.JInt             `json:"block_count"`
+      Account_Version keyMan.JInt        `json:"account_version"`
+      ConfirmationHeight keyMan.JInt     `json:"confirmation_height"`
+      ConfirmationHeightFrontier keyMan.JInt `json:"confirmation_height_frontier"`
    }{}
 
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    if (err != nil) {
       return fmt.Errorf("getAccountInfo: %w", err)
    }
@@ -277,6 +297,8 @@ func getAccountHistory(nanoAddress string) error {
 }
 
 func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
+
+   url := "http://"+ nodeIP
 
    request :=
    `{
@@ -291,7 +313,7 @@ func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
 
    //var response map[string]interface{}
 
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    if (err != nil) {
       //return fmt.Errorf("getAccountInfo: %w", err)
    }
@@ -299,7 +321,19 @@ func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
    return response.Blocks
 }
 
-func getBlockInfo(hash keyMan.BlockHash) (keyMan.Block, error) {
+type BlockInfo struct {
+   Amount *keyMan.Raw
+   Contents keyMan.Block
+   Height int
+   LocalTimestamp keyMan.JInt `json:"local_timestamp"`
+   Successor keyMan.BlockHash
+   Confirmed bool
+   Subtype string
+}
+
+func getBlockInfo(hash keyMan.BlockHash) (BlockInfo, error) {
+
+   url := "http://"+ nodeIP
 
    request :=
    `{
@@ -307,21 +341,19 @@ func getBlockInfo(hash keyMan.BlockHash) (keyMan.Block, error) {
       "json_block": "true",
       "hash": "`+ hash.String() +`"
     }`
-    fmt.Println("request: ", request)
 
-    response := struct {
-       Contents keyMan.Block
-    }{}
-
-   err := rcpCall(request, &response)
+   var response BlockInfo
+   err := rcpCall(request, &response, url)
    if (err != nil) {
-      return response.Contents, fmt.Errorf("getAccountInfo: %w", err)
+      return response, fmt.Errorf("getAccountInfo: %w", err)
    }
 
-   return response.Contents, nil
+   return response, nil
 }
 
 func generateWorkOnNode(hash keyMan.BlockHash) (string, error) {
+
+   url := "http://"+ nodeIP
 
    request :=
    `{
@@ -329,7 +361,6 @@ func generateWorkOnNode(hash keyMan.BlockHash) (string, error) {
       "use_peers": "true",
       "hash": "`+ hash.String() +`"
     }`
-    fmt.Println("request: ", request)
 
     response := struct {
        Work string
@@ -337,7 +368,7 @@ func generateWorkOnNode(hash keyMan.BlockHash) (string, error) {
        Multiplier string
     }{}
 
-   err := rcpCall(request, &response)
+   err := rcpCall(request, &response, url)
    if (err != nil) {
       return "", fmt.Errorf("generateWorkOnNode: %w", err)
    }
@@ -346,10 +377,35 @@ func generateWorkOnNode(hash keyMan.BlockHash) (string, error) {
 
 }
 
-func rcpCall(request string, response any) error {
+func generateWorkOnWorkServer(hash keyMan.BlockHash) (string, error) {
+
+   request :=
+   `{
+      "action": "work_generate",
+      "hash": "`+ hash.String() +`"
+    }`
+
+    response := struct {
+       Work string
+       Difficulty string
+       Multiplier string
+    }{}
+
+   err := rcpCall(request, &response, workServer)
+   if (err != nil) {
+      return "", fmt.Errorf("generateWorkOnNode: %w", err)
+   }
+
+   return response.Work, nil
+}
+
+func rcpCall(request string, response any, url string) error {
    // TODO error out if connection takes too long
 
-   url := "http://"+ nodeIP
+   if (verbose) {
+      fmt.Println("request: ", request)
+   }
+
    payload := strings.NewReader(request)
    req, err := http.NewRequest("POST", url, payload)
    if (err != nil) {
@@ -373,7 +429,7 @@ func rcpCall(request string, response any) error {
 
    err = json.Unmarshal(body, &response)
    if (err != nil) {
-      return fmt.Errorf("error: %w", err)
+      return fmt.Errorf("Unmarshal: %w", err)
    }
 
    return nil
