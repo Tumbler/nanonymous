@@ -40,6 +40,32 @@ func updateBalance(nanoAddress string, balance *keyMan.Raw) error {
    return nil
 }
 
+func getBalance(nanoAddress string) (*keyMan.Raw, error) {
+   var balance = keyMan.NewRaw(0)
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return balance,fmt.Errorf("getBalance: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECt " +
+      "balance " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "\"hash\" = $1;"
+
+   pubKey,  _ := keyMan.AddressToPubKey(nanoAddress)
+   nanoAddressHash := blake2b.Sum256(pubKey)
+   err = conn.QueryRow(context.Background(), queryString, nanoAddressHash[:]).Scan(balance)
+   if (err != nil) {
+      return  balance, fmt.Errorf("getBalance: %w", err)
+   }
+
+   return balance, nil
+}
+
 func clearPoW(nanoAddress string) error {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {

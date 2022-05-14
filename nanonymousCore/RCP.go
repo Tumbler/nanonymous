@@ -8,6 +8,8 @@ import (
    "encoding/json"
    "encoding/hex"
    "math/big"
+   "context"
+   "time"
 
    // Local packages
    keyMan "nanoKeyManager"
@@ -32,7 +34,7 @@ func getAccountBalance(nanoAddress string) (*keyMan.Raw, *keyMan.Raw, error) {
       Receivable *keyMan.Raw
    }{}
 
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       return nil, nil, fmt.Errorf("getAddressBalance: %w", err)
    }
@@ -57,7 +59,7 @@ func getOwnerOfBlock(hash string) (string, error) {
       Account string
    }{}
 
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       return "", fmt.Errorf("getAddressBalance: %w", err)
    }
@@ -82,7 +84,7 @@ func confirmBlock(hash string) error {
       Started string
    }{}
 
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       return fmt.Errorf("getAddressBalance: %w", err)
    }
@@ -108,7 +110,7 @@ func getBlockCount() (*big.Int, *big.Int, *big.Int, error) {
       Cemented keyMan.Raw
    }{}
 
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       return nil, nil, nil, fmt.Errorf("getAddressBalance: %w", err)
    }
@@ -132,7 +134,7 @@ func printPeers() error {
 
    verboseSave := verbose
    verbose = true
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    verbose = verboseSave
    if (err != nil) {
       return fmt.Errorf("getAddressBalance: %w", err)
@@ -152,7 +154,7 @@ func telemetry() error {
 
    verboseSave := verbose
    verbose = true
-   err := rcpCall(request, nil, url)
+   err := rcpCallWithTimeout(request, nil, url, 5000)
    verbose = verboseSave
    if (err != nil) {
       return fmt.Errorf("getAddressBalance: %w", err)
@@ -188,7 +190,7 @@ func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (keyM
       Hash keyMan.BlockHash
    }{}
 
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       return nil, fmt.Errorf("publishSend: %w", err)
    }
@@ -223,7 +225,7 @@ func publishReceive(block keyMan.Block, signature []byte, proofOfWork string) (k
       Hash keyMan.BlockHash
    }{}
 
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       return nil, fmt.Errorf("publishSend: %w", err)
    }
@@ -257,7 +259,7 @@ func getAccountInfo(nanoAddress string) (AccountInfo, error) {
 
    var response AccountInfo
 
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       return response, fmt.Errorf("getAccountInfo: %w", err)
    }
@@ -288,7 +290,7 @@ func getAccountHistory(nanoAddress string) error {
       ConfirmationHeightFrontier keyMan.JInt `json:"confirmation_height_frontier"`
    }{}
 
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       return fmt.Errorf("getAccountInfo: %w", err)
    }
@@ -313,7 +315,7 @@ func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
 
    //var response map[string]interface{}
 
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       //return fmt.Errorf("getAccountInfo: %w", err)
    }
@@ -343,7 +345,7 @@ func getBlockInfo(hash keyMan.BlockHash) (BlockInfo, error) {
     }`
 
    var response BlockInfo
-   err := rcpCall(request, &response, url)
+   err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       return response, fmt.Errorf("getAccountInfo: %w", err)
    }
@@ -368,7 +370,7 @@ func generateWorkOnNode(hash keyMan.BlockHash) (string, error) {
        Multiplier string
     }{}
 
-   err := rcpCall(request, &response, url)
+   err := rcpCall(request, &response, url, nil)
    if (err != nil) {
       return "", fmt.Errorf("generateWorkOnNode: %w", err)
    }
@@ -377,11 +379,12 @@ func generateWorkOnNode(hash keyMan.BlockHash) (string, error) {
 
 }
 
-func generateWorkOnWorkServer(hash keyMan.BlockHash) (string, error) {
+func generateWorkOnWorkServer(hash keyMan.BlockHash, difficulty string) (string, error) {
 
    request :=
    `{
       "action": "work_generate",
+      "difficulty": "`+ difficulty +`",
       "hash": "`+ hash.String() +`"
     }`
 
@@ -391,7 +394,7 @@ func generateWorkOnWorkServer(hash keyMan.BlockHash) (string, error) {
        Multiplier string
     }{}
 
-   err := rcpCall(request, &response, workServer)
+   err := rcpCall(request, &response, workServer, nil)
    if (err != nil) {
       return "", fmt.Errorf("generateWorkOnNode: %w", err)
    }
@@ -399,8 +402,28 @@ func generateWorkOnWorkServer(hash keyMan.BlockHash) (string, error) {
    return response.Work, nil
 }
 
-func rcpCall(request string, response any, url string) error {
-   // TODO error out if connection takes too long
+func rcpCallWithTimeout(request string, response any, url string, ms time.Duration) error {
+
+   ctx, _ := context.WithTimeout(context.Background(), ms*time.Millisecond)
+   ch := make(chan error)
+
+   go rcpCall(request, response, url, ch)
+
+   select {
+      case <-ctx.Done():
+         return fmt.Errorf("rcpCallWithTimeout: rcp call took too long (%d ms)", ms)
+      case err := <-ch:
+         return err
+   }
+}
+
+func rcpCall(request string, response any, url string, ch chan error) error {
+   var err error
+   defer func() {
+      if (ch != nil) {
+         ch <- err
+      }
+   }()
 
    if (verbose) {
       fmt.Println("request: ", request)
