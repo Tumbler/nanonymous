@@ -253,20 +253,10 @@ func SeedToKeys(seed *Key) error {
       return fmt.Errorf("SeedToKeys: %w", err)
    }
 
-   // Make a copy that we can manuipulate
-   var pubCopy = make([]byte, len(seed.PublicKey))
-   copy(pubCopy, seed.PublicKey)
-
-   checksum, err := NanoAddressChecksum(pubCopy)
-   pubCopy = append([]byte{0, 0, 0}, pubCopy...)
-   b32 := base32.NewEncoding(NANO_ADDRESS_ENCODING)
-
+   seed.NanoAddress, err = PubKeyToAddress(seed.PublicKey)
    if (err != nil) {
       return fmt.Errorf("SeedToKeys: %w", err)
    }
-
-   seed.NanoAddress = "nano_" + b32.EncodeToString(pubCopy)[4:] + b32.EncodeToString(checksum)
-
    seed.Initialized = true
 
    if (verbose) {
@@ -282,6 +272,20 @@ func SeedToKeys(seed *Key) error {
 }
 
 
+func PubKeyToAddress(pubkey []byte) (string, error) {
+
+   checksum, err := NanoAddressChecksum(pubkey)
+   pubkey = append([]byte{0, 0, 0}, pubkey...)
+   b32 := base32.NewEncoding(NANO_ADDRESS_ENCODING)
+
+   if (err != nil) {
+      return "", fmt.Errorf("PubKeyToAddress: %w", err)
+   }
+
+   nanoAddress := "nano_" + b32.EncodeToString(pubkey)[4:] + b32.EncodeToString(checksum)
+
+   return nanoAddress, nil
+}
 // AddressToPubKey takes a nano address and converts it to the corresponding
 // public key.
 func AddressToPubKey(nanoAddress string) ([]byte, error) {

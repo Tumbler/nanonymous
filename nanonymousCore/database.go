@@ -191,7 +191,7 @@ func getSeedFromIndex(seed int, index int) (*keyMan.Key, error) {
 func getSeedFromDatabase(id int) ([]byte, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, fmt.Errorf("getNewAddress: %w", err)
+      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
    }
    defer conn.Close(context.Background())
 

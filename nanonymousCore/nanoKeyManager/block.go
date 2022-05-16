@@ -35,6 +35,7 @@ type BlockHash []byte
 type HexData []byte
 
 type JInt int64
+type JBool bool
 
 // Raw represents an amount of raw nano.
 type Raw struct {
@@ -121,7 +122,7 @@ func (h HexData) String() string {
    return strings.ToUpper(hex.EncodeToString(h))
 }
 
-// JSON TimeStamp Marshaler
+// JSON int Marshaler
 func (j JInt) MarshalJSON() ([]byte, error) {
    return json.Marshal(int64(j))
 }
@@ -138,6 +139,32 @@ func (j *JInt) UnmarshalJSON(data []byte) (err error) {
 
 func (j JInt) String() string {
    return strconv.Itoa(int(j))
+}
+
+// JSON bool Marshaler
+func (b JBool) MarshalJSON() ([]byte, error) {
+   return json.Marshal(bool(b))
+}
+
+func (b *JBool) UnmarshalJSON(data []byte) (err error) {
+   var s string
+   if err = json.Unmarshal(data, &s); err != nil {
+      return
+   }
+   if (s == "true") {
+      *b = true
+   } else {
+      *b = false
+   }
+   return
+}
+
+func (b JBool) String() string {
+   if (b) {
+      return "true"
+   } else {
+      return "false"
+   }
 }
 
 // JSON Raw Marshaler
@@ -169,7 +196,7 @@ func (r *Raw) Scan(src any) error {
 
       r.SetString(text[0], 10)
    } else {
-      return fmt.Errorf("Can't assign", src, "to Raw")
+      return fmt.Errorf("Can't assign %s to Raw", src)
    }
 
    return nil

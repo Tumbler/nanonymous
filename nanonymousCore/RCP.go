@@ -267,7 +267,20 @@ func getAccountInfo(nanoAddress string) (AccountInfo, error) {
    return response, nil
 }
 
-func getAccountHistory(nanoAddress string) error {
+type AccountHistory struct {
+   History []struct {
+      Type string
+      Account string
+      Amount *keyMan.Raw
+      LocalTimestamp keyMan.JInt `json:"local_timestamp"`
+      Height keyMan.JInt
+      Hash keyMan.BlockHash
+      Confirmed keyMan.JBool
+   }
+   Previous keyMan.BlockHash
+}
+
+func getAccountHistory(nanoAddress string) (AccountHistory, error) {
 
    url := "http://"+ nodeIP
 
@@ -278,24 +291,13 @@ func getAccountHistory(nanoAddress string) error {
       "count": "1"
     }`
 
-   response := struct {
-      Frontier keyMan.HexData
-      OpenBlock keyMan.HexData           `json:"open_block"`
-      RepresentativeBlock keyMan.HexData `json:"representative_block"`
-      Balance *keyMan.Raw
-      ModifiedTimestamp keyMan.JInt      `json:"modified_timestamp"`
-      BlockCount keyMan.JInt             `json:"block_count"`
-      Account_Version keyMan.JInt        `json:"account_version"`
-      ConfirmationHeight keyMan.JInt     `json:"confirmation_height"`
-      ConfirmationHeightFrontier keyMan.JInt `json:"confirmation_height_frontier"`
-   }{}
-
+   var response AccountHistory
    err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
-      return fmt.Errorf("getAccountInfo: %w", err)
+      return response, fmt.Errorf("getAccountInfo: %w", err)
    }
 
-   return nil
+   return response, nil
 }
 
 func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
@@ -326,10 +328,10 @@ func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
 type BlockInfo struct {
    Amount *keyMan.Raw
    Contents keyMan.Block
-   Height int
+   Height keyMan.JInt
    LocalTimestamp keyMan.JInt `json:"local_timestamp"`
    Successor keyMan.BlockHash
-   Confirmed bool
+   Confirmed keyMan.JBool
    Subtype string
 }
 
@@ -353,13 +355,14 @@ func getBlockInfo(hash keyMan.BlockHash) (BlockInfo, error) {
    return response, nil
 }
 
-func generateWorkOnNode(hash keyMan.BlockHash) (string, error) {
+func generateWorkOnNode(hash keyMan.BlockHash, difficulty string) (string, error) {
 
    url := "http://"+ nodeIP
 
    request :=
    `{
       "action": "work_generate",
+      "difficulty": "`+ difficulty +`",
       "use_peers": "true",
       "hash": "`+ hash.String() +`"
     }`
