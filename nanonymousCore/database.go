@@ -220,7 +220,7 @@ func setAddressInUse(nanoAddress string) {
    "UPDATE " +
       "wallets " +
    "SET " +
-      "\"in_use\" = TRUE" +
+      "\"in_use\" = TRUE " +
    "WHERE " +
       "\"hash\" = $1;"
 
@@ -240,11 +240,53 @@ func setAddressNotInUse(nanoAddress string) {
    "UPDATE " +
       "wallets " +
    "SET " +
-      "\"in_use\" = FALSE" +
+      "\"in_use\" = FALSE " +
    "WHERE " +
       "\"hash\" = $1;"
 
    pubKey,  _ := keyMan.AddressToPubKey(nanoAddress)
    nanoAddressHash := blake2b.Sum256(pubKey)
    conn.Exec(context.Background(), queryString, nanoAddressHash[:])
+}
+
+func resetInUse() {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "UPDATE " +
+      "wallets " +
+   "SET " +
+      "\"in_use\" = FALSE;"
+
+   conn.Exec(context.Background(), queryString)
+}
+
+func addressExsistsInDB(nanoAddress string) bool {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return false
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "hash " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "\"hash\" = $1;"
+
+   pubKey, _ := keyMan.AddressToPubKey(nanoAddress)
+   hash := blake2b.Sum256(pubKey)
+   row, _ := conn.Query(context.Background(), queryString, hash[:])
+
+   if (row.Next()) {
+      return true
+   } else {
+      return false
+   }
 }

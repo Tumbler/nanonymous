@@ -10,6 +10,7 @@ import (
    "math/big"
    "context"
    "time"
+   "strconv"
 
    // Local packages
    keyMan "nanoKeyManager"
@@ -280,7 +281,7 @@ type AccountHistory struct {
    Previous keyMan.BlockHash
 }
 
-func getAccountHistory(nanoAddress string) (AccountHistory, error) {
+func getAccountHistory(nanoAddress string, num int) (AccountHistory, error) {
 
    url := "http://"+ nodeIP
 
@@ -288,7 +289,7 @@ func getAccountHistory(nanoAddress string) (AccountHistory, error) {
    `{
       "action": "account_history",
       "account": "`+ nanoAddress +`",
-      "count": "1"
+      "count": "`+ strconv.Itoa(num) +`"
     }`
 
    var response AccountHistory
@@ -427,6 +428,8 @@ func rcpCall(request string, response any, url string, ch chan error) error {
          ch <- err
       }
    }()
+
+   // TODO capure error response from node??
 
    if (verbose) {
       fmt.Println("request: ", request)

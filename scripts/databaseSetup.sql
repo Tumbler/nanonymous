@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS wallets(
       REFERENCES seeds(id)
       ON DELETE CASCADE,
    pow TEXT,
-   in_use BOOL DEFAULT false,
+   in_use BOOL DEFAULT true,
    PRIMARY KEY (parent_seed, index)
 );
 

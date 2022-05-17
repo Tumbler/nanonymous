@@ -162,19 +162,11 @@ func main() {
          }
       case "6":
          verbose = true
-         seed, _ := getSeedFromIndex(1, 0)
+         seed, _ := getSeedFromIndex(1, 6)
          err := receivedNano(seed.NanoAddress)
          if (err != nil) {
             fmt.Println("err: ", err.Error())
          }
-
-         //wg.Wait()
-         //seed, _ = getSeedFromIndex(1, 6)
-         //_, _, err = Receive(seed.NanoAddress)
-         //if (err != nil) {
-            //fmt.Println("err: ", err.Error())
-         //}
-
 
       case "7":
          keyMan.WalletVerbose(true)
@@ -249,25 +241,47 @@ func main() {
          verbose = true
          var seedSend *keyMan.Key
          var seedReceive *keyMan.Key
-         seedSend, _ = getSeedFromIndex(1, 3)
-         seedReceive, _ = getSeedFromIndex(1, 0)
+         seedSend, _ = getSeedFromIndex(1, 0)
+         seedReceive, _ = getSeedFromIndex(1, 6)
          SendEasy(seedSend.NanoAddress,
                   seedReceive.NanoAddress,
-                  keyMan.NewRawFromNano(1.5))
-         //seedSend, _ = getSeedFromIndex(1, 6)
-         //seedReceive, _ = getSeedFromIndex(1, 7)
+                  keyMan.NewRawFromNano(1.5),
+                  false)
+         //seedSend, _ = getSeedFromIndex(1, 10)
+         //seedReceive, _ = getSeedFromIndex(1, 1)
          //SendEasy(seedSend.NanoAddress,
                   //seedReceive.NanoAddress,
-                  //keyMan.NewRawFromNano(0.998))
-         //seedSend, _ = getSeedFromIndex(1, 4)
+                  //keyMan.NewRawFromNano(0.5),
+                  //false)
+         //seedSend, _ = getSeedFromIndex(1, 10)
+         //seedReceive, _ = getSeedFromIndex(1, 2)
+         //SendEasy(seedSend.NanoAddress,
+                  //seedReceive.NanoAddress,
+                  //keyMan.NewRawFromNano(0.5),
+                  //false)
+         //time.Sleep(5 * time.Second)
+         //seedSend, _ = getSeedFromIndex(1, 10)
          //seedReceive, _ = getSeedFromIndex(1, 3)
          //SendEasy(seedSend.NanoAddress,
                   //seedReceive.NanoAddress,
-                  //keyMan.NewRawFromNano(0.5))
+                  //keyMan.NewRawFromNano(0.5),
+                  //true)
+         //seedSend, _ = getSeedFromIndex(1, 0)
+         //seedReceive, _ = getSeedFromIndex(1, 6)
+         //SendEasy(seedSend.NanoAddress,
+                  //seedReceive.NanoAddress,
+                  //keyMan.NewRawFromNano(1.0),
+                  //false)
+         //seedSend, _ = getSeedFromIndex(1, 11)
+         //seedReceive, _ = getSeedFromIndex(1, 0)
+         //SendEasy(seedSend.NanoAddress,
+                  //seedReceive.NanoAddress,
+                  //keyMan.NewRawFromNano(0.5),
+                  //false)
       case "K":
          verbose = true
 
-         for i := 0; i <= 10; i++ {
+         for i := 0; i <= 14; i++ {
             fmt.Println("--------------", i, "-------------")
             seedReceive, _ := getSeedFromIndex(1, i)
             err := ReceiveAll(seedReceive.NanoAddress)
@@ -282,8 +296,8 @@ func main() {
          }
          defer conn.Close(context.Background())
 
-         seedSend, _ := getSeedFromIndex(1, 3)
-         seedReceive, _ := getSeedFromIndex(1, 6)
+         seedSend, _ := getSeedFromIndex(1, 0)
+         seedReceive, _ := getSeedFromIndex(1, 10)
          blacklist(conn, seedSend.PublicKey, seedReceive.PublicKey)
 
       case "M":
@@ -317,17 +331,8 @@ func main() {
          fmt.Println("work: ", work)
       case "P":
          verbose = true
-         seedkey, _ := getSeedFromIndex(1, 4)
 
-         ai, err := getAccountInfo(seedkey.NanoAddress)
-            if (err != nil) {
-               fmt.Println(err.Error())
-            }
-         err = simpleRefund(ai.Frontier)
-            if (err != nil) {
-               fmt.Println(err.Error())
-            }
-
+         resetInUse()
       }
 
 
@@ -367,6 +372,11 @@ func initNanoymousCore() error {
    if (workServer == "") {
       return fmt.Errorf("initNanoymousCore: work server address not found! (Use \"work = {work_server_address}\" in embed.txt)")
    }
+
+   // TODO
+   //resetInUse()
+   seedSend, _ := getSeedFromIndex(1, 0)
+   setAddressInUse(seedSend.NanoAddress)
 
    feeDividend = int64(math.Trunc(100/FEE_PERCENT))
 
@@ -606,6 +616,7 @@ func receivedNano(nanoAddress string) error {
    if (payment == nil || payment.Cmp(keyMan.NewRaw(0)) == 0) {
       return fmt.Errorf("receivedNano: No payment received")
    }
+   fmt.Println(" receivehash: ", receiveHash)
 
    // If anything goes wrong the transactionManager will make sure to clean up
    // the mess.
@@ -619,11 +630,12 @@ func receivedNano(nanoAddress string) error {
    }
    t.payment = payment
    t.receiveHash = receiveHash
+   fmt.Println(" receivehash: ", t.receiveHash.String())
    t.commChannel = make(chan int)
    t.errChannel = make(chan error)
 
    // TODO This is just for debugging
-   seed, _ := getSeedFromIndex(1, 6)
+   seed, _ := getSeedFromIndex(1, 10)
    clientPub, _ := keyMan.AddressToPubKey(seed.NanoAddress)
    setClientAddress(parentSeedId, index, clientPub)
    // TODO end of debugging code
@@ -760,11 +772,10 @@ func receivedNano(nanoAddress string) error {
       t.commChannel <- 1
    } else if (len(t.sendingKeys) > 1) {
       // Need to do a multi-send; Get a new wallet to combine all funds into
-      t.transitionalAddress, t.transitionSeedId, err = getNewAddress("")
+      t.transitionalKey, t.transitionSeedId, err = getNewAddress("")
       if (err != nil) {
          return fmt.Errorf("receivedNano: %w", err)
       }
-      setAddressInUse(t.transitionalAddress.NanoAddress)
 
       // Go through list of wallets and send to interim address
       var totalSent = keyMan.NewRaw(0)
@@ -779,21 +790,21 @@ func receivedNano(nanoAddress string) error {
             currentSend = t.walletBalance[i]
          }
          t.multiSendAmount = append(t.multiSendAmount, currentSend)
-         go Send(key, t.transitionalAddress.PublicKey, currentSend, t.commChannel, t.errChannel, i)
+         go Send(key, t.transitionalKey.PublicKey, currentSend, t.commChannel, t.errChannel, i)
          if (i == 0) {
             t.commChannel <- 1
          }
          totalSent.Add(totalSent, currentSend)
          if (verbose) {
-            fmt.Println("Sending", currentSend.Int, "from", t.walletSeed[i], key.Index, "to", t.transitionSeedId, t.transitionalAddress.Index)
+            fmt.Println("Sending", currentSend.Int, "from", t.walletSeed[i], key.Index, "to", t.transitionSeedId, t.transitionalKey.Index)
          }
       }
 
       // Now send to client
       if (verbose) {
-         fmt.Println("Sending", t.amountToSend, "from", t.transitionSeedId, t.transitionalAddress.Index, "to client.")
+         fmt.Println("Sending", t.amountToSend, "from", t.transitionSeedId, t.transitionalKey.Index, "to client.")
       }
-      go ReceiveAndSend(t.transitionalAddress, t.clientAddress, t.amountToSend, t.commChannel, t.errChannel, &t.receiveWg, &t.abort)
+      go ReceiveAndSend(t.transitionalKey, t.clientAddress, t.amountToSend, t.commChannel, t.errChannel, &t.receiveWg, &t.abort)
    } else {
       return fmt.Errorf("receivedNano: not enough funds(2)")
    }
@@ -946,6 +957,7 @@ func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *key
    if (*abort) {
       return
    }
+   transactionWg.Add(1)
 
    fmt.Println(" --------- 2 ---------")
 
@@ -957,12 +969,19 @@ func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *key
    // All transactions are still pending. Receive the funds.
    err := ReceiveAll(transitionalKey.NanoAddress)
    if (err != nil) {
-      err = fmt.Errorf("ReceiveAndSend: %w %s", receiveError, err.Error())
+      err = fmt.Errorf("ReceiveAndSend: %w", err)
       errCh <- err
+   } else {
+      commCh <- 2
    }
    fmt.Println(" --------- 4 ---------")
 
-   commCh <- 2
+   // Wait until all receives have processed
+   transactionWg.Wait()
+   if (*abort) {
+      return
+   }
+   transactionWg.Add(1)
 
    // TODO wait for blocks to be confirmed
    fmt.Println("Waiting for blocks(2)...")
@@ -974,10 +993,10 @@ func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *key
    if (err != nil) {
       err = fmt.Errorf("ReceiveAndSend: %w", err)
       errCh <- err
+   } else {
+      commCh <- 3
    }
    fmt.Println(" --------- 6 ---------")
-
-   commCh <- 3
 }
 
 func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *keyMan.Raw, commCh chan int, errCh chan error, i int) error {
@@ -1007,7 +1026,7 @@ func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *keyMan.Raw, commCh ch
 
 // SendEasy is just a wrapper for Send(). If you have the info already Send()
 // is more efficient so don't overuse this function.
-func SendEasy(from string, to string, amount *keyMan.Raw) {
+func SendEasy(from string, to string, amount *keyMan.Raw, all bool) {
 
    fromKey, _, _, err := getSeedFromAddress(from)
    toKey, _, _, err := getSeedFromAddress(to)
@@ -1015,9 +1034,13 @@ func SendEasy(from string, to string, amount *keyMan.Raw) {
       toKey.PublicKey, _ = keyMan.AddressToPubKey(to)
    }
 
-   err = Send(&fromKey, toKey.PublicKey, amount, nil, nil, -1)
-   if (err != nil) {
-      fmt.Println("Error: ", err.Error())
+   if (all) {
+      err = sendAllNano(&fromKey, toKey.PublicKey)
+   } else {
+      err = Send(&fromKey, toKey.PublicKey, amount, nil, nil, -1)
+      if (err != nil) {
+         fmt.Println("Error: ", err.Error())
+      }
    }
 }
 
@@ -1082,7 +1105,26 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *keyMan.Raw)
    // Update database records
    err = updateBalance(block.Account, block.Balance)
    if (err != nil) {
-      return fmt.Errorf("sendNano: %w", err)
+      // TODO log
+      return fmt.Errorf("sendNano: updatebalance error %w", databaseError)
+      // TODO we don't want to throw an error here because that would make us
+      //      refund the client after we already sent his funds
+   }
+
+   return nil
+}
+
+func sendAllNano(fromKey *keyMan.Key, toPublicKey []byte) error {
+   defer setAddressNotInUse(fromKey.NanoAddress)
+
+   balance, _, err := getAccountBalance(fromKey.NanoAddress)
+   if (err != nil) {
+      return fmt.Errorf("sendAllNano: %w", err)
+   }
+
+   err = sendNano(fromKey, toPublicKey, balance)
+   if (err != nil) {
+      return fmt.Errorf("sendAllNano: %w", err)
    }
 
    return nil
@@ -1117,7 +1159,14 @@ func manualWalletUpdate(seed int, index int, nano int64) error {
    return nil
 }
 
+var testy int
 func ReceiveAll(account string) error {
+
+   //testy++
+   //if (testy == 1 || testy == 2) {
+      //return fmt.Errorf("Fake error go brrrrrrrrrrrrr")
+   //}
+
 
    for {
       if amt, _, err := Receive(account); amt != nil {
@@ -1197,7 +1246,7 @@ func Receive(account string) (*keyMan.Raw, keyMan.BlockHash, error) {
       }
 
       // Send RCP request
-      newHash, err := publishReceive(block, sig, PoW)
+      newHash, err = publishReceive(block, sig, PoW)
       if (err != nil){
          return nil, nil, fmt.Errorf("receive: %w", err)
       }
@@ -1205,12 +1254,20 @@ func Receive(account string) (*keyMan.Raw, keyMan.BlockHash, error) {
          return nil, nil, fmt.Errorf("receive: no block hash returned from node", err)
       }
 
+   fmt.Println("newHash: ", newHash)
+
       // We'ved used any stored PoW, clear it out for next use
       clearPoW(block.Account)
       go preCalculateNextPoW(block.Account, false)
 
       // Update database records
       err = updateBalance(block.Account, block.Balance)
+      if (err != nil) {
+         // TODO log
+         return pendingInfo.Amount, newHash, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
+         // TODO we don't want to throw an error here because that would make us
+         //      refund the client after we already sent his funds
+      }
    }
 
    return pendingInfo.Amount, newHash, err
