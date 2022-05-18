@@ -375,8 +375,8 @@ func initNanoymousCore() error {
 
    // TODO
    //resetInUse()
-   seedSend, _ := getSeedFromIndex(1, 0)
-   setAddressInUse(seedSend.NanoAddress)
+   //seedSend, _ := getSeedFromIndex(1, 0)
+   //setAddressInUse(seedSend.NanoAddress)
 
    feeDividend = int64(math.Trunc(100/FEE_PERCENT))
 
@@ -598,6 +598,8 @@ func blacklistHash(sendingAddress []byte, receivingHash keyMan.BlockHash) error 
 //        (minus the blacklisted ones)
 //    (5) Sends the funds to the client
 func receivedNano(nanoAddress string) error {
+   var err error
+   var foundEntry bool
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return fmt.Errorf("receivedNano: %w", err)
@@ -622,17 +624,21 @@ func receivedNano(nanoAddress string) error {
    // the mess.
    var t Transaction
    go transactionManager(&t)
-   // TODO defer errors?
+   t.commChannel = make(chan int)
+   t.errChannel = make(chan error)
+   defer func () {
+      if (err != nil) {
+         t.errChannel <- err
+      }
+   }()
 
    t.paymentAddress, err = keyMan.AddressToPubKey(nanoAddress)
    if (err != nil) {
-      return fmt.Errorf("receivedNano: %w", err)
+      err = fmt.Errorf("receivedNano: %w", err)
+      return err
    }
-   t.payment = payment
    t.receiveHash = receiveHash
    fmt.Println(" receivehash: ", t.receiveHash.String())
-   t.commChannel = make(chan int)
-   t.errChannel = make(chan error)
 
    // TODO This is just for debugging
    seed, _ := getSeedFromIndex(1, 10)
@@ -640,12 +646,11 @@ func receivedNano(nanoAddress string) error {
    setClientAddress(parentSeedId, index, clientPub)
    // TODO end of debugging code
 
-   // Get client address for later use. TODO check for nil
+   // Get client address for later use.
    t.clientAddress = getClientAddress(parentSeedId, index)
    if (t.clientAddress == nil) {
-      // No active transaction, send the funds back to owner
-      // TODO sendNano()
-      return fmt.Errorf("receivedNano: no active transaction available")
+      err = fmt.Errorf("receivedNano: no active transaction available")
+      return err
    }
 
    t.fee = keyMan.NewRaw(0).Div(payment, keyMan.NewRaw(feeDividend))
@@ -674,9 +679,11 @@ func receivedNano(nanoAddress string) error {
       "balance, " +
       "index;"
 
-   rows, err := conn.Query(context.Background(), queryString, t.amountToSend, parentSeedId, index)
+   var rows pgx.Rows
+   rows, err = conn.Query(context.Background(), queryString, t.amountToSend, parentSeedId, index)
    if (err != nil) {
-      return fmt.Errorf("receiviedNano: Query: %w", err)
+      err = fmt.Errorf("receiviedNano: Query: %w", err)
+      return err
    }
 
    var foundAddress bool
@@ -686,13 +693,16 @@ func receivedNano(nanoAddress string) error {
    for rows.Next() {
       err = rows.Scan(&tmpSeed, &tmpIndex, tmpBalance)
       if (err != nil) {
-         return fmt.Errorf("receivedNano: Scan: %w", err)
+         err = fmt.Errorf("receivedNano: Scan: %w", err)
+         return err
       }
 
       // Check the blacklist before accepting
-      foundEntry, tmpKey, err := checkBlackList(tmpSeed, tmpIndex, t.clientAddress)
+      var tmpKey *keyMan.Key
+      foundEntry, tmpKey, err = checkBlackList(tmpSeed, tmpIndex, t.clientAddress)
       if (err != nil) {
-         return fmt.Errorf("receivedNano: %w", err)
+         err = fmt.Errorf("receivedNano: %w", err)
+         return err
       }
       if (!foundEntry) {
          // Uset this address
@@ -710,7 +720,6 @@ func receivedNano(nanoAddress string) error {
    rows.Close()
 
    if (!foundAddress) {
-      t.multiSend = true
       // No single wallet has enough, try to combine several.
       queryString =
       "SELECT " +
@@ -729,7 +738,8 @@ func receivedNano(nanoAddress string) error {
 
       rows, err := conn.Query(context.Background(), queryString, parentSeedId, index)
       if (err != nil) {
-         return fmt.Errorf("receiviedNano: Query: %w", err)
+         err = fmt.Errorf("receiviedNano: Query: %w", err)
+         return err
       }
 
       var enough bool
@@ -737,13 +747,16 @@ func receivedNano(nanoAddress string) error {
       for rows.Next() {
          err = rows.Scan(&tmpSeed, &tmpIndex, tmpBalance)
          if (err != nil) {
-            return fmt.Errorf("receivedNano: Scan(2): %w", err)
+            err = fmt.Errorf("receivedNano: Scan(2): %w", err)
+            return err
          }
 
          // Check the blacklist before adding to the list
-         foundEntry, tmpKey, err := checkBlackList(tmpSeed, tmpIndex, t.clientAddress)
+         var tmpKey *keyMan.Key
+         foundEntry, tmpKey, err = checkBlackList(tmpSeed, tmpIndex, t.clientAddress)
          if (err != nil) {
-            return fmt.Errorf("receivedNano: %w", err)
+            err = fmt.Errorf("receivedNano: %w", err)
+            return err
          }
          if (!foundEntry) {
             t.sendingKeys = append(t.sendingKeys, tmpKey)
@@ -762,7 +775,8 @@ func receivedNano(nanoAddress string) error {
       }
       rows.Close()
       if (!enough) {
-         return fmt.Errorf("receivedNano: not enough funds")
+         err = fmt.Errorf("receivedNano: not enough funds")
+         return err
       }
    }
 
@@ -774,8 +788,10 @@ func receivedNano(nanoAddress string) error {
       // Need to do a multi-send; Get a new wallet to combine all funds into
       t.transitionalKey, t.transitionSeedId, err = getNewAddress("")
       if (err != nil) {
-         return fmt.Errorf("receivedNano: %w", err)
+         err = fmt.Errorf("receivedNano: %w", err)
+         return err
       }
+      t.multiSend = true
 
       // Go through list of wallets and send to interim address
       var totalSent = keyMan.NewRaw(0)
@@ -806,7 +822,8 @@ func receivedNano(nanoAddress string) error {
       }
       go ReceiveAndSend(t.transitionalKey, t.clientAddress, t.amountToSend, t.commChannel, t.errChannel, &t.receiveWg, &t.abort)
    } else {
-      return fmt.Errorf("receivedNano: not enough funds(2)")
+      err = fmt.Errorf("receivedNano: not enough funds(2)")
+      return err
    }
 
    return nil
@@ -1159,14 +1176,7 @@ func manualWalletUpdate(seed int, index int, nano int64) error {
    return nil
 }
 
-var testy int
 func ReceiveAll(account string) error {
-
-   //testy++
-   //if (testy == 1 || testy == 2) {
-      //return fmt.Errorf("Fake error go brrrrrrrrrrrrr")
-   //}
-
 
    for {
       if amt, _, err := Receive(account); amt != nil {

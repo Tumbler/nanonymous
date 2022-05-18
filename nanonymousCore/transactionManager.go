@@ -15,7 +15,6 @@ import (
 
 type Transaction struct {
    paymentAddress []byte
-   payment *keyMan.Raw
    receiveHash keyMan.BlockHash
    multiSend bool
    receiveWg sync.WaitGroup
@@ -58,18 +57,17 @@ func transactionManager(t *Transaction) {
 
    // Waiting until first send
    select {
-      // TODO test when error happens in receivedNano()
       case <-t.commChannel:
          // Proceed to next step
       case <-t.errChannel:
          // There was a problem. Refund the payment and abort the transaction.
-         simpleRefund(t.receiveHash)
+         Refund(t.receiveHash)
          t.abort = true
          t.receiveWg.Done()
          return
       case <-time.After(5 * time.Minute):
          // Timeout. Refund the payment and abort the transaction.
-         simpleRefund(t.receiveHash)
+         Refund(t.receiveHash)
          t.abort = true
          t.receiveWg.Done()
          return
@@ -131,7 +129,6 @@ func transactionManager(t *Transaction) {
             }
          case <-time.After(5 * time.Minute):
             // TODO log
-            // TODO refund??
             if (verbose) {
                if (t.multiSend) {
                   fmt.Println("Transaction error: timout during sends")
@@ -139,6 +136,11 @@ func transactionManager(t *Transaction) {
                   fmt.Println("Transaction error: timout during single send")
                }
             }
+
+            // Refund and reset
+            Refund(t.receiveHash)
+            reverseTransitionalAddress(t)
+
             t.abort = true
             t.receiveWg.Done()
             return
@@ -185,7 +187,6 @@ func transactionManager(t *Transaction) {
                }
             case <-time.After(5 * time.Minute):
                // TODO log
-               // TODO refund??
                if (verbose) {
                   if (operation == 1) {
                      fmt.Println("Transaction error: timout during receives")
@@ -193,6 +194,10 @@ func transactionManager(t *Transaction) {
                      fmt.Println("Transaction error: timout during final send")
                   }
                }
+
+               // Refund and reset
+               Refund(t.receiveHash)
+               reverseTransitionalAddress(t)
 
                // This is just to exit the loop
                operation = 10
@@ -232,7 +237,7 @@ func handleSingleSendError(t *Transaction, prevError error) bool {
    fmt.Println("Transaction error: %s", err.Error())
 
    // Transaction failed... attempt refund
-   err = simpleRefund(t.receiveHash)
+   err = Refund(t.receiveHash)
    if (err != nil && verbose) {
       fmt.Println("Refund failed: ", err.Error())
    }
@@ -275,14 +280,14 @@ func handleMultiSendError(t *Transaction, operation int, i int, err error) bool 
    }
 
    // Couldn't salvage the transaction, begin refunds
-   simpleRefund(t.receiveHash)
+   Refund(t.receiveHash)
    reverseTransitionalAddress(t)
 
    return false
 }
 
-// simpleRefund just takes a receive block hash and reverses it.
-func simpleRefund(receiveHash keyMan.BlockHash)  error {
+// Refund just takes a single receive block hash and reverses it.
+func Refund(receiveHash keyMan.BlockHash)  error {
    // Find the address that send the payment so we can send it back
    if (verbose) {
       fmt.Println("Refunding!")
@@ -290,22 +295,22 @@ func simpleRefund(receiveHash keyMan.BlockHash)  error {
 
    blockInfo, err := getBlockInfo(receiveHash)
    if (err != nil) {
-      return fmt.Errorf("simpleRefund: %w", err)
+      return fmt.Errorf("Refund: %w", err)
    }
    sendingKey, _, _, err := getSeedFromAddress(blockInfo.Contents.Account)
    if (err != nil) {
-      return fmt.Errorf("simpleRefund: %w", err)
+      return fmt.Errorf("Refund: %w", err)
    }
 
    if (blockInfo.Subtype == "receive") {
       blockInfo, err = getBlockInfo(blockInfo.Contents.Link)
    } else {
-      return fmt.Errorf("simpleRefund: Given hash was not a receive")
+      return fmt.Errorf("Refund: Given hash was not a receive")
    }
 
    clientOriginalAddress, err := keyMan.AddressToPubKey(blockInfo.Contents.Account)
    if (err != nil) {
-      return fmt.Errorf("simpleRefund: %w", err)
+      return fmt.Errorf("Refund: %w", err)
    }
 
    retryCount := 0
@@ -321,7 +326,7 @@ func simpleRefund(receiveHash keyMan.BlockHash)  error {
       }
    }
    if (retryCount >= RetryNumber) {
-      return fmt.Errorf("simpleRefund: refund failed: %w", err)
+      return fmt.Errorf("Refund: refund failed: %w", err)
    }
 
    return nil
@@ -331,6 +336,10 @@ func simpleRefund(receiveHash keyMan.BlockHash)  error {
 // internal addresses and returns them to their original wallets. This is so
 // that the wallets can continue using their own blacklist entries correctly.
 func reverseTransitionalAddress(t *Transaction) {
+
+   if !(t.multiSend) {
+      return
+   }
 
    nanoAddress := t.transitionalKey.NanoAddress
 
