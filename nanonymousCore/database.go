@@ -97,7 +97,7 @@ func clearPoW(nanoAddress string) error {
 func getWalletFromAddress(nanoAddress string) (int, int, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return 0, 0, fmt.Errorf("getSeedFromAddress: %w", err)
+      return 0, 0, fmt.Errorf("getWalletFromAddress: %w", err)
    }
    defer conn.Close(context.Background())
 
@@ -207,6 +207,27 @@ func getSeedFromDatabase(id int) ([]byte, error) {
    _ = conn.QueryRow(context.Background(), queryString, databasePassword, id).Scan(&seed)
 
    return seed, nil
+}
+
+func getCurrentIndexFromDatabase(id int) (int, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return 0, fmt.Errorf("getCurrentIndexFromDatabase: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "current_index " +
+   "FROM " +
+      "seeds " +
+   "WHERE " +
+      "id = $1;"
+
+   var currentIndex int
+   _ = conn.QueryRow(context.Background(), queryString, id).Scan(&currentIndex)
+
+   return currentIndex, nil
 }
 
 func setAddressInUse(nanoAddress string) {

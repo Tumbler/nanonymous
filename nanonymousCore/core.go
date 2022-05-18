@@ -33,6 +33,8 @@ var databaseUrl string
 var databasePassword string
 // "nodeIP = [ip]" in embed.txt to set this value
 var nodeIP string
+// "websocket = [address]" in embed.txt to set this value
+var websocketAddress string
 // "work = [work_server_address]" in embed.txt to set this value
 var workServer string
 
@@ -241,11 +243,11 @@ func main() {
          verbose = true
          var seedSend *keyMan.Key
          var seedReceive *keyMan.Key
-         seedSend, _ = getSeedFromIndex(1, 0)
-         seedReceive, _ = getSeedFromIndex(1, 6)
+         seedSend, _ = getSeedFromIndex(1, 4)
+         seedReceive, _ = getSeedFromIndex(1, 15)
          SendEasy(seedSend.NanoAddress,
                   seedReceive.NanoAddress,
-                  keyMan.NewRawFromNano(1.5),
+                  keyMan.NewRawFromNano(0.01),
                   false)
          //seedSend, _ = getSeedFromIndex(1, 10)
          //seedReceive, _ = getSeedFromIndex(1, 1)
@@ -354,6 +356,8 @@ func initNanoymousCore() error {
             databasePassword = strings.Trim(word[1], "\r\n")
          case "nodeIP":
             nodeIP = strings.Trim(word[1], "\r\n")
+         case "websocket":
+            websocketAddress = strings.Trim(word[1], "\r\n")
          case "work":
             workServer = strings.Trim(word[1], "\r\n")
       }
@@ -382,6 +386,8 @@ func initNanoymousCore() error {
 
    activePoW = make(map[string]int)
    workChannel = make(map[string]chan string)
+
+   go websocketListener()
 
    return nil
 }
@@ -782,6 +788,7 @@ func receivedNano(nanoAddress string) error {
 
    // Send nano to client
    if (len(t.sendingKeys) == 1) {
+      t.individualSendAmount = append(t.individualSendAmount, t.amountToSend)
       go Send(t.sendingKeys[0], t.clientAddress, t.amountToSend, t.commChannel, t.errChannel, 0)
       t.commChannel <- 1
    } else if (len(t.sendingKeys) > 1) {
@@ -805,7 +812,7 @@ func receivedNano(nanoAddress string) error {
          } else {
             currentSend = t.walletBalance[i]
          }
-         t.multiSendAmount = append(t.multiSendAmount, currentSend)
+         t.individualSendAmount = append(t.individualSendAmount, currentSend)
          go Send(key, t.transitionalKey.PublicKey, currentSend, t.commChannel, t.errChannel, i)
          if (i == 0) {
             t.commChannel <- 1

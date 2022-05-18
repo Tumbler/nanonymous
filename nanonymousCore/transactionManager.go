@@ -26,7 +26,7 @@ type Transaction struct {
    walletBalance []*keyMan.Raw
    transitionalKey *keyMan.Key
    transitionSeedId int
-   multiSendAmount []*keyMan.Raw
+   individualSendAmount []*keyMan.Raw
    abort bool
    commChannel chan int
    errChannel chan error
@@ -93,7 +93,7 @@ func transactionManager(t *Transaction) {
             // This is known as the "reverse-blacklist." It makes sure that we
             // don't send funds from the address associated with address C to
             // address A. (see blacklist documentation)
-            if (t.walletBalance[i].Cmp(t.multiSendAmount[i]) > 0) {
+            if (t.walletBalance[i].Cmp(t.individualSendAmount[i]) > 0) {
                go blacklistHash(t.sendingKeys[i].PublicKey, t.receiveHash)
             }
          case err := <-t.errChannel:
@@ -379,7 +379,7 @@ func retryMultiSend(t *Transaction, i int, prevError error) bool {
    }
 
    for (retryCount < RetryNumber) {
-      err := Send(t.sendingKeys[i], t.transitionalKey.PublicKey, t.multiSendAmount[i], nil, nil, -1)
+      err := Send(t.sendingKeys[i], t.transitionalKey.PublicKey, t.individualSendAmount[i], nil, nil, -1)
       if (err != nil) {
          retryCount++
       } else {
