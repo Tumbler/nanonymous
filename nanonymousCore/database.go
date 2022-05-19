@@ -209,6 +209,28 @@ func getSeedFromDatabase(id int) ([]byte, error) {
    return seed, nil
 }
 
+func getSeedRowsFromDatabase() (pgx.Rows, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "pgp_sym_decrypt_bytea(seed, $1)," +
+      "current_index " +
+   "FROM " +
+      "seeds;"
+
+   rows, err := conn.Query(context.Background(), queryString, databasePassword)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+   }
+
+   return rows, nil
+}
+
 func getCurrentIndexFromDatabase(id int) (int, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
@@ -310,4 +332,32 @@ func addressExsistsInDB(nanoAddress string) bool {
    } else {
       return false
    }
+}
+
+// inserSeed saves an encrytped version of the seed given into the database.
+func insertSeed(conn psqlDB, seed []byte) (int, error) {
+   var id int
+
+   queryString :=
+   "INSERT INTO " +
+     "seeds (seed, current_index) " +
+   "VALUES " +
+     "(pgp_sym_encrypt_bytea($1, $2), -1) " +
+   "RETURNING id;"
+
+   rows, err := conn.Query(context.Background(), queryString, seed, databasePassword)
+   if (err != nil) {
+      return -1, fmt.Errorf("insertSeed: %w", err)
+   }
+
+   if (rows.Next()) {
+      err = rows.Scan(&id)
+      if (err != nil) {
+         return -1, fmt.Errorf("insertSeed: %w ", err)
+      }
+   }
+
+   rows.Close()
+
+   return id, nil
 }

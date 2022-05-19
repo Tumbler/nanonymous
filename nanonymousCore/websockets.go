@@ -27,8 +27,12 @@ type ConfirmationBlock struct {
 
 var addWebSocketSubscription chan string
 
+var registeredSendChannels map[string]chan string
+var registeredReceiveChannels map[string]chan string
+
 // TODO this is called in a go routine so returned errors are ignored
 func websocketListener() error {
+   // TODO needs to work over secure connection (wss)
    if (verbose) {
       fmt.Println("Started listening to websockets on:", websocketAddress)
    }
@@ -45,26 +49,31 @@ func websocketListener() error {
    }
 
    addWebSocketSubscription = make(chan string)
+   registeredSendChannels = make(map[string]chan string)
+   registeredReceiveChannels = make(map[string]chan string)
 
    var notification ConfirmationBlock
    wsChan := make(chan error)
    go websocketReceive(ws, &notification, wsChan)
 
+   // Listen for eternity
    for {
       select {
          case err := <-wsChan:
             if (err != nil) {
-               // log
-               fmt.Println(" err: ", err.Error())
+               // TODO log
+               if (verbose) {
+                  fmt.Println(" err: ", err.Error())
+               }
             } else {
-               fmt.Println("notification!")
-               handleNotification(notification)
+               go handleNotification(notification)
             }
 
             // Set up next receive
             go websocketReceive(ws, &notification, wsChan)
+
          case nanoAddress := <-addWebSocketSubscription:
-            addToSubscription(ws, nanoAddress)
+            go addToSubscription(ws, nanoAddress)
       }
    }
 
@@ -76,14 +85,18 @@ func startSubscription(ws *websocket.Conn) error {
 
    var addressString string
 
-   for i := 1 ;; i++{
-      seed, _ := getSeedFromDatabase(i)
-      if (len(seed) == 0) {
-         // no more seeds
-         // TODO make single DB call?
+   // Get list of all accounts we've opened so far
+   rows, err := getSeedRowsFromDatabase()
+   var seed []byte
+   var maxIndex int
+   // For all seeds find their acounts
+   for rows.Next() {
+      err = rows.Scan(&seed, &maxIndex)
+      if (err != nil || len(seed) == 0) {
          break
       }
-      maxIndex, _ := getCurrentIndexFromDatabase(i)
+
+      // From 0 to the last account we've opened
       for j := 0; j <= maxIndex; j++ {
          var key keyMan.Key
          key.Seed = seed
@@ -114,7 +127,7 @@ func startSubscription(ws *websocket.Conn) error {
       fmt.Print(request)
    }
 
-   _, err := ws.Write([]byte(request))
+   _, err = ws.Write([]byte(request))
    if (err != nil) {
       return fmt.Errorf("websocketListener, Send: %w", err)
    }
@@ -152,6 +165,10 @@ func websocketReceive(ws *websocket.Conn, r any, ch chan error) {
 
 func addToSubscription(ws *websocket.Conn, nanoAddress string) {
 
+   if (verbose) {
+      fmt.Println("Adding to subscription: ", nanoAddress)
+   }
+
    request :=
    `{
       "action": "update",
@@ -165,30 +182,69 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
 }
 
 func handleNotification(cBlock ConfirmationBlock) {
+   wg.Add(1)
+   defer wg.Done()
 
    msg := cBlock.Message
    if (msg.Block.SubType == "send") {
-      fmt.Println("Send")
       if (addressExsistsInDB(msg.Block.LinkAsAccount)) {
-         // TODO check if any transaction manager is expecting this and give to them instead
-         fmt.Println("Managed address")
+         // Check if any transaction manager is expecting this and give to them instead
          if (addressExsistsInDB(msg.Account)) {
-            fmt.Println("Internal Send")
+            if (verbose) {
+               fmt.Println("Internal Send")
+            }
             // Internal network send, don't trigger a transaction
             //TODO debugging code
-            seed, _ := getSeedFromIndex(1, 4)
+            seed, _ := getSeedFromIndex(1, 0)
             if (strings.Compare(msg.Account, seed.NanoAddress) == 0) {
                fmt.Println("Debug transaction!")
                receivedNano(msg.Block.LinkAsAccount)
+            } else {
+               //TODO end of debugging code
+               if (registeredSendChannels[msg.Block.LinkAsAccount] != nil) {
+                  select {
+                     case registeredSendChannels[msg.Block.LinkAsAccount] <- msg.Hash.String():
+                     case <-time.After(5 * time.Minute):
+                        // TODO log
+                  }
+               }
             }
-            //TODO end of debugging code
          } else {
-            fmt.Println("External Send")
             if (verbose) {
+               fmt.Println("External Send")
                fmt.Println("Starting Transaction!")
             }
             receivedNano(msg.Block.LinkAsAccount)
          }
       }
+   } else {
+      if (verbose) {
+         fmt.Println(" Receive")
+      }
+      if (registeredReceiveChannels[msg.Account] != nil) {
+         select {
+            case registeredReceiveChannels[msg.Account] <- msg.Hash.String():
+            case <-time.After(5 * time.Minute):
+               // TODO log
+         }
+      }
+   }
+}
+
+func registerConfirmationListener(nanoAddress string, ch chan string, operation string) {
+
+   if (operation == "send") {
+      registeredSendChannels[nanoAddress] = ch
+   } else {
+      registeredReceiveChannels[nanoAddress] = ch
+   }
+}
+
+func unregisterConfirmationListener(nanoAddress string, operation string) {
+
+   if (operation == "send") {
+      delete(registeredSendChannels, nanoAddress)
+   } else {
+      delete(registeredReceiveChannels, nanoAddress)
    }
 }

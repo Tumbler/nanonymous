@@ -13,6 +13,8 @@ import (
    keyMan "nanoKeyManager"
 )
 
+// TODO check all timeouts and make sure that they do all the refunding and aborting that they should
+
 type Transaction struct {
    paymentAddress []byte
    receiveHash keyMan.BlockHash
@@ -30,6 +32,7 @@ type Transaction struct {
    abort bool
    commChannel chan int
    errChannel chan error
+   confirmationChannel chan string
 }
 
 var databaseError = errors.New("database error")
@@ -59,8 +62,16 @@ func transactionManager(t *Transaction) {
    select {
       case <-t.commChannel:
          // Proceed to next step
-      case <-t.errChannel:
+         if (t.multiSend) {
+            t.confirmationChannel = make(chan string)
+            registerConfirmationListener(t.transitionalKey.NanoAddress, t.confirmationChannel, "send")
+            defer unregisterConfirmationListener(t.transitionalKey.NanoAddress, "send")
+         }
+      case err := <-t.errChannel:
          // There was a problem. Refund the payment and abort the transaction.
+         if (verbose) {
+            fmt.Println("Error:", err.Error())
+         }
          Refund(t.receiveHash)
          t.abort = true
          t.receiveWg.Done()
@@ -74,12 +85,10 @@ func transactionManager(t *Transaction) {
    }
 
    // First manage all iniital sends
+   numOfSends := len(t.sendingKeys)
    for {
       // All sends finished
-      if (numDone >= len(t.sendingKeys)) {
-         // Signal receives to start in ReceiveAndSend() if necessary
-         t.receiveWg.Done()
-
+      if (numDone >= numOfSends) {
          if (verbose) {
             fmt.Println("Done with Sends!")
          }
@@ -148,10 +157,44 @@ func transactionManager(t *Transaction) {
    }
 
 
+   // Sends are done, wait for them to be confirmed
+   if (t.multiSend) {
+      trackConfirms := make(map[string]bool)
+      var numConfirmed int
+
+      for (numConfirmed < numOfSends) {
+         select {
+            case hash := <-t.confirmationChannel:
+               // Make sure we didn't receive the same block twice
+               if (trackConfirms[hash] == false) {
+                  trackConfirms[hash] = true
+                  numConfirmed++
+               }
+               if (verbose) {
+                  fmt.Println("[S]Confirmed: ", numConfirmed)
+               }
+            case <-time.After(5 * time.Minute):
+               // TODO log
+               t.abort = true
+               t.receiveWg.Done()
+               return
+         }
+      }
+      if (verbose) {
+         fmt.Println("All sends confirmed!")
+      }
+      // Signal receives to start in ReceiveAndSend()
+      t.receiveWg.Done()
+   }
+
+
    // Now if it's a multi send then we need monitor the last step of receiving
    // and sending to the client
    if (t.multiSend) {
       operation = 1
+
+      registerConfirmationListener(t.transitionalKey.NanoAddress, t.confirmationChannel, "receive")
+      defer unregisterConfirmationListener(t.transitionalKey.NanoAddress, "receive")
 
       for (operation < 3) {
          select {
@@ -160,6 +203,28 @@ func transactionManager(t *Transaction) {
                   // Done with receives
                   if (verbose) {
                      fmt.Println("Done with receives")
+                  }
+
+                  // Recives have been published, now wait for them to confirm
+                  trackConfirms := make(map[string]bool)
+                  var numConfirmed int
+                  for numConfirmed < numOfSends {
+                     select {
+                        case hash := <-t.confirmationChannel:
+                           // Make sure we didn't receive the same block twice
+                           if (trackConfirms[hash] == false) {
+                              trackConfirms[hash] = true
+                              numConfirmed++
+                           }
+                           if (verbose) {
+                              fmt.Println("[R]Confirmed: ", numConfirmed)
+                           }
+                        case <-time.After(5 * time.Minute):
+                           // TODO log
+                           t.abort = true
+                           t.receiveWg.Done()
+                           return
+                     }
                   }
                   t.receiveWg.Done()
                } else if (operation == 3) {
@@ -206,6 +271,10 @@ func transactionManager(t *Transaction) {
          }
       }
    }
+
+   if (verbose) {
+      fmt.Println("Transaction Complete!")
+   }
 }
 
 func handleSingleSendError(t *Transaction, prevError error) bool {
@@ -234,7 +303,6 @@ func handleSingleSendError(t *Transaction, prevError error) bool {
    }
 
    // TODO log
-   fmt.Println("Transaction error: %s", err.Error())
 
    // Transaction failed... attempt refund
    err = Refund(t.receiveHash)
