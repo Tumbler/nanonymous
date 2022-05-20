@@ -13,12 +13,11 @@ import (
    keyMan "nanoKeyManager"
 )
 
-// TODO check all timeouts and make sure that they do all the refunding and aborting that they should
-
 type Transaction struct {
    paymentAddress []byte
+   paymentParentSeedId int
+   paymentIndex int
    receiveHash keyMan.BlockHash
-   multiSend bool
    receiveWg sync.WaitGroup
    clientAddress []byte
    fee *keyMan.Raw
@@ -26,13 +25,14 @@ type Transaction struct {
    sendingKeys []*keyMan.Key
    walletSeed []int
    walletBalance []*keyMan.Raw
+   individualSendAmount []*keyMan.Raw
    transitionalKey *keyMan.Key
    transitionSeedId int
-   individualSendAmount []*keyMan.Raw
-   abort bool
    commChannel chan int
    errChannel chan error
    confirmationChannel chan string
+   multiSend bool
+   abort bool
 }
 
 var databaseError = errors.New("database error")
@@ -43,18 +43,42 @@ func transactionManager(t *Transaction) {
    t.receiveWg.Add(1)
    var numDone = 0
    var operation = 0
+   var transcationSucessfull bool
+
 
    wg.Add(1)
    defer wg.Done()
 
    address, _ := keyMan.PubKeyToAddress(t.paymentAddress)
+
+   // We have a lot of clean up to do
    defer func() {
+      // Un-mark all address
       setAddressNotInUse(address)
       for _, key := range t.sendingKeys {
          setAddressNotInUse(key.NanoAddress)
       }
       if (t.transitionalKey != nil) {
          setAddressNotInUse(t.transitionalKey.NanoAddress)
+      }
+
+      // Remove active transaction
+      setClientAddress(t.paymentParentSeedId, t.paymentIndex, nil)
+
+      // Cancel all the things
+      if !(transcationSucessfull) {
+         err := Refund(t.receiveHash)
+         if (err != nil) {
+            // TODO log
+            // VERY BAD! Just accepted money, failed to deliver it, and didn't
+            //           refund the user!
+         }
+         reverseTransitionalAddress(t)
+         t.abort = true
+         t.receiveWg.Done()
+         if (verbosity >= 5) {
+            fmt.Println("Transaction failed...")
+         }
       }
    }()
 
@@ -68,19 +92,13 @@ func transactionManager(t *Transaction) {
             defer unregisterConfirmationListener(t.transitionalKey.NanoAddress, "send")
          }
       case err := <-t.errChannel:
-         // There was a problem. Refund the payment and abort the transaction.
-         if (verbose) {
+         // There was a problem.
+         if (verbosity >= 5) {
             fmt.Println("Error:", err.Error())
          }
-         Refund(t.receiveHash)
-         t.abort = true
-         t.receiveWg.Done()
          return
       case <-time.After(5 * time.Minute):
-         // Timeout. Refund the payment and abort the transaction.
-         Refund(t.receiveHash)
-         t.abort = true
-         t.receiveWg.Done()
+         // Timeout.
          return
    }
 
@@ -89,9 +107,13 @@ func transactionManager(t *Transaction) {
    for {
       // All sends finished
       if (numDone >= numOfSends) {
-         if (verbose) {
+         if !(t.multiSend) {
+            transcationSucessfull = true
+         }
+         if (verbosity >= 5) {
             fmt.Println("Done with Sends!")
          }
+
          break
       }
       select {
@@ -107,7 +129,7 @@ func transactionManager(t *Transaction) {
             }
          case err := <-t.errChannel:
             // There was an error. Deal with it.
-            if (verbose) {
+            if (verbosity >= 5) {
                fmt.Println("Error with sends", err.Error())
             }
             if (t.multiSend) {
@@ -123,8 +145,6 @@ func transactionManager(t *Transaction) {
                   numDone++
                } else {
                   // Abort rest of transaction
-                  t.abort = true
-                  t.receiveWg.Done()
                   return
                }
             } else {
@@ -138,20 +158,13 @@ func transactionManager(t *Transaction) {
             }
          case <-time.After(5 * time.Minute):
             // TODO log
-            if (verbose) {
+            if (verbosity >= 5) {
                if (t.multiSend) {
                   fmt.Println("Transaction error: timout during sends")
                } else {
                   fmt.Println("Transaction error: timout during single send")
                }
             }
-
-            // Refund and reset
-            Refund(t.receiveHash)
-            reverseTransitionalAddress(t)
-
-            t.abort = true
-            t.receiveWg.Done()
             return
       }
    }
@@ -170,7 +183,7 @@ func transactionManager(t *Transaction) {
                   trackConfirms[hash] = true
                   numConfirmed++
                }
-               if (verbose) {
+               if (verbosity >= 5) {
                   fmt.Println("[S]Confirmed: ", numConfirmed)
                }
             case <-time.After(5 * time.Minute):
@@ -180,7 +193,7 @@ func transactionManager(t *Transaction) {
                return
          }
       }
-      if (verbose) {
+      if (verbosity >= 5) {
          fmt.Println("All sends confirmed!")
       }
       // Signal receives to start in ReceiveAndSend()
@@ -201,7 +214,7 @@ func transactionManager(t *Transaction) {
             case operation = <-t.commChannel:
                if (operation == 2) {
                   // Done with receives
-                  if (verbose) {
+                  if (verbosity >= 5) {
                      fmt.Println("Done with receives")
                   }
 
@@ -216,7 +229,7 @@ func transactionManager(t *Transaction) {
                               trackConfirms[hash] = true
                               numConfirmed++
                            }
-                           if (verbose) {
+                           if (verbosity >= 5) {
                               fmt.Println("[R]Confirmed: ", numConfirmed)
                            }
                         case <-time.After(5 * time.Minute):
@@ -229,50 +242,39 @@ func transactionManager(t *Transaction) {
                   t.receiveWg.Done()
                } else if (operation == 3) {
                   // All finished
-                  if (verbose) {
+                  transcationSucessfull = true
+                  if (verbosity >= 5) {
                      fmt.Println("Done with everything!")
                   }
                }
             case err := <-t.errChannel:
                // There was an error. Deal with it.
-               if (verbose) {
+               if (verbosity >= 5) {
                   fmt.Println("Error with receives or final send", err.Error())
                }
                if (handleMultiSendError(t, operation, -1, err)) {
                   operation++
                   t.receiveWg.Done()
                } else {
-                  t.abort = true
-                  t.receiveWg.Done()
-
                   // This is just to exit the loop
                   operation = 10
-
-                  break
+                  return
                }
             case <-time.After(5 * time.Minute):
                // TODO log
-               if (verbose) {
+               if (verbosity >= 5) {
                   if (operation == 1) {
                      fmt.Println("Transaction error: timout during receives")
                   } else {
                      fmt.Println("Transaction error: timout during final send")
                   }
                }
-
-               // Refund and reset
-               Refund(t.receiveHash)
-               reverseTransitionalAddress(t)
-
-               // This is just to exit the loop
-               operation = 10
-
-               break
+               return
          }
       }
    }
 
-   if (verbose) {
+   if (verbosity >= 5) {
       fmt.Println("Transaction Complete!")
    }
 }
@@ -293,7 +295,7 @@ func handleSingleSendError(t *Transaction, prevError error) bool {
    for (retryCount < RetryNumber) {
       err = Send(t.sendingKeys[0], t.clientAddress, t.amountToSend, nil, nil, -1)
       if (err != nil) {
-         if (verbose) {
+         if (verbosity >= 5) {
             fmt.Println("Error with resend: ", retryCount, err.Error())
          }
          retryCount++
@@ -304,12 +306,7 @@ func handleSingleSendError(t *Transaction, prevError error) bool {
 
    // TODO log
 
-   // Transaction failed... attempt refund
-   err = Refund(t.receiveHash)
-   if (err != nil && verbose) {
-      fmt.Println("Refund failed: ", err.Error())
-   }
-
+   // Transaction failed...
    return false
 }
 
@@ -344,20 +341,17 @@ func handleMultiSendError(t *Transaction, operation int, i int, err error) bool 
       case 3:
          // How did you get here?? The transaction is already complete!
          // TODO log
-         return false
+         return true
    }
 
-   // Couldn't salvage the transaction, begin refunds
-   Refund(t.receiveHash)
-   reverseTransitionalAddress(t)
-
+   // Couldn't salvage the transaction
    return false
 }
 
 // Refund just takes a single receive block hash and reverses it.
 func Refund(receiveHash keyMan.BlockHash)  error {
    // Find the address that send the payment so we can send it back
-   if (verbose) {
+   if (verbosity >= 5) {
       fmt.Println("Refunding!")
    }
 
@@ -385,7 +379,7 @@ func Refund(receiveHash keyMan.BlockHash)  error {
    for (retryCount < RetryNumber) {
       err = Send(&sendingKey, clientOriginalAddress, blockInfo.Amount, nil, nil, -1)
       if (err != nil) {
-         if (verbose) {
+         if (verbosity >= 5) {
             fmt.Println("Refund send error: ", err.Error())
          }
          retryCount++
@@ -435,7 +429,6 @@ func reverseTransitionalAddress(t *Transaction) {
    }
 
    setAddressNotInUse(nanoAddress)
-   // TODO test reverse transitional
 }
 
 func retryMultiSend(t *Transaction, i int, prevError error) bool {

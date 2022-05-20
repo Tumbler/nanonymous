@@ -30,22 +30,21 @@ var addWebSocketSubscription chan string
 var registeredSendChannels map[string]chan string
 var registeredReceiveChannels map[string]chan string
 
-// TODO this is called in a go routine so returned errors are ignored
-func websocketListener() error {
+func websocketListener() {
    // TODO needs to work over secure connection (wss)
-   if (verbose) {
+   if (verbosity >= 5) {
       fmt.Println("Started listening to websockets on:", websocketAddress)
    }
 
    ws, err := websocket.Dial(websocketAddress, "", "http://localhost/")
    if (err != nil) {
-      return fmt.Errorf("websocketListener, Dial: %w", err)
+      panic(fmt.Errorf("websocketListener, Dial: %w", err))
    }
    defer ws.Close()
 
    err = startSubscription(ws)
    if (err != nil) {
-      return fmt.Errorf("websocketListener: %w", err)
+      panic(fmt.Errorf("websocketListener: %w", err))
    }
 
    addWebSocketSubscription = make(chan string)
@@ -62,7 +61,7 @@ func websocketListener() error {
          case err := <-wsChan:
             if (err != nil) {
                // TODO log
-               if (verbose) {
+               if (verbosity >= 5) {
                   fmt.Println(" err: ", err.Error())
                }
             } else {
@@ -78,7 +77,6 @@ func websocketListener() error {
    }
 
    // Should never get here TODO log
-   return nil
 }
 
 func startSubscription(ws *websocket.Conn) error {
@@ -123,7 +121,7 @@ func startSubscription(ws *websocket.Conn) error {
       }
    }`
 
-   if (verbose) {
+   if (verbosity >= 5) {
       fmt.Print(request)
    }
 
@@ -147,7 +145,7 @@ func startSubscription(ws *websocket.Conn) error {
          if (response.Ack != "subscribe") {
             return fmt.Errorf("startSubscription: no ack")
          }
-         if (verbose) {
+         if (verbosity >= 5) {
             fmt.Println("Websocket sucessfully opened!")
          }
          return nil
@@ -165,7 +163,7 @@ func websocketReceive(ws *websocket.Conn, r any, ch chan error) {
 
 func addToSubscription(ws *websocket.Conn, nanoAddress string) {
 
-   if (verbose) {
+   if (verbosity >= 5) {
       fmt.Println("Adding to subscription: ", nanoAddress)
    }
 
@@ -190,7 +188,7 @@ func handleNotification(cBlock ConfirmationBlock) {
       if (addressExsistsInDB(msg.Block.LinkAsAccount)) {
          // Check if any transaction manager is expecting this and give to them instead
          if (addressExsistsInDB(msg.Account)) {
-            if (verbose) {
+            if (verbosity >= 5) {
                fmt.Println("Internal Send")
             }
             // Internal network send, don't trigger a transaction
@@ -210,7 +208,7 @@ func handleNotification(cBlock ConfirmationBlock) {
                }
             }
          } else {
-            if (verbose) {
+            if (verbosity >= 5) {
                fmt.Println("External Send")
                fmt.Println("Starting Transaction!")
             }
@@ -218,7 +216,7 @@ func handleNotification(cBlock ConfirmationBlock) {
          }
       }
    } else {
-      if (verbose) {
+      if (verbosity >= 5) {
          fmt.Println(" Receive")
       }
       if (registeredReceiveChannels[msg.Account] != nil) {

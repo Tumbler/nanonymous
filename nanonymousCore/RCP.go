@@ -14,10 +14,6 @@ import (
 
    // Local packages
    keyMan "nanoKeyManager"
-
-   // 3rd party packages
-   //"github.com/shopspring/decimal"
-   //curl "github.com/andelf/go-curl"
 )
 
 func getAccountBalance(nanoAddress string) (*keyMan.Raw, *keyMan.Raw, error) {
@@ -43,7 +39,6 @@ func getAccountBalance(nanoAddress string) (*keyMan.Raw, *keyMan.Raw, error) {
    return response.Balance, response.Receivable, nil
 }
 
-// TODO test
 func getOwnerOfBlock(hash string) (string, error) {
 
    url := "http://"+ nodeIP
@@ -68,7 +63,6 @@ func getOwnerOfBlock(hash string) (string, error) {
    return response.Account, nil
 }
 
-// TODO test
 func confirmBlock(hash string) error {
 
    url := "http://"+ nodeIP
@@ -133,10 +127,10 @@ func printPeers() error {
       peers string
    }{}
 
-   verboseSave := verbose
-   verbose = true
+   verboseSave := verbosity
+   verbosity = 9
    err := rcpCallWithTimeout(request, &response, url, 5000)
-   verbose = verboseSave
+   verbosity = verboseSave
    if (err != nil) {
       return fmt.Errorf("getAddressBalance: %w", err)
    }
@@ -153,10 +147,10 @@ func telemetry() error {
       "action": "telemetry"
     }`
 
-   verboseSave := verbose
-   verbose = true
+   verboseSave := verbosity
+   verbosity = 9
    err := rcpCallWithTimeout(request, nil, url, 5000)
-   verbose = verboseSave
+   verbosity = verboseSave
    if (err != nil) {
       return fmt.Errorf("getAddressBalance: %w", err)
    }
@@ -431,7 +425,7 @@ func rcpCall(request string, response any, url string, ch chan error) error {
 
    // TODO capure error response from node??
 
-   if (verbose) {
+   if (verbosity >= 10) {
       fmt.Println("request: ", request)
    }
 
@@ -452,7 +446,7 @@ func rcpCall(request string, response any, url string, ch chan error) error {
       return fmt.Errorf("readAll: %w", err)
    }
 
-   if (verbose) {
+   if (verbosity >= 9) {
       fmt.Println(string(body))
    }
 
