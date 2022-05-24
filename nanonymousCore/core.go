@@ -11,6 +11,8 @@ import (
    "math"
    "math/rand"
    "sync"
+   "log"
+   "os"
    _"embed"
 
    // Local packages
@@ -46,6 +48,7 @@ const MAX_INDEX = 4294967295
 // Fee in %
 const FEE_PERCENT = float64(0.2)
 var feeDividend int64
+var minPayment *keyMan.Raw
 
 var wg sync.WaitGroup
 
@@ -60,14 +63,15 @@ type psqlDB interface {
    QueryRow(ctx context.Context, sql string, optionsAndArgs ...interface{}) pgx.Row
 }
 
+var Info *log.Logger
+var Warning *log.Logger
+var Error *log.Logger
+
 var verbosity int
 func main() {
-   fmt.Println("Starting nanonymous Core on ", time.Now())
-
    err := initNanoymousCore()
    if (err != nil) {
-      fmt.Println(err.Error())
-      return
+      panic(err)
    }
 
    var usr string
@@ -340,7 +344,19 @@ func main() {
       case "P":
          verbosity = 5
 
-         resetInUse()
+         calculateFee(keyMan.NewRawFromNano(1.503))
+         calculateFee(keyMan.NewRawFromNano(1.2))
+         calculateFee(keyMan.NewRawFromNano(1.3))
+         calculateFee(keyMan.NewRawFromNano(1.4))
+         calculateFee(keyMan.NewRawFromNano(1.5))
+         calculateFee(keyMan.NewRawFromNano(2))
+         calculateFee(keyMan.NewRawFromNano(2.3))
+         calculateFee(keyMan.NewRawFromNano(2.5))
+         calculateFee(keyMan.NewRawFromNano(3))
+         calculateFee(keyMan.NewRawFromNano(7))
+         calculateFee(keyMan.NewRawFromNano(11))
+         calculateFee(keyMan.NewRawFromNano(41))
+
       default:
          break menu
       }
@@ -354,6 +370,28 @@ func main() {
 // initNanoymousCore sets up our variables that need to preexist before other
 // functions can be called.
 func initNanoymousCore() error {
+   // Init loggers
+   _, err := os.ReadDir("./logs")
+   if (err != nil ){
+      if (strings.Contains(err.Error(), "no such file or directory")) {
+         os.Mkdir("./logs", 0755)
+      } else {
+         return fmt.Errorf("initNanoymousCore: %w", err)
+      }
+   }
+
+   logFile, err := os.OpenFile("./logs/logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+   if err != nil {
+    return fmt.Errorf("initNanoymousCore: %w", err)
+   }
+
+   Info = log.New(logFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
+   Warning = log.New(logFile, "WARNING: ", log.Ldate|log.Ltime|log.Lshortfile)
+   Error = log.New(logFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+
+   Info.Println("Started Nanonymous Core")
+
+
    // Grab embedded data
    for _, line := range strings.Split(embeddedData, "\n") {
       word := strings.Split(line, " = ")
@@ -389,6 +427,7 @@ func initNanoymousCore() error {
    resetInUse()
 
    feeDividend = int64(math.Trunc(100/FEE_PERCENT))
+   minPayment = oneNano()
 
    activePoW = make(map[string]int)
    workChannel = make(map[string]chan string)
@@ -407,6 +446,7 @@ func initNanoymousCore() error {
 func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
    var seed keyMan.Key
 
+   Info.Println("New address requested")
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return nil, 0, fmt.Errorf("getNewAddress: %w", err)
@@ -499,7 +539,7 @@ func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
       return nil, 0, fmt.Errorf("getNewAddress: no rows affected during index incrament")
    }
 
-   // blacklist new addres with the receiving address
+   // Blacklist new address with the receiving address
    if (receivingAddress != "") {
       receivingAddressByte, err := keyMan.AddressToPubKey(receivingAddress)
       if (err != nil) {
@@ -511,6 +551,7 @@ func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
          return nil, 0, fmt.Errorf("getNewAddress: Blacklist falied: %w", err)
       }
 
+      // Track so that when we receive funds we know where to send it
       err = setClientAddress(id, seed.Index, receivingAddressByte)
       if (err != nil) {
          return nil, 0, fmt.Errorf("getNewAddress: %w", err)
@@ -529,7 +570,7 @@ func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
          if (verbosity >= 5) {
             fmt.Println("Subscription add failed!")
          }
-         // TODO log
+         Warning.Println("Add subscription timout")
    }
 
 
@@ -539,7 +580,7 @@ func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
 // blacklist takes two public addresses, hashes them and stores them in the
 // database. The purpose of the blacklist is to securely store a transaction
 // pair that should never happen. If, for example, Alice sends nano from address
-// A to address B in order to receive it ananomously at another address C, then
+// A to address B in order to receive it anonymously at another address C, then
 // Alice wants to be sure that her address A and address C are never associated.
 // However, if she later orders another transaction to address C, nanonymous
 // would run the risk of using address B to send to C. Before doing such a
@@ -643,6 +684,13 @@ func receivedNano(nanoAddress string) error {
          t.errChannel <- err
       }
    }()
+   t.id, err = getNextTransactionId()
+   if (err != nil) {
+      err = fmt.Errorf("receivedNano: %w", err)
+      return err
+   }
+
+   Info.Println("Transaction", t.id, "started")
 
    t.paymentAddress, err = keyMan.AddressToPubKey(nanoAddress)
    if (err != nil) {
@@ -662,8 +710,8 @@ func receivedNano(nanoAddress string) error {
       err = fmt.Errorf("receivedNano: no active transaction available")
       return err
    }
-
-   t.fee = keyMan.NewRaw(0).Div(payment, keyMan.NewRaw(feeDividend))
+       //keyMan.NewRaw(0).Div(payment, keyMan.NewRaw(feeDividend))
+   t.fee = calculateFee(payment)
    t.amountToSend = keyMan.NewRaw(0).Sub(payment, t.fee)
    if (verbosity >= 5) {
       fmt.Println("payment:        ", payment,
@@ -859,44 +907,6 @@ func sendNanoToClient(t *Transaction) error {
    }
 
    return nil
-}
-
-// findTotalBalace is a simple function that adds up all the nano there is
-// amongst all the wallets and returns the amount in Nano.
-func findTotalBalance() (float64, error) {
-   conn, err := pgx.Connect(context.Background(), databaseUrl)
-   if (err != nil) {
-      return -1.0, fmt.Errorf("FindTotalBalance: %w", err)
-   }
-   defer conn.Close(context.Background())
-
-   queryString :=
-   "SELECT " +
-      "SUM(balance) " +
-   "FROM " +
-      "wallets;"
-
-   var rawBalance = keyMan.NewRaw(0)
-   var nanoBalance float64
-   row, err := conn.Query(context.Background(), queryString)
-   if (err != nil) {
-      return -1.0, fmt.Errorf("QueryRow failed: %w", err)
-   }
-
-   if (row.Next()) {
-      err = row.Scan(rawBalance)
-      if (err != nil) {
-         return -1.0, fmt.Errorf("findTotalBalance: %w", err)
-      }
-
-      nanoBalance = rawToNANO(rawBalance)
-
-      if (verbosity >= 5) {
-         fmt.Println("Total Balance is: Ӿ", nanoBalance)
-      }
-   }
-
-   return nanoBalance, nil
 }
 
 // rawToNANO is used to convert raw to NANO AKA Mnano (the communnity just calls
@@ -1148,7 +1158,7 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *keyMan.Raw)
    // Update database records
    err = updateBalance(block.Account, block.Balance)
    if (err != nil) {
-      // TODO log
+      Error.Println("Balance update failed from send:", err.Error())
       return fmt.Errorf("sendNano: updatebalance error %w", databaseError)
       // TODO test that database error doesn't trigger a refund
    }
@@ -1294,7 +1304,7 @@ func Receive(account string) (*keyMan.Raw, keyMan.BlockHash, error) {
       // Update database records
       err = updateBalance(block.Account, block.Balance)
       if (err != nil) {
-         // TODO log
+         Error.Println("Balance update failed from receive:", err.Error())
          return pendingInfo.Amount, newHash, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
          // TODO test that database error doesn't trigger a refund
       }
@@ -1396,10 +1406,11 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
       work, err := generateWorkOnWorkServer(hash, difficulty)
       //work, err := generateWorkOnNode(hash, difficulty)
       if (err != nil) {
-         // TODO log error
+         Warning.Println("Failed to connect to work server")
          // Fall back server
          work, err = generateWorkOnNode(hash, difficulty)
          if (err != nil) {
+            Error.Println("Failed to generate work")
             return ""
          }
       }
@@ -1499,4 +1510,25 @@ func checkBalance(nanoAddress string) error {
    }
 
    return nil
+}
+
+func calculateFee(payment *keyMan.Raw) *keyMan.Raw {
+
+   // Find base fee simply by taking the percentage
+   fee := keyMan.NewRaw(0).Div(payment, keyMan.NewRaw(feeDividend))
+
+   // Don't want the user to have to deal with dust so I'll round the fee down
+   // to the nearest .001 * minimum
+   minDust := oneNano().Div(minPayment, keyMan.NewRaw(1000))
+
+   _, dust := oneNano().DivMod(fee, minDust)
+
+   // Remove any dust from the fee
+   fee.Sub(fee, dust)
+
+   return fee
+}
+
+func oneNano() *keyMan.Raw {
+   return keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(30), nil)
 }

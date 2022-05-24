@@ -31,6 +31,14 @@ CREATE TABLE IF NOT EXISTS blacklist(
    hash BYTEA PRIMARY KEY
 );
 
+CREATE TABLE IF NOT EXISTS transaction(
+   unique_id BIGINT
+);
+INSERT INTO
+   transaction (unique_id)
+VALUES
+   (-1);
+
 CREATE EXTENSION pgcrypto;
 
 CREATE USER go WITH PASSWORD 'my_password';

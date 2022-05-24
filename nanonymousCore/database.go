@@ -361,3 +361,66 @@ func insertSeed(conn psqlDB, seed []byte) (int, error) {
 
    return id, nil
 }
+
+// findTotalBalace is a simple function that adds up all the nano there is
+// amongst all the wallets and returns the amount in Nano.
+func findTotalBalance() (float64, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return -1.0, fmt.Errorf("FindTotalBalance: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "SUM(balance) " +
+   "FROM " +
+      "wallets;"
+
+   var rawBalance = keyMan.NewRaw(0)
+   var nanoBalance float64
+   row, err := conn.Query(context.Background(), queryString)
+   if (err != nil) {
+      return -1.0, fmt.Errorf("QueryRow failed: %w", err)
+   }
+
+   if (row.Next()) {
+      err = row.Scan(rawBalance)
+      if (err != nil) {
+         return -1.0, fmt.Errorf("findTotalBalance: %w", err)
+      }
+
+      nanoBalance = rawToNANO(rawBalance)
+
+      if (verbosity >= 5) {
+         fmt.Println("Total Balance is: Ӿ", nanoBalance)
+      }
+   }
+
+   return nanoBalance, nil
+}
+
+func getNextTransactionId() (int, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return -1, fmt.Errorf("FindTotalBalance: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "UPDATE " +
+      "transaction " +
+   "SET " +
+      "unique_id = unique_id + 1 " +
+   "RETURNING " +
+      "unique_id;"
+
+   var id int
+   err = conn.QueryRow(context.Background(), queryString).Scan(&id)
+   if (err != nil) {
+      return -1, fmt.Errorf("getNextTransactionId: QueryRow failed: %w", err)
+   }
+
+   return id, nil
+}
+

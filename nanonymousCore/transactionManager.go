@@ -14,6 +14,7 @@ import (
 )
 
 type Transaction struct {
+   id int
    paymentAddress []byte
    paymentParentSeedId int
    paymentIndex int
@@ -69,16 +70,24 @@ func transactionManager(t *Transaction) {
       if !(transcationSucessfull) {
          err := Refund(t.receiveHash)
          if (err != nil) {
-            // TODO log
             // VERY BAD! Just accepted money, failed to deliver it, and didn't
             //           refund the user!
+            Error.Println("Refund failed!! Address:", t.paymentAddress, " error:", err.Error())
+            // TODO email myself??
          }
          reverseTransitionalAddress(t)
          t.abort = true
          t.receiveWg.Done()
+         if (t.multiSend) {
+            Warning.Println("Multi transaction failed (", t.id, ")")
+         } else {
+            Warning.Println("Transaction failed (", t.id, ")")
+         }
          if (verbosity >= 5) {
             fmt.Println("Transaction failed...")
          }
+      } else {
+         Info.Println("Transaction", t.id, "Complete")
       }
    }()
 
@@ -157,7 +166,7 @@ func transactionManager(t *Transaction) {
                }
             }
          case <-time.After(5 * time.Minute):
-            // TODO log
+            Info.Println("Transaction timeout(1)")
             if (verbosity >= 5) {
                if (t.multiSend) {
                   fmt.Println("Transaction error: timout during sends")
@@ -187,7 +196,7 @@ func transactionManager(t *Transaction) {
                   fmt.Println("[S]Confirmed: ", numConfirmed)
                }
             case <-time.After(5 * time.Minute):
-               // TODO log
+               Info.Println("Transaction timeout(2)")
                t.abort = true
                t.receiveWg.Done()
                return
@@ -233,7 +242,7 @@ func transactionManager(t *Transaction) {
                               fmt.Println("[R]Confirmed: ", numConfirmed)
                            }
                         case <-time.After(5 * time.Minute):
-                           // TODO log
+                           Info.Println("Transaction timeout(3)")
                            t.abort = true
                            t.receiveWg.Done()
                            return
@@ -261,7 +270,7 @@ func transactionManager(t *Transaction) {
                   return
                }
             case <-time.After(5 * time.Minute):
-               // TODO log
+               Info.Println("Transaction timeout(4)")
                if (verbosity >= 5) {
                   if (operation == 1) {
                      fmt.Println("Transaction error: timout during receives")
@@ -304,7 +313,7 @@ func handleSingleSendError(t *Transaction, prevError error) bool {
       }
    }
 
-   // TODO log
+   Warning.Println("Single send error:", err.Error())
 
    // Transaction failed...
    return false
@@ -340,7 +349,7 @@ func handleMultiSendError(t *Transaction, operation int, i int, err error) bool 
          }
       case 3:
          // How did you get here?? The transaction is already complete!
-         // TODO log
+         Warning.Println("Unreachable(1)")
          return true
    }
 

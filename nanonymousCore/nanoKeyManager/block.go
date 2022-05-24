@@ -246,6 +246,13 @@ func (r *Raw) Div(x, y *Raw) *Raw {
    return r
 }
 
+func (r *Raw) DivMod(x, y *Raw) (*Raw, *Raw) {
+
+   z := NewRaw(0)
+   r.Int, _ = r.Int.DivMod(x.Int, y.Int, z.Int)
+   return r, z
+}
+
 func (r *Raw) Sub(x, y *Raw) *Raw {
    r.Int = r.Int.Sub(x.Int, y.Int)
    return r

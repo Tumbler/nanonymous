@@ -60,7 +60,7 @@ func websocketListener() {
       select {
          case err := <-wsChan:
             if (err != nil) {
-               // TODO log
+               Error.Println("Websocket receive error: ", err.Error())
                if (verbosity >= 5) {
                   fmt.Println(" err: ", err.Error())
                }
@@ -76,7 +76,7 @@ func websocketListener() {
       }
    }
 
-   // Should never get here TODO log
+   Warning.Println("Unreachable(2)")
 }
 
 func startSubscription(ws *websocket.Conn) error {
@@ -203,7 +203,7 @@ func handleNotification(cBlock ConfirmationBlock) {
                   select {
                      case registeredSendChannels[msg.Block.LinkAsAccount] <- msg.Hash.String():
                      case <-time.After(5 * time.Minute):
-                        // TODO log
+                        Warning.Println("Registered send channel timeout")
                   }
                }
             }
@@ -223,7 +223,7 @@ func handleNotification(cBlock ConfirmationBlock) {
          select {
             case registeredReceiveChannels[msg.Account] <- msg.Hash.String():
             case <-time.After(5 * time.Minute):
-               // TODO log
+               Warning.Println("Registered receive channel timeout")
          }
       }
    }
