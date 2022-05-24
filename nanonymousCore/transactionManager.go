@@ -11,6 +11,7 @@ import (
 
    // Local packages
    keyMan "nanoKeyManager"
+   nt "nanoTypes"
 )
 
 type Transaction struct {
@@ -18,15 +19,15 @@ type Transaction struct {
    paymentAddress []byte
    paymentParentSeedId int
    paymentIndex int
-   receiveHash keyMan.BlockHash
+   receiveHash nt.BlockHash
    receiveWg sync.WaitGroup
    clientAddress []byte
-   fee *keyMan.Raw
-   amountToSend *keyMan.Raw
+   fee *nt.Raw
+   amountToSend *nt.Raw
    sendingKeys []*keyMan.Key
    walletSeed []int
-   walletBalance []*keyMan.Raw
-   individualSendAmount []*keyMan.Raw
+   walletBalance []*nt.Raw
+   individualSendAmount []*nt.Raw
    transitionalKey *keyMan.Key
    transitionSeedId int
    commChannel chan int
@@ -358,7 +359,7 @@ func handleMultiSendError(t *Transaction, operation int, i int, err error) bool 
 }
 
 // Refund just takes a single receive block hash and reverses it.
-func Refund(receiveHash keyMan.BlockHash)  error {
+func Refund(receiveHash nt.BlockHash)  error {
    // Find the address that send the payment so we can send it back
    if (verbosity >= 5) {
       fmt.Println("Refunding!")

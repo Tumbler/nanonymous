@@ -10,17 +10,18 @@ import (
 
    // Local packages
    keyMan "nanoKeyManager"
+   nt "nanoTypes"
 )
 
 // Port 80 (unsecured) and 443 (secure)
 
 type ConfirmationBlock struct {
-   Time keyMan.JInt
+   Time nt.JInt
    Message struct {
       Block keyMan.Block
       Account string
-      Amount *keyMan.Raw
-      Hash keyMan.BlockHash
+      Amount *nt.Raw
+      Hash nt.BlockHash
       ConfirmationType string `json:"confirmation_type"`
    }
 }

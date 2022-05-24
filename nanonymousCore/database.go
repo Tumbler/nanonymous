@@ -6,13 +6,14 @@ import (
 
    // Local packages
    keyMan "nanoKeyManager"
+   nt "nanoTypes"
 
    // 3rd party packages
    pgx "github.com/jackc/pgx/v4"
    "golang.org/x/crypto/blake2b"
 )
 
-func updateBalance(nanoAddress string, balance *keyMan.Raw) error {
+func updateBalance(nanoAddress string, balance *nt.Raw) error {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return fmt.Errorf("updateBalance: %w", err)
@@ -40,8 +41,8 @@ func updateBalance(nanoAddress string, balance *keyMan.Raw) error {
    return nil
 }
 
-func getBalance(nanoAddress string) (*keyMan.Raw, error) {
-   var balance = keyMan.NewRaw(0)
+func getBalance(nanoAddress string) (*nt.Raw, error) {
+   var balance = nt.NewRaw(0)
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return balance,fmt.Errorf("getBalance: %w", err)
@@ -377,7 +378,7 @@ func findTotalBalance() (float64, error) {
    "FROM " +
       "wallets;"
 
-   var rawBalance = keyMan.NewRaw(0)
+   var rawBalance = nt.NewRaw(0)
    var nanoBalance float64
    row, err := conn.Query(context.Background(), queryString)
    if (err != nil) {

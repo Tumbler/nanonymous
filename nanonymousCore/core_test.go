@@ -182,50 +182,50 @@ func Test_receivedNano(t *testing.T) {
       clientAddress string
       seedId int
       index int
-      nanoReceived *keyMan.Raw
-      balances []*keyMan.Raw
+      nanoReceived *nt.Raw
+      balances []*nt.Raw
    }{
       {"nano_3f4pznen4utfxmeu7jmucnhg6ut4rd9fk87s7xnnrkr4okph65158j4xciqf",
        "nano_1bgho34hpofn4sxencbr8916sbbyyoosr5mmepewyguo8te15qkq8hefnrdn",
        1,
        3,
-       keyMan.NewRaw(0).Mul(keyMan.NewRaw(10), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(30), nil)),
-[]*keyMan.Raw{keyMan.NewRaw(0).Mul(keyMan.NewRaw(3102), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(28), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(6),    keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(29), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(32),   keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(29), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(10),   keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(30), nil))},
+       nt.NewRaw(0).Mul(nt.NewRaw(10), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+ []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(3102), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(6),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(32),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(10),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))},
       },
       {"nano_1ts8ejswbndstgp6r4wgi7yr593rg7ryab4wuzburmay3pxbrgu3i5f1fz3n",
        "nano_14gfu8wkz48o3xf869ehp7rd9oah1993d1deguqknkksidp5s4b46czn86sw",
        1,
        0,
-       keyMan.NewRaw(0).Mul(keyMan.NewRaw(9), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(30), nil)),
-[]*keyMan.Raw{keyMan.NewRaw(0).Mul(keyMan.NewRaw(4002), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(28), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(6),    keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(29), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(32),   keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(29), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(1018), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(27), nil))},
+       nt.NewRaw(0).Mul(nt.NewRaw(9), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+ []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(4002), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(6),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(32),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(1018), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil))},
       },
       {"nano_1ie4own1s5qmmyd33u9a64169ox54kdb3khs1yt84gfgd7n7dshgcjkegxei",
        "nano_14gfu8wkz48o3xf869ehp7rd9oah1993d1deguqknkksidp5s4b46czn86sw",
        1,
        1,
-       keyMan.NewRaw(0).Mul(keyMan.NewRaw(53), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(29), nil)),
-[]*keyMan.Raw{keyMan.NewRaw(0).Mul(keyMan.NewRaw(347306), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(26), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(59),     keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(29), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(32),     keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(29), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(1018),   keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(27), nil))},
+       nt.NewRaw(0).Mul(nt.NewRaw(53), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+ []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(347306), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(26), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(59),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(32),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(1018),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil))},
       },
       {"nano_1c73mmx64sxpudp1d46w56ct8kynnzt5bdufocfkspn8beknbb3mngj3a6br",
        // This address is blacklisted from address 1,0. That's why it won't take from there
        "nano_3gickb6kgex966fs9666jghehh7bwrpcmqmdbyqa1441i83dwufrr9uojn81",
        1,
        2,
-       keyMan.NewRaw(0).Mul(keyMan.NewRaw(6), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(30), nil)),
-[]*keyMan.Raw{keyMan.NewRaw(0).Mul(keyMan.NewRaw(347306), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(26), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(93),     keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(28), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(92),     keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(29), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(0),      keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(28), nil)),
-           keyMan.NewRaw(0).Mul(keyMan.NewRaw(0),      keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(28), nil))},
+       nt.NewRaw(0).Mul(nt.NewRaw(6), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+ []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(347306), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(26), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(93),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(92),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil))},
       },
    }
 
@@ -259,7 +259,7 @@ func Test_receivedNano(t *testing.T) {
 
       rows, err := conn.Query(context.Background(), queryString)
 
-      var balance = keyMan.NewRaw(0)
+      var balance = nt.NewRaw(0)
       var seedId int
       var index int
       for i := 0; rows.Next(); i++ {
@@ -283,18 +283,18 @@ func Test_receivedNano(t *testing.T) {
 func Test_RawToNano(t *testing.T) {
 
    test1 := []struct {
-      input *keyMan.Raw
+      input *nt.Raw
       output float64
    }{
-      {keyMan.NewRaw(0).Mul(keyMan.NewRaw(41), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(30), nil)),
+      {nt.NewRaw(0).Mul(nt.NewRaw(41), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
        41},
-      {keyMan.NewRaw(0).Mul(keyMan.NewRaw(917), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(28), nil)),
+      {nt.NewRaw(0).Mul(nt.NewRaw(917), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
        9.17},
-      {keyMan.NewRaw(0).Mul(keyMan.NewRaw(148), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(27), nil)),
+      {nt.NewRaw(0).Mul(nt.NewRaw(148), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
        0.148},
-      {keyMan.NewRaw(0).Mul(keyMan.NewRaw(314), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(28), nil)),
+      {nt.NewRaw(0).Mul(nt.NewRaw(314), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
        3.14},
-      {keyMan.NewRaw(0).Mul(keyMan.NewRaw(4857), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(29), nil)),
+      {nt.NewRaw(0).Mul(nt.NewRaw(4857), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
        485.7},
    }
 

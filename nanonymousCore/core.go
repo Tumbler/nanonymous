@@ -17,6 +17,7 @@ import (
 
    // Local packages
    keyMan "nanoKeyManager"
+   nt "nanoTypes"
 
    // 3rd party packages
    pgx "github.com/jackc/pgx/v4"
@@ -48,7 +49,7 @@ const MAX_INDEX = 4294967295
 // Fee in %
 const FEE_PERCENT = float64(0.2)
 var feeDividend int64
-var minPayment *keyMan.Raw
+var minPayment *nt.Raw
 
 var wg sync.WaitGroup
 
@@ -247,7 +248,7 @@ func main() {
          seedReceive, _ = getSeedFromIndex(1, 12)
          SendEasy(seedSend.NanoAddress,
                   seedReceive.NanoAddress,
-                  keyMan.NewRawFromNano(0.50),
+                  nt.NewRawFromNano(0.50),
                   false)
       case "J":
          verbosity = 5
@@ -257,38 +258,38 @@ func main() {
          seedReceive, _ = getSeedFromIndex(1, 7)
          SendEasy(seedSend.NanoAddress,
                   seedReceive.NanoAddress,
-                  keyMan.NewRawFromNano(1.00),
+                  nt.NewRawFromNano(1.00),
                   false)
          //seedSend, _ = getSeedFromIndex(1, 8)
          //seedReceive, _ = getSeedFromIndex(1, 0)
          //SendEasy(seedSend.NanoAddress,
                   //seedReceive.NanoAddress,
-                  //keyMan.NewRawFromNano(0.498),
+                  //nt.NewRawFromNano(0.498),
                   //false)
          //seedSend, _ = getSeedFromIndex(1, 10)
          //seedReceive, _ = getSeedFromIndex(1, 2)
          //SendEasy(seedSend.NanoAddress,
                   //seedReceive.NanoAddress,
-                  //keyMan.NewRawFromNano(0.5),
+                  //nt.NewRawFromNano(0.5),
                   //false)
          //time.Sleep(5 * time.Second)
          //seedSend, _ = getSeedFromIndex(1, 10)
          //seedReceive, _ = getSeedFromIndex(1, 3)
          //SendEasy(seedSend.NanoAddress,
                   //seedReceive.NanoAddress,
-                  //keyMan.NewRawFromNano(0.5),
+                  //nt.NewRawFromNano(0.5),
                   //false)
          //seedSend, _ = getSeedFromIndex(1, 0)
          //seedReceive, _ = getSeedFromIndex(1, 6)
          //SendEasy(seedSend.NanoAddress,
                   //seedReceive.NanoAddress,
-                  //keyMan.NewRawFromNano(1.0),
+                  //nt.NewRawFromNano(1.0),
                   //false)
          //seedSend, _ = getSeedFromIndex(1, 11)
          //seedReceive, _ = getSeedFromIndex(1, 0)
          //SendEasy(seedSend.NanoAddress,
                   //seedReceive.NanoAddress,
-                  //keyMan.NewRawFromNano(0.5),
+                  //nt.NewRawFromNano(0.5),
                   //false)
       case "K":
          verbosity = 5
@@ -344,18 +345,18 @@ func main() {
       case "P":
          verbosity = 5
 
-         calculateFee(keyMan.NewRawFromNano(1.503))
-         calculateFee(keyMan.NewRawFromNano(1.2))
-         calculateFee(keyMan.NewRawFromNano(1.3))
-         calculateFee(keyMan.NewRawFromNano(1.4))
-         calculateFee(keyMan.NewRawFromNano(1.5))
-         calculateFee(keyMan.NewRawFromNano(2))
-         calculateFee(keyMan.NewRawFromNano(2.3))
-         calculateFee(keyMan.NewRawFromNano(2.5))
-         calculateFee(keyMan.NewRawFromNano(3))
-         calculateFee(keyMan.NewRawFromNano(7))
-         calculateFee(keyMan.NewRawFromNano(11))
-         calculateFee(keyMan.NewRawFromNano(41))
+         calculateFee(nt.NewRawFromNano(1.503))
+         calculateFee(nt.NewRawFromNano(1.2))
+         calculateFee(nt.NewRawFromNano(1.3))
+         calculateFee(nt.NewRawFromNano(1.4))
+         calculateFee(nt.NewRawFromNano(1.5))
+         calculateFee(nt.NewRawFromNano(2))
+         calculateFee(nt.NewRawFromNano(2.3))
+         calculateFee(nt.NewRawFromNano(2.5))
+         calculateFee(nt.NewRawFromNano(3))
+         calculateFee(nt.NewRawFromNano(7))
+         calculateFee(nt.NewRawFromNano(11))
+         calculateFee(nt.NewRawFromNano(41))
 
       default:
          break menu
@@ -616,7 +617,7 @@ func blacklist(conn psqlDB, sendingAddress []byte, receivingAddress []byte) erro
 
 // blacklistHash is just a wrapper to blacklist() that takes a receiving hash
 // instead of a receiving pub key.
-func blacklistHash(sendingAddress []byte, receivingHash keyMan.BlockHash) error {
+func blacklistHash(sendingAddress []byte, receivingHash nt.BlockHash) error {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return fmt.Errorf("receivedNano: %w", err)
@@ -666,7 +667,7 @@ func receivedNano(nanoAddress string) error {
    if (err != nil) {
       return fmt.Errorf("receivedNano: %w", err)
    }
-   if (payment == nil || payment.Cmp(keyMan.NewRaw(0)) == 0) {
+   if (payment == nil || payment.Cmp(nt.NewRaw(0)) == 0) {
       return fmt.Errorf("receivedNano: No payment received")
    }
 
@@ -712,7 +713,7 @@ func receivedNano(nanoAddress string) error {
    }
        //keyMan.NewRaw(0).Div(payment, keyMan.NewRaw(feeDividend))
    t.fee = calculateFee(payment)
-   t.amountToSend = keyMan.NewRaw(0).Sub(payment, t.fee)
+   t.amountToSend = nt.NewRaw(0).Sub(payment, t.fee)
    if (verbosity >= 5) {
       fmt.Println("payment:        ", payment,
                   "\r\nfee:            ", t.fee,
@@ -770,7 +771,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
    var foundAddress bool
    var tmpSeed int
    var tmpIndex int
-   var tmpBalance = keyMan.NewRaw(0)
+   var tmpBalance = nt.NewRaw(0)
    for rows.Next() {
       err = rows.Scan(&tmpSeed, &tmpIndex, tmpBalance)
       if (err != nil) {
@@ -821,7 +822,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
       }
 
       var enough bool
-      var totalBalance = keyMan.NewRaw(0)
+      var totalBalance = nt.NewRaw(0)
       for rows.Next() {
          err = rows.Scan(&tmpSeed, &tmpIndex, tmpBalance)
          if (err != nil) {
@@ -838,7 +839,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
             t.sendingKeys = append(t.sendingKeys, tmpKey)
             t.walletSeed = append(t.walletSeed, tmpSeed)
             // tmpBalance contains a pointer, so we need a new address to add to the list
-            newAddress := keyMan.NewFromRaw(tmpBalance)
+            newAddress := nt.NewFromRaw(tmpBalance)
             t.walletBalance = append(t.walletBalance, newAddress)
             totalBalance.Add(totalBalance, tmpBalance)
             setAddressInUse(tmpKey.NanoAddress)
@@ -875,12 +876,12 @@ func sendNanoToClient(t *Transaction) error {
       t.multiSend = true
 
       // Go through list of wallets and send to interim address
-      var totalSent = keyMan.NewRaw(0)
-      var currentSend = keyMan.NewRaw(0)
+      var totalSent = nt.NewRaw(0)
+      var currentSend = nt.NewRaw(0)
       for i, key := range t.sendingKeys {
 
          // if (total + balance) > payment
-         var arithmaticResult = keyMan.NewRaw(0)
+         var arithmaticResult = nt.NewRaw(0)
          if (arithmaticResult.Add(totalSent, t.walletBalance[i]).Cmp(t.amountToSend) > 0) {
             currentSend = arithmaticResult.Sub(t.amountToSend, totalSent)
          } else {
@@ -913,7 +914,7 @@ func sendNanoToClient(t *Transaction) error {
 // this a nano). We don't have a conversion to go the other way as all
 // operations should be done in raw to avoid rounding errors. We only want to
 // convert when outputing for human readable format.
-func rawToNANO(raw *keyMan.Raw) float64 {
+func rawToNANO(raw *nt.Raw) float64 {
    // 1 NANO is 10^30 raw
    rawConv := new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)
    rawConvFloat := new(big.Float).SetInt(rawConv)
@@ -1015,7 +1016,7 @@ func setClientAddress(parentSeedId int, index int, clientAddress []byte) error {
    return nil
 }
 
-func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *keyMan.Raw, commCh chan int, errCh chan error, transactionWg *sync.WaitGroup, abort *bool) {
+func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan int, errCh chan error, transactionWg *sync.WaitGroup, abort *bool) {
    wg.Add(1)
    defer wg.Done()
 
@@ -1052,7 +1053,7 @@ func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *key
    }
 }
 
-func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *keyMan.Raw, commCh chan int, errCh chan error, i int) error {
+func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan int, errCh chan error, i int) error {
 
    err := sendNano(fromKey, toPublicKey, amount)
    if (err != nil) {
@@ -1079,7 +1080,7 @@ func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *keyMan.Raw, commCh ch
 
 // SendEasy is just a wrapper for Send(). If you have the info already Send()
 // is more efficient so don't overuse this function.
-func SendEasy(from string, to string, amount *keyMan.Raw, all bool) {
+func SendEasy(from string, to string, amount *nt.Raw, all bool) {
 
    fromKey, _, _, err := getSeedFromAddress(from)
    toKey, _, _, err := getSeedFromAddress(to)
@@ -1097,7 +1098,7 @@ func SendEasy(from string, to string, amount *keyMan.Raw, all bool) {
    }
 }
 
-func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *keyMan.Raw) error {
+func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) error {
    var block keyMan.Block
 
    accountInfo, err := getAccountInfo(fromKey.NanoAddress)
@@ -1115,7 +1116,7 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *keyMan.Raw)
    block.Seed = *fromKey
    block.Account = block.Seed.NanoAddress
    block.Representative = accountInfo.Representative
-   block.Balance = keyMan.NewRaw(0).Sub(accountInfo.Balance, amountToSend)
+   block.Balance = nt.NewRaw(0).Sub(accountInfo.Balance, amountToSend)
    block.Link = toPublicKey
 
    sig, err := block.Sign()
@@ -1151,7 +1152,7 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *keyMan.Raw)
    clearPoW(block.Account)
    // If there's no nano left in the account, it's a dead account; no need to
    // calculate PoW for it.
-   if (block.Balance.Cmp(keyMan.NewRaw(0)) != 0) {
+   if (block.Balance.Cmp(nt.NewRaw(0)) != 0) {
       go preCalculateNextPoW(block.Account, false)
    }
 
@@ -1189,7 +1190,7 @@ func manualWalletUpdate(seed int, index int, nano int64) error {
    }
    defer conn.Close(context.Background())
 
-   amount := keyMan.NewRaw(0).Mul(keyMan.NewRaw(nano), keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(30), nil))
+   amount := nt.NewRaw(0).Mul(nt.NewRaw(nano), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))
 
    queryString :=
    "UPDATE " +
@@ -1219,7 +1220,7 @@ func ReceiveAll(account string) error {
             return fmt.Errorf("ReceiveAll: %w", err)
             break
          }
-         if (amt.Cmp(keyMan.NewRaw(0)) == 0) {
+         if (amt.Cmp(nt.NewRaw(0)) == 0) {
             break
          }
       } else {
@@ -1230,10 +1231,10 @@ func ReceiveAll(account string) error {
    return nil
 }
 
-func Receive(account string) (*keyMan.Raw, keyMan.BlockHash, error) {
+func Receive(account string) (*nt.Raw, nt.BlockHash, error) {
    var block keyMan.Block
    var pendingInfo BlockInfo
-   var newHash keyMan.BlockHash
+   var newHash nt.BlockHash
 
    key, _, _, err := getSeedFromAddress(account)
    if (err != nil) {
@@ -1261,7 +1262,7 @@ func Receive(account string) (*keyMan.Raw, keyMan.BlockHash, error) {
          // Old account. Do a standard receive.
          block.Previous = accountInfo.Frontier
          block.Representative = accountInfo.Representative
-         block.Balance = keyMan.NewRaw(0).Add(accountInfo.Balance, pendingInfo.Amount)
+         block.Balance = nt.NewRaw(0).Add(accountInfo.Balance, pendingInfo.Amount)
       }
       block.Account = account
       block.Link = pendingHash
@@ -1381,7 +1382,7 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
       // PoW is not being calculated, so do it!
       activePoW[nanoAddress] = 1
 
-      var hash keyMan.BlockHash
+      var hash nt.BlockHash
       accountInfo, _ := getAccountInfo(nanoAddress)
 
       if (len(accountInfo.Frontier) == 32) {
@@ -1494,7 +1495,7 @@ func checkBalance(nanoAddress string) error {
 
    balance, receiveable, _ := getAccountBalance(nanoAddress)
 
-   if (receiveable.Cmp(keyMan.NewRaw(0)) != 0) {
+   if (receiveable.Cmp(nt.NewRaw(0)) != 0) {
       // Receive and update
       Receive(nanoAddress)
    } else {
@@ -1512,14 +1513,14 @@ func checkBalance(nanoAddress string) error {
    return nil
 }
 
-func calculateFee(payment *keyMan.Raw) *keyMan.Raw {
+func calculateFee(payment *nt.Raw) *nt.Raw {
 
    // Find base fee simply by taking the percentage
-   fee := keyMan.NewRaw(0).Div(payment, keyMan.NewRaw(feeDividend))
+   fee := nt.NewRaw(0).Div(payment, nt.NewRaw(feeDividend))
 
    // Don't want the user to have to deal with dust so I'll round the fee down
    // to the nearest .001 * minimum
-   minDust := oneNano().Div(minPayment, keyMan.NewRaw(1000))
+   minDust := oneNano().Div(minPayment, nt.NewRaw(1000))
 
    _, dust := oneNano().DivMod(fee, minDust)
 
@@ -1529,6 +1530,6 @@ func calculateFee(payment *keyMan.Raw) *keyMan.Raw {
    return fee
 }
 
-func oneNano() *keyMan.Raw {
-   return keyMan.NewRaw(0).Exp(keyMan.NewRaw(10), keyMan.NewRaw(30), nil)
+func oneNano() *nt.Raw {
+   return nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)
 }

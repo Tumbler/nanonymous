@@ -2,13 +2,10 @@ package nanoKeyManager
 
 import (
    "fmt"
-   "strings"
-   "math/big"
    "golang.org/x/crypto/blake2b"
-   "encoding/hex"
-   "encoding/json"
-   "strconv"
-   "database/sql/driver"
+
+   // Local packages
+   nt "nanoTypes"
 
    // Third party packages
    "github.com/hectorchu/gonano/wallet/ed25519"
@@ -19,41 +16,19 @@ import (
 type Block struct {
    Type           string     `json:"type"`
    Account        string     `json:"account"`
-   Previous       BlockHash  `json:"previous"`
+   Previous       nt.BlockHash  `json:"previous"`
    Representative string     `json:"representative"`
-   Balance        *Raw       `json:"balance"`
-   Link           BlockHash  `json:"link"`
+   Balance        *nt.Raw       `json:"balance"`
+   Link           nt.BlockHash  `json:"link"`
    LinkAsAccount  string     `json:"link_as_account"`
-   Signature      HexData    `json:"signature"`
-   Work           HexData    `json:"work"`
+   Signature      nt.HexData    `json:"signature"`
+   Work           nt.HexData    `json:"work"`
    SubType        string
    Seed           Key
 }
 
-// BlockHash represents a block hash.
-type BlockHash []byte
-// HexData represents generic hex data.
-type HexData []byte
-
-type JInt int64
-type JBool bool
-
-// Raw represents an amount of raw nano.
-type Raw struct {
-    *big.Int
-}
-
-
-func (h BlockHash) String() string {
-   if (len(h) == 0) {
-      return "0000000000000000000000000000000000000000000000000000000000000000"
-   } else {
-      return strings.ToUpper(hex.EncodeToString(h))
-   }
-}
-
 // Hash calculates the block hash.
-func (b *Block) Hash() (hash BlockHash, err error) {
+func (b *Block) Hash() (hash nt.BlockHash, err error) {
    h, err := blake2b.New256(nil)
    if err != nil {
       return
@@ -75,6 +50,8 @@ func (b *Block) Hash() (hash BlockHash, err error) {
    h.Write(b.Link)
    return h.Sum(nil), nil
 }
+
+
 func (b *Block) Sign() ([]byte, error) {
 
    if (b.Seed.KeyType > 1 || !b.Seed.Initialized) {
@@ -90,188 +67,3 @@ func (b *Block) Sign() ([]byte, error) {
    return ed25519.Sign(keyPair, hash), nil
 }
 
-// JSON BlockHash Marshaler
-func (h BlockHash) MarshalJSON() ([]byte, error) {
-   return json.Marshal(h.String())
-}
-
-func (h *BlockHash) UnmarshalJSON(data []byte) (err error) {
-   var s string
-   if err = json.Unmarshal(data, &s); err != nil {
-      return
-   }
-   *h, err = hex.DecodeString(s)
-   return
-}
-
-// JSON HexData Marshaler
-func (h HexData) MarshalJSON() ([]byte, error) {
-   return json.Marshal(hex.EncodeToString(h))
-}
-
-// UnmarshalJSON sets *h to a copy of data.
-func (h *HexData) UnmarshalJSON(data []byte) (err error) {
-   var s string
-   if err = json.Unmarshal(data, &s); err != nil {
-      return
-   }
-   *h, err = hex.DecodeString(s)
-   return
-}
-
-func (h HexData) String() string {
-   return strings.ToUpper(hex.EncodeToString(h))
-}
-
-// JSON int Marshaler
-func (j JInt) MarshalJSON() ([]byte, error) {
-   return json.Marshal(int64(j))
-}
-
-func (j *JInt) UnmarshalJSON(data []byte) (err error) {
-   var s string
-   if err = json.Unmarshal(data, &s); err != nil {
-      return
-   }
-   i, err := strconv.Atoi(s)
-   *j = JInt(i)
-   return
-}
-
-func (j JInt) String() string {
-   return strconv.Itoa(int(j))
-}
-
-// JSON bool Marshaler
-func (b JBool) MarshalJSON() ([]byte, error) {
-   return json.Marshal(bool(b))
-}
-
-func (b *JBool) UnmarshalJSON(data []byte) (err error) {
-   var s string
-   if err = json.Unmarshal(data, &s); err != nil {
-      return
-   }
-   if (s == "true") {
-      *b = true
-   } else {
-      *b = false
-   }
-   return
-}
-
-func (b JBool) String() string {
-   if (b) {
-      return "true"
-   } else {
-      return "false"
-   }
-}
-
-// JSON Raw Marshaler
-func (r Raw) MarshalJSON() ([]byte, error) {
-    return []byte(r.String()), nil
-}
-
-func (r *Raw) UnmarshalJSON(src []byte) error {
-    if string(src) == "null" {
-        return nil
-    }
-    trimmed := strings.Trim(string(src), `"`)
-    var z big.Int
-    p, ok := z.SetString(trimmed, 10)
-    if !ok {
-        return fmt.Errorf("not a valid big integer: %s", src)
-    }
-    r.Int = p
-    return nil
-}
-
-// Postgres Scan driver for Raw
-func (r *Raw) Scan(src any) error {
-
-   if str, ok := src.(string); ok {
-      text := strings.Split(str, "e")
-      numZeros, _ := strconv.Atoi(text[1])
-      text[0] += strings.Repeat("0", numZeros)
-
-      r.SetString(text[0], 10)
-   } else {
-      return fmt.Errorf("Can't assign %s to Raw", src)
-   }
-
-   return nil
-}
-
-// Postgres Insert driver for Raw
-func (r *Raw) Value() (driver.Value, error) {
-   return r.Int.String(), nil
-}
-
-// Wrapper functions for big.Int
-
-func NewRaw(integer int64) *Raw {
-   var r Raw
-   r.Int = big.NewInt(integer)
-   return &r
-}
-
-func NewFromRaw(raw *Raw) *Raw {
-   var r = NewRaw(0)
-   r.Int = new(big.Int).Set(raw.Int)
-   return r
-}
-
-func NewRawFromNano(nano float64) *Raw {
-   expanded := int64(nano * 1000000000000000)
-   raw := NewRaw(0).Mul(NewRaw(expanded), NewRaw(0).Exp(NewRaw(10), NewRaw(15), nil))
-   return raw
-}
-
-func (r Raw) String() string {
-   return r.Int.String()
-}
-
-func (r *Raw) Exp(x, y, m *Raw) *Raw {
-   if (m == nil) {
-      r.Int = r.Int.Exp(x.Int, y.Int, nil)
-   } else {
-      r.Int = r.Int.Exp(x.Int, y.Int, m.Int)
-   }
-   return r
-}
-
-func (r *Raw) Div(x, y *Raw) *Raw {
-   r.Int = r.Int.Div(x.Int, y.Int)
-   return r
-}
-
-func (r *Raw) DivMod(x, y *Raw) (*Raw, *Raw) {
-
-   z := NewRaw(0)
-   r.Int, _ = r.Int.DivMod(x.Int, y.Int, z.Int)
-   return r, z
-}
-
-func (r *Raw) Sub(x, y *Raw) *Raw {
-   r.Int = r.Int.Sub(x.Int, y.Int)
-   return r
-}
-
-func (r *Raw) Add(x, y *Raw) *Raw {
-   r.Int = r.Int.Add(x.Int, y.Int)
-   return r
-}
-
-// Cmp compares r and x and returns:
-// -1 if r <  x
-//  0 if r == x
-// +1 if r >  x
-func (r *Raw) Cmp(x *Raw) int {
-   return r.Int.Cmp(x.Int)
-}
-
-func (r *Raw) Mul(x, y *Raw) *Raw {
-   r.Int = r.Int.Mul(x.Int, y.Int)
-   return r
-}

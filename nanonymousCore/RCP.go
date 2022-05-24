@@ -14,9 +14,10 @@ import (
 
    // Local packages
    keyMan "nanoKeyManager"
+   nt "nanoTypes"
 )
 
-func getAccountBalance(nanoAddress string) (*keyMan.Raw, *keyMan.Raw, error) {
+func getAccountBalance(nanoAddress string) (*nt.Raw, *nt.Raw, error) {
 
    url := "http://"+ nodeIP
 
@@ -27,8 +28,8 @@ func getAccountBalance(nanoAddress string) (*keyMan.Raw, *keyMan.Raw, error) {
     }`
 
    response := struct {
-      Balance *keyMan.Raw
-      Receivable *keyMan.Raw
+      Balance *nt.Raw
+      Receivable *nt.Raw
    }{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
@@ -100,9 +101,9 @@ func getBlockCount() (*big.Int, *big.Int, *big.Int, error) {
     }`
 
    response := struct {
-      Count keyMan.Raw
-      Unchecked keyMan.Raw
-      Cemented keyMan.Raw
+      Count nt.Raw
+      Unchecked nt.Raw
+      Cemented nt.Raw
    }{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
@@ -158,7 +159,7 @@ func telemetry() error {
    return nil
 }
 
-func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (keyMan.BlockHash, error) {
+func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (nt.BlockHash, error) {
 
    url := "http://"+ nodeIP
 
@@ -182,7 +183,7 @@ func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (keyM
     }`
 
    response := struct {
-      Hash keyMan.BlockHash
+      Hash nt.BlockHash
    }{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
@@ -193,7 +194,7 @@ func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (keyM
    return response.Hash ,nil
 }
 
-func publishReceive(block keyMan.Block, signature []byte, proofOfWork string) (keyMan.BlockHash, error) {
+func publishReceive(block keyMan.Block, signature []byte, proofOfWork string) (nt.BlockHash, error) {
 
    url := "http://"+ nodeIP
 
@@ -217,7 +218,7 @@ func publishReceive(block keyMan.Block, signature []byte, proofOfWork string) (k
     }`
 
    response := struct {
-      Hash keyMan.BlockHash
+      Hash nt.BlockHash
    }{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
@@ -229,16 +230,16 @@ func publishReceive(block keyMan.Block, signature []byte, proofOfWork string) (k
 }
 
 type AccountInfo struct {
-   Frontier keyMan.BlockHash
-   OpenBlock keyMan.BlockHash         `json:"open_block"`
-   RepresentativeBlock keyMan.HexData `json:"representative_block"`
-   Representative string              `json:"representative"`
-   Balance *keyMan.Raw
-   ModifiedTimestamp keyMan.JInt      `json:"modified_timestamp"`
-   BlockCount keyMan.JInt             `json:"block_count"`
-   Account_Version keyMan.JInt        `json:"account_version"`
-   ConfirmationHeight keyMan.JInt     `json:"confirmation_height"`
-   ConfirmationHeightFrontier keyMan.BlockHash `json:"confirmation_height_frontier"`
+   Frontier nt.BlockHash
+   OpenBlock nt.BlockHash         `json:"open_block"`
+   RepresentativeBlock nt.HexData `json:"representative_block"`
+   Representative string          `json:"representative"`
+   Balance *nt.Raw
+   ModifiedTimestamp nt.JInt      `json:"modified_timestamp"`
+   BlockCount nt.JInt             `json:"block_count"`
+   Account_Version nt.JInt        `json:"account_version"`
+   ConfirmationHeight nt.JInt     `json:"confirmation_height"`
+   ConfirmationHeightFrontier nt.BlockHash `json:"confirmation_height_frontier"`
 }
 
 func getAccountInfo(nanoAddress string) (AccountInfo, error) {
@@ -266,13 +267,13 @@ type AccountHistory struct {
    History []struct {
       Type string
       Account string
-      Amount *keyMan.Raw
-      LocalTimestamp keyMan.JInt `json:"local_timestamp"`
-      Height keyMan.JInt
-      Hash keyMan.BlockHash
-      Confirmed keyMan.JBool
+      Amount *nt.Raw
+      LocalTimestamp nt.JInt `json:"local_timestamp"`
+      Height nt.JInt
+      Hash nt.BlockHash
+      Confirmed nt.JBool
    }
-   Previous keyMan.BlockHash
+   Previous nt.BlockHash
 }
 
 func getAccountHistory(nanoAddress string, num int) (AccountHistory, error) {
@@ -295,7 +296,7 @@ func getAccountHistory(nanoAddress string, num int) (AccountHistory, error) {
    return response, nil
 }
 
-func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
+func getPendingHash(nanoAddress string) map[string][]nt.BlockHash {
 
    url := "http://"+ nodeIP
 
@@ -307,7 +308,7 @@ func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
     }`
 
    response := struct {
-      Blocks map[string][]keyMan.BlockHash
+      Blocks map[string][]nt.BlockHash
    }{}
 
    //var response map[string]interface{}
@@ -321,16 +322,16 @@ func getPendingHash(nanoAddress string) map[string][]keyMan.BlockHash {
 }
 
 type BlockInfo struct {
-   Amount *keyMan.Raw
+   Amount *nt.Raw
    Contents keyMan.Block
-   Height keyMan.JInt
-   LocalTimestamp keyMan.JInt `json:"local_timestamp"`
-   Successor keyMan.BlockHash
-   Confirmed keyMan.JBool
+   Height nt.JInt
+   LocalTimestamp nt.JInt `json:"local_timestamp"`
+   Successor nt.BlockHash
+   Confirmed nt.JBool
    Subtype string
 }
 
-func getBlockInfo(hash keyMan.BlockHash) (BlockInfo, error) {
+func getBlockInfo(hash nt.BlockHash) (BlockInfo, error) {
 
    url := "http://"+ nodeIP
 
@@ -350,7 +351,7 @@ func getBlockInfo(hash keyMan.BlockHash) (BlockInfo, error) {
    return response, nil
 }
 
-func generateWorkOnNode(hash keyMan.BlockHash, difficulty string) (string, error) {
+func generateWorkOnNode(hash nt.BlockHash, difficulty string) (string, error) {
 
    url := "http://"+ nodeIP
 
@@ -377,7 +378,7 @@ func generateWorkOnNode(hash keyMan.BlockHash, difficulty string) (string, error
 
 }
 
-func generateWorkOnWorkServer(hash keyMan.BlockHash, difficulty string) (string, error) {
+func generateWorkOnWorkServer(hash nt.BlockHash, difficulty string) (string, error) {
 
    request :=
    `{
