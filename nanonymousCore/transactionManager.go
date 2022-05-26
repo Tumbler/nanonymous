@@ -55,7 +55,7 @@ func transactionManager(t *Transaction) {
 
    // We have a lot of clean up to do
    defer func() {
-      // Un-mark all address
+      // Un-mark all addresses
       setAddressNotInUse(address)
       for _, key := range t.sendingKeys {
          setAddressNotInUse(key.NanoAddress)
@@ -73,7 +73,8 @@ func transactionManager(t *Transaction) {
          if (err != nil) {
             // VERY BAD! Just accepted money, failed to deliver it, and didn't
             //           refund the user!
-            Error.Println("Refund failed!! Address:", t.paymentAddress, " error:", err.Error())
+            nanoAddress, _ := keyMan.PubKeyToAddress(t.paymentAddress)
+            Error.Println("Refund failed!! Address:", nanoAddress, " error:", err.Error())
             // TODO email myself??
          }
          reverseTransitionalAddress(t)
@@ -109,6 +110,7 @@ func transactionManager(t *Transaction) {
          return
       case <-time.After(5 * time.Minute):
          // Timeout.
+         Info.Println("Transaction timeout(0)")
          return
    }
 
@@ -300,6 +302,7 @@ func handleSingleSendError(t *Transaction, prevError error) bool {
    if (errors.Is(prevError, databaseError)) {
       // Just a database error. Update internal database and move on
       checkBalance(t.sendingKeys[0].NanoAddress)
+      return true
    }
 
    for (retryCount < RetryNumber) {
@@ -419,14 +422,37 @@ func reverseTransitionalAddress(t *Transaction) {
       return
    }
 
+   // TODO how to make this more robust???
    // Give some time for any transactions that might be in progres (might not
    // even be pending yet) to finish before trying to find them all.
    time.Sleep(10 * time.Second)
 
+   // Get ready to track how many receives we get
+   ch := make(chan string)
+   registerConfirmationListener(nanoAddress, ch, "receive")
+   defer unregisterConfirmationListener(nanoAddress, "receive")
+   hashes, _ := getPendingHashes(nanoAddress)
+   numToReceive := len(hashes[nanoAddress])
+
    ReceiveAll(nanoAddress)
 
-   // TODO wait for blocks to be confirmed
-   time.Sleep(10 * time.Second)
+   // Wait for all to be confirmed
+   trackConfirms := make(map[string]bool)
+   var numConfirmed int
+   for (numConfirmed < numToReceive) {
+      select {
+         case hash := <-ch:
+            if (trackConfirms[hash] == false) {
+               trackConfirms[hash] = true
+               numConfirmed++
+            }
+         case <-time.After(5 * time.Minute):
+            Error.Println("reverseTransitional timeout")
+
+            // This is just to get out of the loop
+            numConfirmed = numToReceive
+      }
+   }
 
    // -1 means full history
    history, _ := getAccountHistory(nanoAddress, -1)

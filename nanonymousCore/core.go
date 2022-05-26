@@ -102,7 +102,7 @@ func main() {
                 "M. Get Pending\n",
                 "N. Check Balance\n",
                 "O. Channel Test\n",
-                "P. PoW test\n",
+                "P. Test\n",
              )
       fmt.Scan(&usr)
 
@@ -117,7 +117,7 @@ func main() {
 
          keyMan.WalletVerbose(false)
       case "2":
-         verbosity = 5
+         verbosity = 10
          fmt.Print("Seed: ")
          fmt.Scan(&usr)
          seed, _ := strconv.Atoi(usr)
@@ -126,6 +126,10 @@ func main() {
          index, _ := strconv.Atoi(usr)
          seedKey, _ := getSeedFromIndex(seed, index)
          _, err := getAccountInfo(seedKey.NanoAddress)
+         if (err != nil) {
+            fmt.Println("error: ", err.Error())
+         }
+         _, _, err = getAccountBalance(seedKey.NanoAddress)
          if (err != nil) {
             fmt.Println("error: ", err.Error())
          }
@@ -235,7 +239,7 @@ func main() {
          getBlockInfo(h)
 
       case "H":
-         received, _,  err := Receive("nano_17iperkf8wx68akk66t4zynhuep7oek397nghh75oenahauch41g6pfgtrnu")
+         received, _, _,  err := Receive("nano_17iperkf8wx68akk66t4zynhuep7oek397nghh75oenahauch41g6pfgtrnu")
          if (err != nil) {
             fmt.Println("Error: ", err.Error())
          }
@@ -260,14 +264,14 @@ func main() {
                   seedReceive.NanoAddress,
                   nt.NewRawFromNano(1.00),
                   false)
-         //seedSend, _ = getSeedFromIndex(1, 8)
-         //seedReceive, _ = getSeedFromIndex(1, 0)
+         //seedSend, _ = getSeedFromIndex(1, 0)
+         //seedReceive, _ = getSeedFromIndex(1, 2)
          //SendEasy(seedSend.NanoAddress,
                   //seedReceive.NanoAddress,
-                  //nt.NewRawFromNano(0.498),
+                  //nt.NewRawFromNano(0.50),
                   //false)
-         //seedSend, _ = getSeedFromIndex(1, 10)
-         //seedReceive, _ = getSeedFromIndex(1, 2)
+         //seedSend, _ = getSeedFromIndex(1, 0)
+         //seedReceive, _ = getSeedFromIndex(1, 3)
          //SendEasy(seedSend.NanoAddress,
                   //seedReceive.NanoAddress,
                   //nt.NewRawFromNano(0.5),
@@ -294,7 +298,7 @@ func main() {
       case "K":
          verbosity = 5
 
-         for i := 0; i <= 25; i++ {
+         for i := 0; i <= 41; i++ {
             fmt.Println("--------------", i, "-------------")
             seedReceive, _ := getSeedFromIndex(1, i)
             err := ReceiveAll(seedReceive.NanoAddress)
@@ -316,7 +320,7 @@ func main() {
       case "M":
          verbosity = 5
          seed, _ := getSeedFromIndex(1, 5)
-         blarg := getPendingHash(seed.NanoAddress)
+         blarg, _ := getPendingHashes(seed.NanoAddress)
          fmt.Println(blarg[seed.NanoAddress][0])
       case "N":
          verbosity = 5
@@ -326,7 +330,7 @@ func main() {
          //fmt.Print("Index: ")
          //fmt.Scan(&usr)
          //index, _ := strconv.Atoi(usr)
-         for index := 0; index <= 12; index++ {
+         for index := 0; index <= 41; index++ {
             seedkey, _ := getSeedFromIndex(1, index)
             err := checkBalance(seedkey.NanoAddress)
             if (err != nil) {
@@ -343,21 +347,13 @@ func main() {
 
          fmt.Println("work: ", work)
       case "P":
-         verbosity = 5
+         verbosity = 10
 
-         calculateFee(nt.NewRawFromNano(1.503))
-         calculateFee(nt.NewRawFromNano(1.2))
-         calculateFee(nt.NewRawFromNano(1.3))
-         calculateFee(nt.NewRawFromNano(1.4))
-         calculateFee(nt.NewRawFromNano(1.5))
-         calculateFee(nt.NewRawFromNano(2))
-         calculateFee(nt.NewRawFromNano(2.3))
-         calculateFee(nt.NewRawFromNano(2.5))
-         calculateFee(nt.NewRawFromNano(3))
-         calculateFee(nt.NewRawFromNano(7))
-         calculateFee(nt.NewRawFromNano(11))
-         calculateFee(nt.NewRawFromNano(41))
-
+         seedkey, _ := getSeedFromIndex(1, 7)
+         err := ReceiveAll(seedkey.NanoAddress)
+         if (err != nil) {
+            fmt.Println(fmt.Errorf("main: %w", err))
+         }
       default:
          break menu
       }
@@ -436,7 +432,10 @@ func initNanoymousCore() error {
    // Seed randomness
    random = rand.New(rand.NewSource(time.Now().UnixNano()))
 
-   go websocketListener()
+   ch := make(chan int)
+   go websocketListener(ch)
+   // Wait until websockets are initialized
+   <-ch
 
    return nil
 }
@@ -663,7 +662,7 @@ func receivedNano(nanoAddress string) error {
       return fmt.Errorf("receivedNano: %w", err)
    }
 
-   payment, receiveHash, err := Receive(nanoAddress)
+   payment, receiveHash, _, err := Receive(nanoAddress)
    if (err != nil) {
       return fmt.Errorf("receivedNano: %w", err)
    }
@@ -716,8 +715,8 @@ func receivedNano(nanoAddress string) error {
    t.amountToSend = nt.NewRaw(0).Sub(payment, t.fee)
    if (verbosity >= 5) {
       fmt.Println("payment:        ", payment,
-                  "\r\nfee:            ", t.fee,
-                  "\r\namount to send: ", t.amountToSend)
+                  "\nfee:            ", t.fee,
+                  "\namount to send: ", t.amountToSend)
    }
 
    err = findSendingWallets(&t, conn)
@@ -1108,7 +1107,7 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) err
 
    // if (Balance < amountToSend)
    if (accountInfo.Balance.Cmp(amountToSend) < 0) {
-      return fmt.Errorf("sendNano: not enough funds in account.\r\n have: %s\r\n need: %s", accountInfo.Balance, amountToSend)
+      return fmt.Errorf("sendNano: not enough funds in account.\n have: %s\n need: %s", accountInfo.Balance, amountToSend)
    }
 
    // Create send block
@@ -1161,7 +1160,6 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) err
    if (err != nil) {
       Error.Println("Balance update failed from send:", err.Error())
       return fmt.Errorf("sendNano: updatebalance error %w", databaseError)
-      // TODO test that database error doesn't trigger a refund
    }
 
    return nil
@@ -1215,15 +1213,11 @@ func manualWalletUpdate(seed int, index int, nano int64) error {
 func ReceiveAll(account string) error {
 
    for {
-      if amt, _, err := Receive(account); amt != nil {
-         if (err != nil) {
-            return fmt.Errorf("ReceiveAll: %w", err)
-            break
-         }
-         if (amt.Cmp(nt.NewRaw(0)) == 0) {
-            break
-         }
-      } else {
+      _, _, numLeft, err := Receive(account)
+      if (err != nil) {
+         return fmt.Errorf("ReceiveAll: %w", err)
+      }
+      if (numLeft <= 0) {
          break
       }
    }
@@ -1231,25 +1225,28 @@ func ReceiveAll(account string) error {
    return nil
 }
 
-func Receive(account string) (*nt.Raw, nt.BlockHash, error) {
+func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
    var block keyMan.Block
    var pendingInfo BlockInfo
    var newHash nt.BlockHash
 
    key, _, _, err := getSeedFromAddress(account)
    if (err != nil) {
-      return nil, nil, fmt.Errorf("receive: %w", err)
+      return nil, nil, 0, fmt.Errorf("receive: %w", err)
    }
 
-   pendingHashes := getPendingHash(account)
-   doesPendingExist := len(pendingHashes[account])
+   pendingHashes, _ := getPendingHashes(account)
+   numOfPeningHashes := len(pendingHashes[account])
 
-   if (doesPendingExist > 0 ) {
+   if (numOfPeningHashes > 0) {
       pendingHash := pendingHashes[account][0]
       pendingInfo, _ = getBlockInfo(pendingHash)
       accountInfo, err := getAccountInfo(account)
       if (err != nil) {
-         return nil, nil, fmt.Errorf("Receive: %w", err)
+         // Filter out expected errors
+         if (strings.Contains(err.Error(), "account not found")) {
+            return nil, nil, 0, fmt.Errorf("Receive: %w", err)
+         }
       }
 
       // Fill block with relavent information
@@ -1270,7 +1267,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, error) {
 
       sig, err := block.Sign()
       if (err != nil) {
-         return nil, nil, fmt.Errorf("receive: %w", err)
+         return nil, nil, 0, fmt.Errorf("receive: %w", err)
       }
 
       if (verbosity >= 5) {
@@ -1286,17 +1283,19 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, error) {
 
       PoW, err := getPoW(block.Account, true)
       if (err != nil) {
-         return nil, nil, fmt.Errorf("receive: %w", err)
+         return nil, nil, 0, fmt.Errorf("receive: %w", err)
       }
 
       // Send RCP request
       newHash, err = publishReceive(block, sig, PoW)
       if (err != nil){
-         return nil, nil, fmt.Errorf("receive: %w", err)
+         return nil, nil, 0, fmt.Errorf("receive: %w", err)
       }
       if (len(newHash) != 32){
-         return nil, nil, fmt.Errorf("receive: no block hash returned from node", err)
+         return nil, nil, 0, fmt.Errorf("receive: no block hash returned from node", err)
       }
+
+      numOfPeningHashes--
 
       // We'ved used any stored PoW, clear it out for next use
       clearPoW(block.Account)
@@ -1306,12 +1305,11 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, error) {
       err = updateBalance(block.Account, block.Balance)
       if (err != nil) {
          Error.Println("Balance update failed from receive:", err.Error())
-         return pendingInfo.Amount, newHash, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
-         // TODO test that database error doesn't trigger a refund
+         return pendingInfo.Amount, newHash, 0, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
       }
    }
 
-   return pendingInfo.Amount, newHash, err
+   return pendingInfo.Amount, newHash, numOfPeningHashes, err
 }
 
 // getNewRepresentative returns a random representative from a list of accounts
@@ -1446,6 +1444,7 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
             }
             return work
          case <-time.After(5 * time.Minute):
+            Warning.Println("Work never generated")
             return ""
       }
    }

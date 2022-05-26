@@ -11,6 +11,7 @@ import (
    "context"
    "time"
    "strconv"
+   "reflect"
 
    // Local packages
    keyMan "nanoKeyManager"
@@ -30,6 +31,7 @@ func getAccountBalance(nanoAddress string) (*nt.Raw, *nt.Raw, error) {
    response := struct {
       Balance *nt.Raw
       Receivable *nt.Raw
+      Error string
    }{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
@@ -54,6 +56,7 @@ func getOwnerOfBlock(hash string) (string, error) {
 
    response := struct {
       Account string
+      Error string
    }{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
@@ -78,6 +81,7 @@ func confirmBlock(hash string) error {
 
    response := struct {
       Started string
+      Error string
    }{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
@@ -104,6 +108,7 @@ func getBlockCount() (*big.Int, *big.Int, *big.Int, error) {
       Count nt.Raw
       Unchecked nt.Raw
       Cemented nt.Raw
+      Error string
    }{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
@@ -126,6 +131,7 @@ func printPeers() error {
 
    response := struct {
       peers string
+      Error string
    }{}
 
    verboseSave := verbosity
@@ -184,6 +190,7 @@ func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (nt.B
 
    response := struct {
       Hash nt.BlockHash
+      Error string
    }{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
@@ -219,6 +226,7 @@ func publishReceive(block keyMan.Block, signature []byte, proofOfWork string) (n
 
    response := struct {
       Hash nt.BlockHash
+      Error string
    }{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
@@ -240,6 +248,7 @@ type AccountInfo struct {
    Account_Version nt.JInt        `json:"account_version"`
    ConfirmationHeight nt.JInt     `json:"confirmation_height"`
    ConfirmationHeightFrontier nt.BlockHash `json:"confirmation_height_frontier"`
+   Error string
 }
 
 func getAccountInfo(nanoAddress string) (AccountInfo, error) {
@@ -274,6 +283,7 @@ type AccountHistory struct {
       Confirmed nt.JBool
    }
    Previous nt.BlockHash
+   Error string
 }
 
 func getAccountHistory(nanoAddress string, num int) (AccountHistory, error) {
@@ -296,7 +306,7 @@ func getAccountHistory(nanoAddress string, num int) (AccountHistory, error) {
    return response, nil
 }
 
-func getPendingHash(nanoAddress string) map[string][]nt.BlockHash {
+func getPendingHashes(nanoAddress string) (map[string][]nt.BlockHash, error) {
 
    url := "http://"+ nodeIP
 
@@ -304,21 +314,20 @@ func getPendingHash(nanoAddress string) map[string][]nt.BlockHash {
    `{
       "action": "accounts_pending",
       "accounts": ["`+ nanoAddress +`"],
-      "count": "1"
+      "count": "-1"
     }`
 
    response := struct {
       Blocks map[string][]nt.BlockHash
+      Error string
    }{}
-
-   //var response map[string]interface{}
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
-      //return fmt.Errorf("getAccountInfo: %w", err)
+      return nil, fmt.Errorf("getPendingHash: %w", err)
    }
 
-   return response.Blocks
+   return response.Blocks, nil
 }
 
 type BlockInfo struct {
@@ -329,6 +338,7 @@ type BlockInfo struct {
    Successor nt.BlockHash
    Confirmed nt.JBool
    Subtype string
+   Error string
 }
 
 func getBlockInfo(hash nt.BlockHash) (BlockInfo, error) {
@@ -367,6 +377,7 @@ func generateWorkOnNode(hash nt.BlockHash, difficulty string) (string, error) {
        Work string
        Difficulty string
        Multiplier string
+       Error string
     }{}
 
    err := rcpCall(request, &response, url, nil)
@@ -391,6 +402,7 @@ func generateWorkOnWorkServer(hash nt.BlockHash, difficulty string) (string, err
        Work string
        Difficulty string
        Multiplier string
+       Error string
     }{}
 
    err := rcpCall(request, &response, workServer, nil)
@@ -418,13 +430,24 @@ func rcpCallWithTimeout(request string, response any, url string, ms time.Durati
 
 func rcpCall(request string, response any, url string, ch chan error) error {
    var err error
+   var checkResponse bool
    defer func() {
       if (ch != nil) {
          ch <- err
       }
    }()
 
-   // TODO capure error response from node??
+   // Check to make sure response is in the correct format
+   if (response != nil) {
+      val := reflect.Indirect(reflect.ValueOf(response))
+      i := val.NumField() - 1
+      if (val.Type().Field(i).Name != "Error") {
+         err = fmt.Errorf("rcpCall: response requires 'Error' as last field")
+         return err
+      }
+      checkResponse = true
+   }
+
 
    if (verbosity >= 10) {
       fmt.Println("request: ", request)
@@ -454,6 +477,17 @@ func rcpCall(request string, response any, url string, ch chan error) error {
    err = json.Unmarshal(body, &response)
    if (err != nil) {
       return fmt.Errorf("Unmarshal: %w", err)
+   }
+
+   // Check if there was an error
+   if (checkResponse) {
+      val := reflect.Indirect(reflect.ValueOf(response))
+      i := val.NumField() - 1
+      errString := val.Field(i).String()
+      if (errString != "") {
+         err = fmt.Errorf("rcpCall: node returned error: %s", errString)
+         return err
+      }
    }
 
    return nil

@@ -31,7 +31,7 @@ var addWebSocketSubscription chan string
 var registeredSendChannels map[string]chan string
 var registeredReceiveChannels map[string]chan string
 
-func websocketListener() {
+func websocketListener(ch chan int) {
    // TODO needs to work over secure connection (wss)
    if (verbosity >= 5) {
       fmt.Println("Started listening to websockets on:", websocketAddress)
@@ -46,6 +46,10 @@ func websocketListener() {
    err = startSubscription(ws)
    if (err != nil) {
       panic(fmt.Errorf("websocketListener: %w", err))
+   }
+   // Tell caller that we're done initializing
+   if (ch != nil) {
+      ch <- 1
    }
 
    addWebSocketSubscription = make(chan string)
@@ -190,7 +194,7 @@ func handleNotification(cBlock ConfirmationBlock) {
          // Check if any transaction manager is expecting this and give to them instead
          if (addressExsistsInDB(msg.Account)) {
             if (verbosity >= 5) {
-               fmt.Println("Internal Send")
+               fmt.Println(" Internal Send")
             }
             // Internal network send, don't trigger a transaction
             //TODO debugging code
@@ -210,7 +214,7 @@ func handleNotification(cBlock ConfirmationBlock) {
             }
          } else {
             if (verbosity >= 5) {
-               fmt.Println("External Send")
+               fmt.Println(" External Send")
                fmt.Println("Starting Transaction!")
             }
             receivedNano(msg.Block.LinkAsAccount)

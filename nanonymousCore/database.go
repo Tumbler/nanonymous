@@ -222,9 +222,11 @@ func getSeedRowsFromDatabase() (pgx.Rows, error) {
       "pgp_sym_decrypt_bytea(seed, $1)," +
       "current_index " +
    "FROM " +
-      "seeds;"
+      "seeds " +
+   "WHERE " +
+      "current_index <= $2;"
 
-   rows, err := conn.Query(context.Background(), queryString, databasePassword)
+   rows, err := conn.Query(context.Background(), queryString, databasePassword, MAX_INDEX)
    if (err != nil) {
       return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
    }
