@@ -696,6 +696,7 @@ func receivedNano(nanoAddress string) error {
       err = fmt.Errorf("receivedNano: %w", err)
       return err
    }
+   setAddressInUse(nanoAddress)
 
    // TODO This is just for debugging
    seed, _ := getSeedFromIndex(1, 8)
