@@ -3,6 +3,7 @@ package main
 import (
    "fmt"
    "net/http"
+   "net/smtp"
    "strings"
    "io/ioutil"
    "encoding/json"
@@ -493,3 +494,54 @@ func rcpCall(request string, response any, url string, ch chan error) error {
    return nil
 }
 
+// getNanoUSDValue uses the coingecko API to find the current price of nano in
+// USD. This function isn't actually RCP, but it doesn't fit better anywhere
+// else.
+func getNanoUSDValue() (float64, error) {
+   url := `https://api.coingecko.com/api/v3/simple/price?ids=nano&vs_currencies=usd`
+   res, err := http.Get(url)
+   if (err != nil) {
+      return 0.0, fmt.Errorf("getNanoUSDValue: %w", err)
+   }
+   defer res.Body.Close()
+
+   body, err := ioutil.ReadAll(res.Body)
+   if (err != nil) {
+      return 0.0, fmt.Errorf("getNanoUSDValue: %w", err)
+   }
+
+   response := struct {
+      Nano struct {
+         Usd float64
+      }
+   }{}
+   err = json.Unmarshal(body, &response)
+   if (err != nil) {
+      return 0.0, fmt.Errorf("getNanoUSDValue: %w", err)
+   }
+
+   return response.Nano.Usd, nil
+}
+
+func sendEamil(contents string) error {
+   from := "TumblerTerrall@gmail.com"
+   password := ""
+
+   to := []string {
+      "kingdombound13@gmail.com",
+   }
+
+   smtpHost := "smtp.gmail.com"
+   smtpPort := "587"
+
+   message := []byte(contents)
+
+   auth := smtp.PlainAuth("", from, password, smtpHost)
+
+   err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, message)
+   if (err != nil) {
+      return fmt.Errorf("sendEamil: %w", err)
+   }
+
+   return nil
+}

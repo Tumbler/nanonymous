@@ -41,6 +41,8 @@ var databaseError = errors.New("database error")
 
 const RetryNumber = 3
 
+// transactionManager tracks all on-chain actions spawned by receivedNano(),
+// coordinates send/receives, and handles refunds if something goes wrong.
 func transactionManager(t *Transaction) {
    t.receiveWg.Add(1)
    var numDone = 0
@@ -89,6 +91,7 @@ func transactionManager(t *Transaction) {
             fmt.Println("Transaction failed...")
          }
       } else {
+         recordProfit(t.fee, t.id)
          Info.Println("Transaction", t.id, "Complete")
       }
    }()
@@ -317,7 +320,7 @@ func handleSingleSendError(t *Transaction, prevError error) bool {
       }
    }
 
-   Warning.Println("Single send error:", err.Error())
+   Error.Println("ID", t.id, "Single send error, orig:", prevError, "final:", err)
 
    // Transaction failed...
    return false
@@ -439,6 +442,7 @@ func reverseTransitionalAddress(t *Transaction) {
    // Wait for all to be confirmed
    trackConfirms := make(map[string]bool)
    var numConfirmed int
+   confirmLoop:
    for (numConfirmed < numToReceive) {
       select {
          case hash := <-ch:
@@ -448,9 +452,7 @@ func reverseTransitionalAddress(t *Transaction) {
             }
          case <-time.After(5 * time.Minute):
             Error.Println("reverseTransitional timeout")
-
-            // This is just to get out of the loop
-            numConfirmed = numToReceive
+            break confirmLoop
       }
    }
 
@@ -475,14 +477,16 @@ func retryMultiSend(t *Transaction, i int, prevError error) bool {
       clearPoW(t.sendingKeys[i].NanoAddress)
    }
 
+   var err error
    for (retryCount < RetryNumber) {
-      err := Send(t.sendingKeys[i], t.transitionalKey.PublicKey, t.individualSendAmount[i], nil, nil, -1)
+      err = Send(t.sendingKeys[i], t.transitionalKey.PublicKey, t.individualSendAmount[i], nil, nil, -1)
       if (err != nil) {
          retryCount++
       } else {
          return true
       }
    }
+   Error.Println("ID", t.id, "Problem with multi send ", i, ", orig:", prevError, "final:", err)
    return false
 }
 
@@ -495,14 +499,16 @@ func retryFinalSend(t *Transaction, prevError error) bool {
    }
    // TODO put other common fixes to problems here as you find them
 
+   var err error
    for (retryCount < RetryNumber) {
-      err := Send(t.transitionalKey, t.clientAddress, t.amountToSend, nil, nil, -1)
+      err = Send(t.transitionalKey, t.clientAddress, t.amountToSend, nil, nil, -1)
       if (err != nil) {
          retryCount++
       } else {
          return true
       }
    }
+   Error.Println("ID", t.id, "Problem with final send, orig:", prevError, "final:", err)
    return false
 }
 
@@ -518,5 +524,6 @@ func retryReceives(t *Transaction, prevError error) bool {
       return false
    }
 
+   Error.Println("ID", t.id, "Problem with multi receives orig:", prevError, "final:", err)
    return true
 }

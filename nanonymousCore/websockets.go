@@ -210,6 +210,10 @@ func handleNotification(cBlock ConfirmationBlock) {
                      case <-time.After(5 * time.Minute):
                         Warning.Println("Registered send channel timeout")
                   }
+               } else {
+                  // Internal send, but no transaction is requesting it so just
+                  // receive the funds
+                  Receive(msg.Block.LinkAsAccount)
                }
             }
          } else {

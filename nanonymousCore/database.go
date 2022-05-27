@@ -427,3 +427,31 @@ func getNextTransactionId() (int, error) {
    return id, nil
 }
 
+func recordProfit(gross *nt.Raw, tid int) error {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return fmt.Errorf("recordProfit: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   nanoUsdValue, err := getNanoUSDValue()
+   if (err != nil) {
+      return fmt.Errorf("recordProfit: %w", err)
+   }
+
+   queryString :=
+   "INSERT INTO " +
+      "profit_record (time, nano_gained, nano_usd_value, trans_id) " +
+   "VALUES " +
+      "(NOW(), $1, $2, $3);"
+
+   rowsAffected, err := conn.Exec(context.Background(), queryString, gross, nanoUsdValue, tid)
+   if (err != nil) {
+      return fmt.Errorf("updateBalance: %w", err)
+   }
+   if (rowsAffected.RowsAffected() < 1) {
+      return fmt.Errorf("updateBalance: no rows affected in update")
+   }
+
+   return nil
+}

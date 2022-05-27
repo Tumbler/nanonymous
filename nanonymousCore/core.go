@@ -349,8 +349,7 @@ func main() {
       case "P":
          verbosity = 10
 
-         seedkey, _ := getSeedFromIndex(1, 7)
-         err := ReceiveAll(seedkey.NanoAddress)
+         err := sendEamil("This is a test email for nanonymous")
          if (err != nil) {
             fmt.Println(fmt.Errorf("main: %w", err))
          }
@@ -382,9 +381,9 @@ func initNanoymousCore() error {
     return fmt.Errorf("initNanoymousCore: %w", err)
    }
 
-   Info = log.New(logFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile)
-   Warning = log.New(logFile, "WARNING: ", log.Ldate|log.Ltime|log.Lshortfile)
-   Error = log.New(logFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile)
+   Info = log.New(logFile, "INFO: ", log.Ldate|log.Ltime|log.Lshortfile|log.LUTC)
+   Warning = log.New(logFile, "WARNING: ", log.Ldate|log.Ltime|log.Lshortfile|log.LUTC)
+   Error = log.New(logFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile|log.LUTC)
 
    Info.Println("Started Nanonymous Core")
 
@@ -1244,7 +1243,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
       accountInfo, err := getAccountInfo(account)
       if (err != nil) {
          // Filter out expected errors
-         if (strings.Contains(err.Error(), "account not found")) {
+         if !(strings.Contains(err.Error(), "Account not found")) {
             return nil, nil, 0, fmt.Errorf("Receive: %w", err)
          }
       }

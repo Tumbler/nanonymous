@@ -39,6 +39,14 @@ INSERT INTO
 VALUES
    (-1);
 
+CREATE TABLE IF NOT EXISTS profit_record(
+   id SERIAL PRIMARY KEY,
+   trans_id INT NOT NULL,
+   time TIMESTAMPTZ NOT NULL,
+   nano_gained NUMERIC(40,0) NOT NULL,
+   nano_usd_value FLOAT8
+);
+
 CREATE EXTENSION pgcrypto;
 
 CREATE USER go WITH PASSWORD 'my_password';
