@@ -9,7 +9,8 @@ WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = 'nanonymousdb')\gexec
 CREATE TABLE IF NOT EXISTS seeds(
    id SERIAL PRIMARY KEY,
    seed BYTEA NOT NULL,
-   current_index BIGINT
+   current_index BIGINT,
+   active BOOL DEFAULT true
 );
 
 

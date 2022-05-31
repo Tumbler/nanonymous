@@ -224,7 +224,9 @@ func getSeedRowsFromDatabase() (pgx.Rows, error) {
    "FROM " +
       "seeds " +
    "WHERE " +
-      "current_index <= $2;"
+      "current_index <= $2 " +
+   "ORDER BY " +
+      "id DESC;"
 
    rows, err := conn.Query(context.Background(), queryString, databasePassword, MAX_INDEX)
    if (err != nil) {

@@ -24,12 +24,17 @@ type ConfirmationBlock struct {
       Hash nt.BlockHash
       ConfirmationType string `json:"confirmation_type"`
    }
+   Ack string
+   Error string
 }
 
 var addWebSocketSubscription chan string
 
 var registeredSendChannels map[string]chan string
 var registeredReceiveChannels map[string]chan string
+
+var numSubsribed int
+const ACCOUNTS_TRACKED = 5000
 
 func websocketListener(ch chan int) {
    // TODO needs to work over secure connection (wss)
@@ -88,28 +93,37 @@ func startSubscription(ws *websocket.Conn) error {
 
    var addressString string
 
-   // Get list of all accounts we've opened so far
+   // Go through newest seeds first and find 5000 to track
    rows, err := getSeedRowsFromDatabase()
    var seed []byte
    var maxIndex int
-   // For all seeds find their acounts
+   // For all seeds find their accounts
    for rows.Next() {
       err = rows.Scan(&seed, &maxIndex)
       if (err != nil || len(seed) == 0) {
          break
       }
 
-      // From 0 to the last account we've opened
-      for j := 0; j <= maxIndex; j++ {
+      startingPoint := maxIndex - (ACCOUNTS_TRACKED - numSubsribed)
+      if (startingPoint < 0) {
+         startingPoint = 0
+      }
+      for i := startingPoint; i <= maxIndex; i++ {
          var key keyMan.Key
          key.Seed = seed
-         key.Index = j
+         key.Index = i
          err := keyMan.SeedToKeys(&key)
          if (err != nil) {
             return fmt.Errorf("startSubscription: %w", err)
          }
 
          addressString += `"`+ key.NanoAddress + `", `
+
+         numSubsribed++
+      }
+
+      if (numSubsribed >= ACCOUNTS_TRACKED) {
+         break
       }
    }
 
@@ -172,16 +186,55 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
       fmt.Println("Adding to subscription: ", nanoAddress)
    }
 
+   // unsub from oldest account
+   var delString string
+   if (numSubsribed >= ACCOUNTS_TRACKED) {
+      rows, _ := getSeedRowsFromDatabase()
+      var seed keyMan.Key
+      var maxIndex int
+      var countAccounts int
+      // For all seeds find their accounts
+      for rows.Next() {
+         err := rows.Scan(&seed.Seed, &maxIndex)
+         if (err != nil) {
+            Warning.Println("addToSubscription failed:", err)
+            return
+         }
+
+         if (countAccounts + maxIndex >= ACCOUNTS_TRACKED) {
+            // Found the seed to use, stop searching
+            break
+         } else {
+            countAccounts += maxIndex
+         }
+      }
+      rows.Close()
+
+      if (maxIndex - (ACCOUNTS_TRACKED - countAccounts) < 0) {
+         seed.Index = 0
+      } else {
+         seed.Index = maxIndex - (ACCOUNTS_TRACKED - countAccounts)
+      }
+      keyMan.SeedToKeys(&seed)
+
+      delString = ",\n         "+`"accounts_del" : ["`+ seed.NanoAddress +`"]`
+
+      numSubsribed--
+   }
+
    request :=
    `{
       "action": "update",
       "topic": "confirmation",
       "options": {
-         "accounts_add" : ["`+ nanoAddress +`"]
+         "confirmation_type": "active_quorum",
+         "accounts_add" : ["`+ nanoAddress +`"]` +
+         delString +`
       }
    }`
 
    ws.Write([]byte(request))
+   numSubsribed++
 }
 
 func handleNotification(cBlock ConfirmationBlock) {
@@ -224,7 +277,7 @@ func handleNotification(cBlock ConfirmationBlock) {
             receivedNano(msg.Block.LinkAsAccount)
          }
       }
-   } else {
+   } else if (msg.Block.SubType == "receive") {
       if (verbosity >= 5) {
          fmt.Println(" Receive")
       }
@@ -234,6 +287,16 @@ func handleNotification(cBlock ConfirmationBlock) {
             case <-time.After(5 * time.Minute):
                Warning.Println("Registered receive channel timeout")
          }
+      }
+   } else if (cBlock.Ack != "") {
+      Info.Println("Websocket Ack:", cBlock.Ack)
+      if (verbosity >= 5 ) {
+         fmt.Println("Ack:", cBlock.Ack)
+      }
+   } else if (cBlock.Error != "") {
+      Warning.Println("Websocket action came back with an error:", cBlock.Error)
+      if (verbosity >= 5 ) {
+         fmt.Println("Websocket action came back with an error:", cBlock.Error)
       }
    }
 }

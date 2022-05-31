@@ -349,10 +349,20 @@ func main() {
       case "P":
          verbosity = 10
 
-         err := sendEamil("This is a test email for nanonymous")
-         if (err != nil) {
-            fmt.Println(fmt.Errorf("main: %w", err))
+         seed, _ := getSeedFromIndex(1, 0)
+         var bigString string
+         for i:=0; i < 5000; i++ {
+            seed.Index = i
+            keyMan.SeedToKeys(seed)
+
+            bigString += seed.NanoAddress
+            if (i % 200 == 0) {
+               fmt.Println(i)
+            }
          }
+         fmt.Println(bigString)
+
+
       default:
          break menu
       }
@@ -466,7 +476,8 @@ func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
    "FROM " +
       "seeds " +
    "WHERE " +
-      "current_index < $2" +
+      "current_index < $2 AND " +
+      "active = true " +
    "ORDER BY " +
       "id;"
 
