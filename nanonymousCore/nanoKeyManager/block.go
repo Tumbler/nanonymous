@@ -14,13 +14,13 @@ import (
 
 // Block corresponds to the JSON representation of a block.
 type Block struct {
-   Type           string     `json:"type"`
-   Account        string     `json:"account"`
+   Type           string        `json:"type"`
+   Account        string        `json:"account"`
    Previous       nt.BlockHash  `json:"previous"`
-   Representative string     `json:"representative"`
+   Representative string        `json:"representative"`
    Balance        *nt.Raw       `json:"balance"`
    Link           nt.BlockHash  `json:"link"`
-   LinkAsAccount  string     `json:"link_as_account"`
+   LinkAsAccount  string        `json:"link_as_account"`
    Signature      nt.HexData    `json:"signature"`
    Work           nt.HexData    `json:"work"`
    SubType        string
@@ -66,4 +66,3 @@ func (b *Block) Sign() ([]byte, error) {
    keyPair := append(b.Seed.PrivateKey, b.Seed.PublicKey...)
    return ed25519.Sign(keyPair, hash), nil
 }
-

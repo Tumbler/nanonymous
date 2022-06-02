@@ -313,6 +313,32 @@ func resetInUse() {
    conn.Exec(context.Background(), queryString)
 }
 
+func isAddressInUse(nanoAddress string) (bool, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return false, fmt.Errorf("isAddressInUse: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "in_use " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "hash = $1;"
+
+   var inUse bool
+   pubKey, err := keyMan.AddressToPubKey(nanoAddress)
+   if (err != nil) {
+      return false, fmt.Errorf("isAddressInUse: %w", err)
+   }
+   hash := blake2b.Sum256(pubKey)
+   conn.QueryRow(context.Background(), queryString, hash[:]).Scan(&inUse)
+
+   return inUse, nil
+}
+
 func addressExsistsInDB(nanoAddress string) bool {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {

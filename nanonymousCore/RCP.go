@@ -325,7 +325,10 @@ func getPendingHashes(nanoAddress string) (map[string][]nt.BlockHash, error) {
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
-      return nil, fmt.Errorf("getPendingHash: %w", err)
+      // Filter out blank block error
+      if !(strings.Contains(err.Error(), "cannot unmarshal string into Go struct field .Blocks")) {
+         return nil, fmt.Errorf("getPendingHashes: %w", err)
+      }
    }
 
    return response.Blocks, nil
