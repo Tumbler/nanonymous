@@ -43,7 +43,10 @@ var websocketAddress string
 var workServer string
 
 // Should only be set to true in test functions
-var testing = false
+var inTesting = false
+var testingPayment []*nt.Raw
+var testingPaymentIndex int
+var testingPendingHashesNum int
 
 const MAX_INDEX = 4294967295
 
@@ -399,8 +402,13 @@ func initNanoymousCore(mainInstance bool) error {
       if err != nil {
          return fmt.Errorf("initNanoymousCore: %w", err)
       }
-   } else {
+   } else if (len(args) > 0) {
       logFile, err = os.OpenFile("./logs/" + args[0] + "_logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+      if err != nil {
+         return fmt.Errorf("initNanoymousCore: %w", err)
+      }
+   } else {
+      logFile, err = os.OpenFile("./logs/test_logs.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
       if err != nil {
          return fmt.Errorf("initNanoymousCore: %w", err)
       }
@@ -445,6 +453,9 @@ func initNanoymousCore(mainInstance bool) error {
       return fmt.Errorf("initNanoymousCore: work server address not found! (Use \"work = {work_server_address}\" in embed.txt)")
    }
 
+   feeDividend = int64(math.Trunc(100/FEE_PERCENT))
+   minPayment = oneNano()
+
    // Some things to do for only the main instance
    if (mainInstance) {
 
@@ -454,9 +465,6 @@ func initNanoymousCore(mainInstance bool) error {
       }
 
       resetInUse()
-
-      feeDividend = int64(math.Trunc(100/FEE_PERCENT))
-      minPayment = oneNano()
 
       activePoW = make(map[string]int)
       workChannel = make(map[string]chan string)
@@ -479,7 +487,6 @@ func initNanoymousCore(mainInstance bool) error {
 func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
    var seed keyMan.Key
 
-   Info.Println("New address requested")
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return nil, 0, fmt.Errorf("getNewAddress: %w", err)
@@ -597,14 +604,16 @@ func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
       return nil, 0, fmt.Errorf("getNewAddress: %w", err)
    }
 
-   // Track confirmations on websocket
-   select {
-      case addWebSocketSubscription <- seed.NanoAddress:
-      case <-time.After(3 * time.Second):
-         if (verbosity >= 5) {
-            fmt.Println("Subscription add failed!")
-         }
-         Warning.Println("Add subscription timout")
+   if !(inTesting) {
+      // Track confirmations on websocket
+      select {
+         case addWebSocketSubscription <- seed.NanoAddress:
+         case <-time.After(3 * time.Second):
+            if (verbosity >= 5) {
+               fmt.Println("Subscription add failed!")
+            }
+            Warning.Println("Add subscription timout")
+      }
    }
 
 
@@ -734,9 +743,10 @@ func receivedNano(nanoAddress string) error {
    setAddressInUse(nanoAddress)
 
    // TODO This is just for debugging
-   seed, _ := getSeedFromIndex(1, 8)
-   clientPub, _ := keyMan.AddressToPubKey(seed.NanoAddress)
-   setClientAddress(t.paymentParentSeedId, t.paymentIndex, clientPub)
+   //fmt.Println("If you're not debegging than something is wrong!!!!")
+   //seed, _ := getSeedFromIndex(1, 8)
+   //clientPub, _ := keyMan.AddressToPubKey(seed.NanoAddress)
+   //setClientAddress(t.paymentParentSeedId, t.paymentIndex, clientPub)
    // TODO end of debugging code
 
    // Get client address for later use.
@@ -1135,66 +1145,85 @@ func SendEasy(from string, to string, amount *nt.Raw, all bool) {
 func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) error {
    var block keyMan.Block
 
-   accountInfo, err := getAccountInfo(fromKey.NanoAddress)
-   if (err != nil) {
-      return fmt.Errorf("sendNano: %w", err)
-   }
+   if !(inTesting) {
+      accountInfo, err := getAccountInfo(fromKey.NanoAddress)
+      if (err != nil) {
+         return fmt.Errorf("sendNano: %w", err)
+      }
 
-   // if (Balance < amountToSend)
-   if (accountInfo.Balance.Cmp(amountToSend) < 0) {
-      return fmt.Errorf("sendNano: not enough funds in account.\n have: %s\n need: %s", accountInfo.Balance, amountToSend)
-   }
+      // if (Balance < amountToSend)
+      if (accountInfo.Balance.Cmp(amountToSend) < 0) {
+         return fmt.Errorf("sendNano: not enough funds in account.\n have: %s\n need: %s", accountInfo.Balance, amountToSend)
+      }
 
-   // Create send block
-   block.Previous = accountInfo.Frontier
-   block.Seed = *fromKey
-   block.Account = block.Seed.NanoAddress
-   block.Representative = accountInfo.Representative
-   block.Balance = nt.NewRaw(0).Sub(accountInfo.Balance, amountToSend)
-   block.Link = toPublicKey
+      // Create send block
+      block.Previous = accountInfo.Frontier
+      block.Seed = *fromKey
+      block.Account = block.Seed.NanoAddress
+      block.Representative = accountInfo.Representative
+      block.Balance = nt.NewRaw(0).Sub(accountInfo.Balance, amountToSend)
+      block.Link = toPublicKey
 
-   sig, err := block.Sign()
-   if (err != nil) {
-      return fmt.Errorf("sendNano: %w", err)
-   }
+      sig, err := block.Sign()
+      if (err != nil) {
+         return fmt.Errorf("sendNano: %w", err)
+      }
 
-   if (verbosity >= 5) {
-      fmt.Println("account:", block.Account)
-      fmt.Println("representative:", block.Representative)
-      fmt.Println("balance:", block.Balance)
-      fmt.Println("link:", strings.ToUpper(hex.EncodeToString(block.Link)))
-      h, _ := block.Hash()
-      fmt.Println("hash:", strings.ToUpper(hex.EncodeToString(h)))
-      fmt.Println("private:", strings.ToUpper(hex.EncodeToString(block.Seed.PrivateKey)))
-      fmt.Println("Sig:", strings.ToUpper(hex.EncodeToString(sig)))
-   }
+      if (verbosity >= 5) {
+         fmt.Println("account:", block.Account)
+         fmt.Println("representative:", block.Representative)
+         fmt.Println("balance:", block.Balance)
+         fmt.Println("link:", strings.ToUpper(hex.EncodeToString(block.Link)))
+         h, _ := block.Hash()
+         fmt.Println("hash:", strings.ToUpper(hex.EncodeToString(h)))
+         fmt.Println("private:", strings.ToUpper(hex.EncodeToString(block.Seed.PrivateKey)))
+         fmt.Println("Sig:", strings.ToUpper(hex.EncodeToString(sig)))
+      }
 
-   PoW, err := getPoW(block.Account, false)
-   if (err != nil) {
-      return fmt.Errorf("sendNano: %w", err)
-   }
+      PoW, err := getPoW(block.Account, false)
+      if (err != nil) {
+         return fmt.Errorf("sendNano: %w", err)
+      }
 
-   // Send RCP request
-   newHash, err := publishSend(block, sig, PoW)
-   if (err != nil){
-      return fmt.Errorf("sendNano: %w", err)
-   }
-   if (len(newHash) != 32){
-      return fmt.Errorf("sendNano: no block hash returned from node", err)
-   }
+      // Send RCP request
+      newHash, err := publishSend(block, sig, PoW)
+      if (err != nil) {
+         return fmt.Errorf("sendNano: %w", err)
+      }
+      if (len(newHash) != 32) {
+         return fmt.Errorf("sendNano: no block hash returned from node")
+      }
 
-   clearPoW(block.Account)
-   // If there's no nano left in the account, it's a dead account; no need to
-   // calculate PoW for it.
-   if (block.Balance.Cmp(nt.NewRaw(0)) != 0) {
-      go preCalculateNextPoW(block.Account, false)
-   }
+      clearPoW(block.Account)
+      // If there's no nano left in the account, it's a dead account; no need to
+      // calculate PoW for it.
+      if (block.Balance.Cmp(nt.NewRaw(0)) != 0) {
+         go preCalculateNextPoW(block.Account, false)
+      }
 
-   // Update database records
-   err = updateBalance(block.Account, block.Balance)
-   if (err != nil) {
-      Error.Println("Balance update failed from send:", err.Error())
-      return fmt.Errorf("sendNano: updatebalance error %w", databaseError)
+      // Update database records
+      err = updateBalance(block.Account, block.Balance)
+      if (err != nil) {
+         Error.Println("Balance update failed from send:", err.Error())
+         return fmt.Errorf("sendNano: updatebalance error %w", databaseError)
+      }
+   } else {
+      // Doing tests; behave as close as possible without calling RCP
+
+      balance, _ := getBalance(fromKey.NanoAddress)
+      newBalance := nt.NewRaw(0).Sub(balance, amountToSend)
+
+      // if (Balance < amountToSend)
+      if (balance.Cmp(amountToSend) < 0) {
+         return fmt.Errorf("sendNano: not enough funds in account.\n have: %s\n need: %s", balance, amountToSend)
+      }
+
+      // Update database records
+      err := updateBalance(fromKey.NanoAddress, newBalance)
+      if (err != nil) {
+         Error.Println("Balance update failed from send:", err.Error())
+         return fmt.Errorf("sendNano: updatebalance error %w", databaseError)
+      }
    }
 
    return nil
@@ -1264,87 +1293,108 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
    var block keyMan.Block
    var pendingInfo BlockInfo
    var newHash nt.BlockHash
+   var numOfPendingHashes int
 
    key, _, _, err := getSeedFromAddress(account)
    if (err != nil) {
       return nil, nil, 0, fmt.Errorf("receive: %w", err)
    }
 
-   pendingHashes, _ := getPendingHashes(account)
-   numOfPeningHashes := len(pendingHashes[account])
+   if !(inTesting) {
+      pendingHashes, _ := getPendingHashes(account)
+      numOfPendingHashes = len(pendingHashes[account])
 
-   if (numOfPeningHashes > 0) {
-      pendingHash := pendingHashes[account][0]
-      pendingInfo, _ = getBlockInfo(pendingHash)
-      accountInfo, err := getAccountInfo(account)
-      if (err != nil) {
-         // Filter out expected errors
-         if !(strings.Contains(err.Error(), "Account not found")) {
-            return nil, nil, 0, fmt.Errorf("Receive: %w", err)
+      if (numOfPendingHashes > 0) {
+         pendingHash := pendingHashes[account][0]
+         pendingInfo, _ = getBlockInfo(pendingHash)
+         accountInfo, err := getAccountInfo(account)
+         if (err != nil) {
+            // Filter out expected errors
+            if !(strings.Contains(err.Error(), "Account not found")) {
+               return nil, nil, 0, fmt.Errorf("Receive: %w", err)
+            }
+         }
+
+         // Fill block with relavent information
+         if (len(accountInfo.Frontier) == 0) {
+            // New account. Structure as an open.
+            block.Previous = make([]byte, 32)
+            block.Representative = getNewRepresentative()
+            block.Balance = pendingInfo.Amount
+         } else {
+            // Old account. Do a standard receive.
+            block.Previous = accountInfo.Frontier
+            block.Representative = accountInfo.Representative
+            block.Balance = nt.NewRaw(0).Add(accountInfo.Balance, pendingInfo.Amount)
+         }
+         block.Account = account
+         block.Link = pendingHash
+         block.Seed = key
+
+         sig, err := block.Sign()
+         if (err != nil) {
+            return nil, nil, 0, fmt.Errorf("receive: %w", err)
+         }
+
+         if (verbosity >= 5) {
+            fmt.Println("account:", block.Account)
+            fmt.Println("representative:", block.Representative)
+            fmt.Println("balance:", block.Balance)
+            fmt.Println("link:", strings.ToUpper(hex.EncodeToString(block.Link)))
+            h, _ := block.Hash()
+            fmt.Println("hash:", strings.ToUpper(hex.EncodeToString(h)))
+            fmt.Println("private:", strings.ToUpper(hex.EncodeToString(block.Seed.PrivateKey)))
+            fmt.Println("Sig:", strings.ToUpper(hex.EncodeToString(sig)))
+         }
+
+         PoW, err := getPoW(block.Account, true)
+         if (err != nil) {
+            return nil, nil, 0, fmt.Errorf("receive: %w", err)
+         }
+
+         // Send RCP request
+         newHash, err = publishReceive(block, sig, PoW)
+         if (err != nil){
+            return nil, nil, 0, fmt.Errorf("receive: %w", err)
+         }
+         if (len(newHash) != 32){
+            return nil, nil, 0, fmt.Errorf("receive: no block hash returned from node")
+         }
+
+         numOfPendingHashes--
+
+         // We'ved used any stored PoW, clear it out for next use
+         clearPoW(block.Account)
+         go preCalculateNextPoW(block.Account, false)
+
+         // Update database records
+         err = updateBalance(block.Account, block.Balance)
+         if (err != nil) {
+            Error.Println("Balance update failed from receive:", err.Error())
+            return pendingInfo.Amount, newHash, 0, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
          }
       }
+   } else {
+      // Doing testing; behave as close as possible without calling RCP
 
-      // Fill block with relavent information
-      if (len(accountInfo.Frontier) == 0) {
-         // New account. Structure as an open.
-         block.Previous = make([]byte, 32)
-         block.Representative = getNewRepresentative()
-         block.Balance = pendingInfo.Amount
-      } else {
-         // Old account. Do a standard receive.
-         block.Previous = accountInfo.Frontier
-         block.Representative = accountInfo.Representative
-         block.Balance = nt.NewRaw(0).Add(accountInfo.Balance, pendingInfo.Amount)
-      }
-      block.Account = account
-      block.Link = pendingHash
-      block.Seed = key
+      balance, _ := getBalance(account)
+      pendingInfo.Amount = testingPayment[testingPaymentIndex]
+      testingPaymentIndex++
 
-      sig, err := block.Sign()
-      if (err != nil) {
-         return nil, nil, 0, fmt.Errorf("receive: %w", err)
-      }
-
-      if (verbosity >= 5) {
-         fmt.Println("account:", block.Account)
-         fmt.Println("representative:", block.Representative)
-         fmt.Println("balance:", block.Balance)
-         fmt.Println("link:", strings.ToUpper(hex.EncodeToString(block.Link)))
-         h, _ := block.Hash()
-         fmt.Println("hash:", strings.ToUpper(hex.EncodeToString(h)))
-         fmt.Println("private:", strings.ToUpper(hex.EncodeToString(block.Seed.PrivateKey)))
-         fmt.Println("Sig:", strings.ToUpper(hex.EncodeToString(sig)))
-      }
-
-      PoW, err := getPoW(block.Account, true)
-      if (err != nil) {
-         return nil, nil, 0, fmt.Errorf("receive: %w", err)
-      }
-
-      // Send RCP request
-      newHash, err = publishReceive(block, sig, PoW)
-      if (err != nil){
-         return nil, nil, 0, fmt.Errorf("receive: %w", err)
-      }
-      if (len(newHash) != 32){
-         return nil, nil, 0, fmt.Errorf("receive: no block hash returned from node", err)
-      }
-
-      numOfPeningHashes--
-
-      // We'ved used any stored PoW, clear it out for next use
-      clearPoW(block.Account)
-      go preCalculateNextPoW(block.Account, false)
+      newBalance := nt.NewRaw(0).Add(balance, pendingInfo.Amount)
 
       // Update database records
-      err = updateBalance(block.Account, block.Balance)
+      err = updateBalance(account, newBalance)
       if (err != nil) {
          Error.Println("Balance update failed from receive:", err.Error())
          return pendingInfo.Amount, newHash, 0, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
       }
+
+      testingPendingHashesNum--
+      numOfPendingHashes = testingPendingHashesNum
    }
 
-   return pendingInfo.Amount, newHash, numOfPeningHashes, err
+   return pendingInfo.Amount, newHash, numOfPendingHashes, err
 }
 
 // getNewRepresentative returns a random representative from a list of accounts
@@ -1373,7 +1423,7 @@ func getNewRepresentative() string {
 func preCalculateNextPoW(nanoAddress string, isReceiveBlock bool) {
    wg.Add(1)
    defer wg.Done()
-   if (testing) {
+   if (inTesting) {
       return
    }
 
@@ -1405,7 +1455,7 @@ var workChannel map[string]chan string
 // string. It also will make sure not to request work that is already being
 // worked on, and so can safely be called multiple times on the same account.
 func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
-   if (testing) {
+   if (inTesting) {
       return ""
    }
    // TODO should receiveblocks request work from the node instead?

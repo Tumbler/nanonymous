@@ -191,6 +191,10 @@ func transactionManager(t *Transaction) {
       var numConfirmed int
 
       for (numConfirmed < numOfSends) {
+         if (inTesting) {
+            break
+         }
+
          select {
             case hash := <-t.confirmationChannel:
                // Make sure we didn't receive the same block twice
@@ -237,6 +241,10 @@ func transactionManager(t *Transaction) {
                   trackConfirms := make(map[string]bool)
                   var numConfirmed int
                   for numConfirmed < numOfSends {
+                     if (inTesting) {
+                        break
+                     }
+
                      select {
                         case hash := <-t.confirmationChannel:
                            // Make sure we didn't receive the same block twice

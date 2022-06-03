@@ -251,6 +251,7 @@ func handleNotification(cBlock ConfirmationBlock) {
             }
             // Internal network send, don't trigger a transaction
             //TODO debugging code
+            fmt.Println("If you're not debugging, you're doing something wrong!!!2")
             seed, _ := getSeedFromIndex(1, 0)
             if (strings.Compare(msg.Account, seed.NanoAddress) == 0) {
                fmt.Println("Debug transaction!")
@@ -302,6 +303,9 @@ func handleNotification(cBlock ConfirmationBlock) {
 }
 
 func registerConfirmationListener(nanoAddress string, ch chan string, operation string) {
+   if (inTesting) {
+      return
+   }
 
    if (operation == "send") {
       registeredSendChannels[nanoAddress] = ch
@@ -311,6 +315,9 @@ func registerConfirmationListener(nanoAddress string, ch chan string, operation 
 }
 
 func unregisterConfirmationListener(nanoAddress string, operation string) {
+   if (inTesting) {
+      return
+   }
 
    if (operation == "send") {
       delete(registeredSendChannels, nanoAddress)

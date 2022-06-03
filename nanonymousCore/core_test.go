@@ -10,6 +10,7 @@ import (
 
    // Local packages
    keyMan "nanoKeyManager"
+   nt "nanoTypes"
 
    // 3rd party packages
    pgx "github.com/jackc/pgx/v4"
@@ -22,7 +23,7 @@ func Test_Password(t *testing.T) {
    // This is my hash, GET YOUR OWN!
    const P_HASH = "bd7ba7e0de3500733f4066499255ffb3fa155def272c87f259d10148ee5d2bf8613fe492d833795e3350166443cec75e6fb861029f03ff85f25aa0447b1d7b93"
 
-   err := initNanoymousCore()
+   err := initNanoymousCore(false)
    if (err != nil) {
       t.Errorf(err.Error())
       return
@@ -43,6 +44,7 @@ func Test_insertSeed(t *testing.T) {
    // Reset database to known state
    script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
    script.Run()
+   inTesting = true
 
    test1 := []struct {
       inputSeed string
@@ -98,6 +100,7 @@ func Test_getNewAddress(t *testing.T) {
    // Reset database to known state
    script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
    script.Run()
+   inTesting = true
 
    test1 := []struct {
       inputAddress string
@@ -158,6 +161,7 @@ func Test_findTotalBalance(t *testing.T) {
    // Reset database to known state
    script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
    script.Run()
+   inTesting = true
 
    balance, err := findTotalBalance()
    if (err != nil) {
@@ -176,6 +180,7 @@ func Test_receivedNano(t *testing.T) {
    // Reset database to known state
    script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
    script.Run()
+   inTesting = true
 
    test1 := []struct {
       nanoAddress string
@@ -184,6 +189,8 @@ func Test_receivedNano(t *testing.T) {
       index int
       nanoReceived *nt.Raw
       balances []*nt.Raw
+      numOfPendingTxs int
+      intermediaryTx []*nt.Raw
    }{
       {"nano_3f4pznen4utfxmeu7jmucnhg6ut4rd9fk87s7xnnrkr4okph65158j4xciqf",
        "nano_1bgho34hpofn4sxencbr8916sbbyyoosr5mmepewyguo8te15qkq8hefnrdn",
@@ -194,6 +201,8 @@ func Test_receivedNano(t *testing.T) {
            nt.NewRaw(0).Mul(nt.NewRaw(6),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(32),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(10),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))},
+       1,
+       []*nt.Raw{},
       },
       {"nano_1ts8ejswbndstgp6r4wgi7yr593rg7ryab4wuzburmay3pxbrgu3i5f1fz3n",
        "nano_14gfu8wkz48o3xf869ehp7rd9oah1993d1deguqknkksidp5s4b46czn86sw",
@@ -204,16 +213,20 @@ func Test_receivedNano(t *testing.T) {
            nt.NewRaw(0).Mul(nt.NewRaw(6),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(32),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(1018), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil))},
+       1,
+       []*nt.Raw{},
       },
       {"nano_1ie4own1s5qmmyd33u9a64169ox54kdb3khs1yt84gfgd7n7dshgcjkegxei",
        "nano_14gfu8wkz48o3xf869ehp7rd9oah1993d1deguqknkksidp5s4b46czn86sw",
        1,
        1,
        nt.NewRaw(0).Mul(nt.NewRaw(53), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
- []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(347306), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(26), nil)),
+ []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(3473),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(59),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(32),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(1018),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil))},
+       1,
+       []*nt.Raw{},
       },
       {"nano_1c73mmx64sxpudp1d46w56ct8kynnzt5bdufocfkspn8beknbb3mngj3a6br",
        // This address is blacklisted from address 1,0. That's why it won't take from there
@@ -221,15 +234,19 @@ func Test_receivedNano(t *testing.T) {
        1,
        2,
        nt.NewRaw(0).Mul(nt.NewRaw(6), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
- []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(347306), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(26), nil)),
+ []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(3473),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(93),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(92),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil))},
+       3,
+       []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(1018), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(4970), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil))},
       },
    }
 
    for _, test := range test1 {
+      resetInUse()
       // Add address to client list
       clientPub, err := keyMan.AddressToPubKey(test.clientAddress)
       if (err != nil) {
@@ -237,10 +254,17 @@ func Test_receivedNano(t *testing.T) {
       }
       setClientAddress(test.seedId, test.index, clientPub)
 
-      err = receivedNano(test.nanoAddress, test.nanoReceived)
+      testingPayment = append(make([]*nt.Raw, 0), test.nanoReceived)
+      testingPayment = append(testingPayment, test.intermediaryTx...)
+      testingPaymentIndex = 0
+      testingPendingHashesNum = test.numOfPendingTxs
+      err = receivedNano(test.nanoAddress)
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
+
+      // Wait for transaction to complete
+      wg.Wait()
 
       // Now check that the database is as we expect
       conn, err := pgx.Connect(context.Background(), databaseUrl)
@@ -327,6 +351,7 @@ func Test_checkBlackList(t *testing.T) {
    // Reset database to known state
    script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
    script.Run()
+   inTesting = true
 
    // Check to make sure they're there
    test1 := []struct {
