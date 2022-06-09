@@ -15,8 +15,8 @@ function autoFill(caller) {
       case 1:
          var price = document.getElementById("nanoPrice").innerHTML;
          var input = document.getElementById("USDamount").value;
-         var nano = Math.round(input * price * 1000) / 1000;
-         var afterTax = CalculateTax(nano)
+         var nano = thousandsRound(input * price);
+         var afterTax = thousandsRound(CalculateTax(nano))
          document.getElementById("nanoAmount").value = nano;
          document.getElementById("afterTaxAmount").value = afterTax;
          break;
@@ -47,38 +47,50 @@ function SetCurrentPrice(data) {
    var price = data
 
    document.getElementById("nanoPrice").innerHTML = price;
-
-   console.log(price);
 }
 
-// Adds .001 for every .5 nano converted (Essentially a .2% tax, but without all
-// the dust)
+// Basically just a 0.2% fee, but truncates any dust from the fee itself (but
+// not from the payment so you can add your own dust if you so desire).
 function CalculateTax(amount) {
-   var div = amount / .5;
-   var truncated = Math.floor(div);
+   var feeWithDust = amount * 0.002;
+   var fee = Math.floor(feeWithDust * 1000) / 1000;
 
-   // Do weird amplified stuff because floating point values are literally the worst
-   var amplified = amount * 1000 + truncated;
-   var finalVal = Math.round(amplified) / 1000;
+   var finalVal = amount + fee;
 
-   return finalVal;
+   var precision = afterDecimal(amount);
+   if (precision < 3) {
+      precision = 3;
+   }
+   precision = 10 ** precision;
+
+   return Math.round(finalVal * precision) / precision;
 }
 
 function CalculateInverseTax(amount) {
-   var div = amount / .5;
-   var truncated = Math.floor(div);
 
-   // Do weird amplified stuff because floating point values are literally the worst
-   var amplified = amount * 1000 - truncated;
-   var finalVal = Math.round(amplified) / 1000;
+   var origWithDust = amount / 1.002;
+   var origNoDust = Math.ceil(origWithDust * 1000) / 1000;
 
-   // The inverse function isn't exact, so backwards check the answer and reverse solve if needed.
-   var check = CalculateTax(finalVal);
-   if (check == amount) {
-      console.log("yes")
-      return finalVal;
-   } else {
-      var diff = amount - check;
-      return Math.round((finalVal + diff) * 1000) /1000
+   var fee = thousandsRound(amount - origNoDust);
+   var trueOrig = amount - fee;
+
+   var precision = afterDecimal(amount);
+   if (precision < 3) {
+      precision = 3;
    }
+   precision = 10 ** precision;
+
+   return Math.round(trueOrig * precision) / precision;
+}
+
+function thousandsRound(number) {
+   return Math.round(number * 1000) / 1000;
+}
+
+function afterDecimal(num) {
+  if (Number.isInteger(num)) {
+    return 0;
+  }
+
+  return num.toString().split('.')[1].length;
 }
