@@ -1,12 +1,18 @@
 // TODO w3schools modal image
 
 function showQR() {
-   var textAddress = document.getElementById("finalAddress").value;
-   document.getElementById("QRCode").innerHTML = textAddress
+   var Nano = document.getElementById("afterTaxAmount").value;
+   var raw = nanocurrency.convert(Nano, {from:"Nano", to:"raw"})
 
+   var textAddress = document.getElementById("finalAddress").value;
+   document.getElementById("QRInfo").innerHTML = "Tap to open wallet if on mobile"
+
+   var qrCodeText = "nano:" + textAddress + "?amount=" + raw;
+
+   document.getElementById("QRLink").href = qrCodeText
    var qr = new QRious({
-      element: document.getElementById("QRImage"),
-      size: 250, value: textAddress
+      element: document.getElementById("QRCode"),
+      size: 250, value: qrCodeText
    });
 }
 
@@ -94,3 +100,35 @@ function afterDecimal(num) {
 
   return num.toString().split('.')[1].length;
 }
+
+function validateNanoAddress() {
+   var address = document.getElementById("finalAddress").value
+   if (address.substr(0, 4) == "xrb_") {
+      address = "nano_" + address.split("_")[1]
+      document.getElementById("finalAddress").value = address
+   }
+   if (address.length != 65) {
+      document.getElementById("errorMessage").innerHTML = "Address must be 65 characters long."
+      document.getElementById("button").disabled = true
+   } else if (!nanocurrency.checkAddress(address)) {
+      document.getElementById("errorMessage").innerHTML = "Address invalid! Check for typos."
+      document.getElementById("button").disabled = true
+   } else {
+      document.getElementById("errorMessage").innerHTML = ""
+      document.getElementById("button").disabled = false
+   }
+}
+
+//function onScanSuccess(decodedText, decodedResult) {
+   //document.getElementById("finalAddress").value = decodedText
+//}
+//
+//function onScanFailure(error) {
+   //console.warn(`QR Code scan error: = ${error}`);
+//}
+//
+//let html5QrcodeScanner = new Html5QrcodeScanner(
+   //"reader",
+   //{fps: 10, qrbox: {width: 250, height: 250} },
+   //false);
+//html5QrcodeScanner.render(onScanSuccess, onScanFailure);
