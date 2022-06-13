@@ -2,12 +2,14 @@
 <html>
 <head>
 <meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=1.0, user-scalable=0"/>
 <title>Nanonymous</title>
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
-<script type="text/javascript" src="script/nanocurrency.js"></script>
+<script type="text/javascript" src="script/lib/nanocurrency.js"></script>
 <!--<script type="text/javascript" src="script/node_modules/html5-qrcode/html5-qrcode.min.js"></script>-->
 <!--<script type="text/javascript" src="script/html5-qrreader.js"></script>-->
 <!--<script src="https://unpkg.com/html5-qrcode" type="text/javascript">-->
+<script type="text/javascript" src="script/lib/qr_reader.js"></script>
 <script type="text/javascript" src="script/transaction.js"></script>
 <style>
     body {
@@ -53,10 +55,14 @@
 </table>
 <br>
 <label> Address to send to:</label>
+<button type="button" onclick="requestCamera()"> <img src="images/qr_icon.svg" height=20 width=20/></button>
 <label id="errorMessage" class="error"></label>
 <input type="text" id="finalAddress" name="finalAddress" placeholder="nano_1234567890ABCDEF..." size=65 oninput="validateNanoAddress()"><br><br>
 <button id="button" onclick="showQR()" disabled>Submit</button>
-<div id="reader" width="600px"></div>
+
+<div id="container">
+    <canvas hidden="" id="qr-canvas"></canvas>
+</div>
 
 <br>
 
@@ -70,6 +76,7 @@
 </body>
 </html>
 
+<script type="text/javascript" src="script/qrReader.js"></script>
 <script>
    GetCurrentPrice();
 </script>

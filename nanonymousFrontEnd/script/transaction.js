@@ -1,5 +1,3 @@
-// TODO w3schools modal image
-
 function showQR() {
    var Nano = document.getElementById("afterTaxAmount").value;
    var raw = nanocurrency.convert(Nano, {from:"Nano", to:"raw"})
@@ -110,25 +108,14 @@ function validateNanoAddress() {
    if (address.length != 65) {
       document.getElementById("errorMessage").innerHTML = "Address must be 65 characters long."
       document.getElementById("button").disabled = true
+      return false
    } else if (!nanocurrency.checkAddress(address)) {
       document.getElementById("errorMessage").innerHTML = "Address invalid! Check for typos."
       document.getElementById("button").disabled = true
+      return false
    } else {
       document.getElementById("errorMessage").innerHTML = ""
       document.getElementById("button").disabled = false
+      return true
    }
 }
-
-//function onScanSuccess(decodedText, decodedResult) {
-   //document.getElementById("finalAddress").value = decodedText
-//}
-//
-//function onScanFailure(error) {
-   //console.warn(`QR Code scan error: = ${error}`);
-//}
-//
-//let html5QrcodeScanner = new Html5QrcodeScanner(
-   //"reader",
-   //{fps: 10, qrbox: {width: 250, height: 250} },
-   //false);
-//html5QrcodeScanner.render(onScanSuccess, onScanFailure);
