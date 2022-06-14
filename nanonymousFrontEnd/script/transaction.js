@@ -1,17 +1,6 @@
 function showQR() {
-   var Nano = document.getElementById("afterTaxAmount").value;
-   var raw = nanocurrency.convert(Nano, {from:"Nano", to:"raw"})
-
-   var textAddress = document.getElementById("finalAddress").value;
-   document.getElementById("QRInfo").innerHTML = "Tap to open wallet if on mobile"
-
-   var qrCodeText = "nano:" + textAddress + "?amount=" + raw;
-
-   document.getElementById("QRLink").href = qrCodeText
-   var qr = new QRious({
-      element: document.getElementById("QRCode"),
-      size: 250, value: qrCodeText
-   });
+   var finalAddress = document.getElementById("finalAddress").value;
+   ajaxGetAddress(finalAddress);
 }
 
 function autoFill(caller) {
@@ -118,4 +107,28 @@ function validateNanoAddress() {
       document.getElementById("button").disabled = false
       return true
    }
+}
+
+function ajaxGetAddress(finalAddress) {
+
+   var req = new XMLHttpRequest();
+   req.open("POST", "php/getNewAddress.php?address="+ finalAddress)
+
+   var Nano = document.getElementById("afterTaxAmount").value;
+   var raw = nanocurrency.convert(Nano, {from:"Nano", to:"raw"})
+
+   req.onload = function() {
+      document.getElementById("QRInfo").innerHTML = "Tap to open wallet if on mobile"
+
+      var qrCodeText = "nano:" + this.response + "?amount=" + raw;
+
+      document.getElementById("QRLink").href = qrCodeText;
+      document.getElementById("qr-label").innerHTML = this.response;
+      var qr = new QRious({
+         element: document.getElementById("QRCode"),
+         size: 250, value: qrCodeText
+      });
+      document.getElementById("QRdiv").hidden = false;
+   };
+   req.send();
 }
