@@ -6,9 +6,6 @@
 <title>Nanonymous</title>
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script type="text/javascript" src="script/lib/nanocurrency.js"></script>
-<!--<script type="text/javascript" src="script/node_modules/html5-qrcode/html5-qrcode.min.js"></script>-->
-<!--<script type="text/javascript" src="script/html5-qrreader.js"></script>-->
-<!--<script src="https://unpkg.com/html5-qrcode" type="text/javascript">-->
 <script type="text/javascript" src="script/lib/qr_reader.js"></script>
 <script type="text/javascript" src="script/transaction.js"></script>
 <style>
@@ -48,7 +45,7 @@
       <td><label class="info"> This is the amount that the address will receive </label></td>
    </tr>
    <tr>
-      <td><label> After tax </label></td>
+      <td><label> After fee </label></td>
       <td><input type="number" step ='0.001' id="afterTaxAmount" placeholder="1.236" oninput="autoFill(3)"></td>
       <td><label class="info"> This is the amount you will send </label></td>
    </tr>
@@ -67,9 +64,13 @@
 <br>
 
 <br>
-<a id="QRLink">
-   <canvas id="QRCode"></canvas>
-</a>
+<div id="QRdiv" hidden=true>
+   <h3> Send payment here: </h3>
+   <a id="QRLink">
+      <canvas id="QRCode"></canvas>
+   </a>
+   <label id="qr-label"></label>
+</div>
 <br>
 <label id="QRInfo"></label>
 
