@@ -30,12 +30,20 @@ type Transaction struct {
    individualSendAmount []*nt.Raw
    transitionalKey *keyMan.Key
    transitionSeedId int
-   commChannel chan int
+   finalHash nt.BlockHash
+   commChannel chan transactionComm
    errChannel chan error
    confirmationChannel chan string
    multiSend bool
    abort bool
 }
+
+type transactionComm struct {
+   i int
+   hash nt.BlockHash
+}
+
+var registeredFinalHashChannels map[string]chan nt.BlockHash
 
 var databaseError = errors.New("database error")
 
@@ -93,6 +101,7 @@ func transactionManager(t *Transaction) {
       } else {
          recordProfit(t.fee, t.id)
          Info.Println("Transaction", t.id, "Complete")
+         sendFinalHash(t.finalHash, t.clientAddress)
       }
    }()
 
@@ -136,11 +145,15 @@ func transactionManager(t *Transaction) {
             // A send finished with no errors
             numDone++
 
+            if !(t.multiSend) {
+               t.finalHash = i.hash
+            }
+
             // This is known as the "reverse-blacklist." It makes sure that we
             // don't send funds from the address associated with address C to
             // address A. (see blacklist documentation)
-            if (t.walletBalance[i].Cmp(t.individualSendAmount[i]) > 0) {
-               go blacklistHash(t.sendingKeys[i].PublicKey, t.receiveHash)
+            if (t.walletBalance[i.i].Cmp(t.individualSendAmount[i.i]) > 0) {
+               go blacklistHash(t.sendingKeys[i.i].PublicKey, t.receiveHash)
             }
          case err := <-t.errChannel:
             // There was an error. Deal with it.
@@ -230,7 +243,8 @@ func transactionManager(t *Transaction) {
 
       for (operation < 3) {
          select {
-            case operation = <-t.commChannel:
+            case tComm := <-t.commChannel:
+               operation = tComm.i
                if (operation == 2) {
                   // Done with receives
                   if (verbosity >= 5) {
@@ -265,6 +279,7 @@ func transactionManager(t *Transaction) {
                   t.receiveWg.Done()
                } else if (operation == 3) {
                   // All finished
+                  t.finalHash = tComm.hash
                   transcationSucessfull = true
                   if (verbosity >= 5) {
                      fmt.Println("Done with everything!")
@@ -317,7 +332,7 @@ func handleSingleSendError(t *Transaction, prevError error) bool {
    }
 
    for (retryCount < RetryNumber) {
-      err = Send(t.sendingKeys[0], t.clientAddress, t.amountToSend, nil, nil, -1)
+      _, err = Send(t.sendingKeys[0], t.clientAddress, t.amountToSend, nil, nil, -1)
       if (err != nil) {
          if (verbosity >= 5) {
             fmt.Println("Error with resend: ", retryCount, err.Error())
@@ -401,7 +416,7 @@ func Refund(receiveHash nt.BlockHash)  error {
 
    retryCount := 0
    for (retryCount < RetryNumber) {
-      err = Send(&sendingKey, clientOriginalAddress, blockInfo.Amount, nil, nil, -1)
+      _, err = Send(&sendingKey, clientOriginalAddress, blockInfo.Amount, nil, nil, -1)
       if (err != nil) {
          if (verbosity >= 5) {
             fmt.Println("Refund send error: ", err.Error())
@@ -487,7 +502,7 @@ func retryMultiSend(t *Transaction, i int, prevError error) bool {
 
    var err error
    for (retryCount < RetryNumber) {
-      err = Send(t.sendingKeys[i], t.transitionalKey.PublicKey, t.individualSendAmount[i], nil, nil, -1)
+      _, err = Send(t.sendingKeys[i], t.transitionalKey.PublicKey, t.individualSendAmount[i], nil, nil, -1)
       if (err != nil) {
          retryCount++
       } else {
@@ -509,10 +524,11 @@ func retryFinalSend(t *Transaction, prevError error) bool {
 
    var err error
    for (retryCount < RetryNumber) {
-      err = Send(t.transitionalKey, t.clientAddress, t.amountToSend, nil, nil, -1)
+      newHash, err := Send(t.transitionalKey, t.clientAddress, t.amountToSend, nil, nil, -1)
       if (err != nil) {
          retryCount++
       } else {
+         t.finalHash = newHash
          return true
       }
    }
@@ -534,4 +550,27 @@ func retryReceives(t *Transaction, prevError error) bool {
 
    Error.Println("ID", t.id, "Problem with multi receives orig:", prevError, "final:", err)
    return true
+}
+
+func registerFinalHashListener(nanoAddress string, ch chan nt.BlockHash) {
+   if (inTesting) {
+      return
+   }
+
+   registeredFinalHashChannels[nanoAddress] = ch
+}
+
+func unregisterFinalHashListener(nanoAddress string) {
+   if (inTesting) {
+      return
+   }
+
+   delete(registeredFinalHashChannels, nanoAddress)
+}
+
+func sendFinalHash(hash nt.BlockHash, pubkey []byte) {
+   nanoAddress, _ := keyMan.PubKeyToAddress(pubkey)
+   if (registeredFinalHashChannels[nanoAddress] != nil) {
+      registeredFinalHashChannels[nanoAddress] <- hash
+   }
 }

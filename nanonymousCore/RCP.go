@@ -359,7 +359,7 @@ func getBlockInfo(hash nt.BlockHash) (BlockInfo, error) {
    var response BlockInfo
    err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
-      return response, fmt.Errorf("getAccountInfo: %w", err)
+      return response, fmt.Errorf("getABlockInfo: %w", err)
    }
 
    return response, nil

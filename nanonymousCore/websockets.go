@@ -250,25 +250,16 @@ func handleNotification(cBlock ConfirmationBlock) {
                fmt.Println(" Internal Send")
             }
             // Internal network send, don't trigger a transaction
-            //TODO debugging code
-            fmt.Println("If you're not debugging, you're doing something wrong!!!2")
-            seed, _ := getSeedFromIndex(1, 0)
-            if (strings.Compare(msg.Account, seed.NanoAddress) == 0) {
-               fmt.Println("Debug transaction!")
-               receivedNano(msg.Block.LinkAsAccount)
-            } else {
-               //TODO end of debugging code
-               if (registeredSendChannels[msg.Block.LinkAsAccount] != nil) {
-                  select {
-                     case registeredSendChannels[msg.Block.LinkAsAccount] <- msg.Hash.String():
-                     case <-time.After(5 * time.Minute):
-                        Warning.Println("Registered send channel timeout")
-                  }
-               } else {
-                  // Internal send, but no transaction is requesting it so just
-                  // receive the funds
-                  Receive(msg.Block.LinkAsAccount)
+            if (registeredSendChannels[msg.Block.LinkAsAccount] != nil) {
+               select {
+                  case registeredSendChannels[msg.Block.LinkAsAccount] <- msg.Hash.String():
+                  case <-time.After(5 * time.Minute):
+                     Warning.Println("Registered send channel timeout")
                }
+            } else {
+               // Internal send, but no transaction is requesting it so just
+               // receive the funds
+               Receive(msg.Block.LinkAsAccount)
             }
          } else {
             if (verbosity >= 5) {
