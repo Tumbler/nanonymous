@@ -8,7 +8,7 @@ function autoFill(caller) {
       case 1:
          var price = document.getElementById("nanoPrice").innerHTML;
          var input = document.getElementById("USDamount").value;
-         var nano = thousandsRound(input * price);
+         var nano = thousandsRound(input / price);
          var afterTax = thousandsRound(CalculateTax(nano))
          document.getElementById("nanoAmount").value = nano;
          document.getElementById("afterTaxAmount").value = afterTax;
@@ -16,7 +16,7 @@ function autoFill(caller) {
       case 2:
          var price = document.getElementById("nanoPrice").innerHTML;
          var input = document.getElementById("nanoAmount").value;
-         var usd = Math.round(input / price * 100) / 100;
+         var usd = Math.round(input * price * 100) / 100;
          var afterTax = CalculateTax(parseFloat(input))
          document.getElementById("USDamount").value = usd;
          document.getElementById("afterTaxAmount").value = afterTax;
@@ -25,7 +25,7 @@ function autoFill(caller) {
          var price = document.getElementById("nanoPrice").innerHTML;
          var input = document.getElementById("afterTaxAmount").value;
          var nano = CalculateInverseTax(parseFloat(input))
-         var usd = Math.round(nano / price * 100) / 100;
+         var usd = Math.round(nano * price * 100) / 100;
          document.getElementById("USDamount").value = usd;
          document.getElementById("nanoAmount").value = nano;
          break;
@@ -60,7 +60,6 @@ function CalculateTax(amount) {
 }
 
 function CalculateInverseTax(amount) {
-
    var origWithDust = amount / 1.002;
    var origNoDust = Math.ceil(origWithDust * 1000) / 1000;
 
@@ -81,7 +80,7 @@ function thousandsRound(number) {
 }
 
 function afterDecimal(num) {
-  if (Number.isInteger(num)) {
+  if (isNaN(num) || Number.isInteger(num)) {
     return 0;
   }
 
@@ -117,18 +116,43 @@ function ajaxGetAddress(finalAddress) {
    var Nano = document.getElementById("afterTaxAmount").value;
    var raw = nanocurrency.convert(Nano, {from:"Nano", to:"raw"})
 
+   // Wait for new address to come back from server and then display QR code.
    req.onload = function() {
-      document.getElementById("QRInfo").innerHTML = "Tap to open wallet if on mobile"
+      if (this.response.includes("address=")) {
+         var address = this.response.match(/address=(nano_[a-z0-9]+)/i)[1];
+         document.getElementById("TransactionInfo").innerHTML = "Tap to open wallet if on mobile"
 
-      var qrCodeText = "nano:" + this.response + "?amount=" + raw;
+         var qrCodeText = "nano:" + address + "?amount=" + raw;
 
-      document.getElementById("QRLink").href = qrCodeText;
-      document.getElementById("qr-label").innerHTML = this.response;
-      var qr = new QRious({
-         element: document.getElementById("QRCode"),
-         size: 250, value: qrCodeText
-      });
-      document.getElementById("QRdiv").hidden = false;
+         document.getElementById("QRLink").href = qrCodeText;
+         document.getElementById("qr-label").innerHTML = address;
+         var qr = new QRious({
+            element: document.getElementById("QRCode"),
+            size: 250, value: qrCodeText
+         });
+         document.getElementById("QRdiv").hidden = false;
+      }
+
+      // Wait until transaction is complete and then post the hash.
+      var req2 = new XMLHttpRequest();
+      req2.open("POST", "php/getFinalHash.php?address="+ finalAddress)
+      req2.timeout = 0; // No timeout
+
+      req2.onload = function() {
+         if (this.response.includes("hash=")) {
+            var hash = this.response.match(/hash=([a-f0-9]+)/i)[1];
+            document.getElementById("TransactionInfo").innerHTML = "Transaction Complete!"
+
+            document.getElementById("HashLink").href = "www.nanolooker.com/block/" + hash;
+            document.getElementById("HashLink").innerHTML = hash;
+            document.getElementById("QRdiv").hidden = true;
+            document.getElementById("Hashdiv").hidden = false;
+            document.getElementById("button").hidden = true;
+            document.getElementById("scanQR").hidden = true;
+         }
+      };
+      req2.send();
    };
    req.send();
+
 }

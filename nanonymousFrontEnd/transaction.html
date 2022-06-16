@@ -4,7 +4,7 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=1.0, user-scalable=0"/>
 <title>Nanonymous</title>
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+<script type="text/javascript" src="script/lib/qrious.js"></script>
 <script type="text/javascript" src="script/lib/nanocurrency.js"></script>
 <script type="text/javascript" src="script/lib/qr_reader.js"></script>
 <script type="text/javascript" src="script/transaction.js"></script>
@@ -52,7 +52,7 @@
 </table>
 <br>
 <label> Address to send to:</label>
-<button type="button" onclick="requestCamera()"> <img src="images/qr_icon.svg" height=20 width=20/></button>
+<button id="scanQR" type="button" onclick="requestCamera()"> <img src="images/qr_icon.svg" height=20 width=20/></button>
 <label id="errorMessage" class="error"></label>
 <input type="text" id="finalAddress" name="finalAddress" placeholder="nano_1234567890ABCDEF..." size=65 oninput="validateNanoAddress()"><br><br>
 <button id="button" onclick="showQR()" disabled>Submit</button>
@@ -72,7 +72,10 @@
    <label id="qr-label"></label>
 </div>
 <br>
-<label id="QRInfo"></label>
+<label id="TransactionInfo"></label>
+<div id="Hashdiv" hidden=true>
+   <a id="HashLink"></a>
+</div>
 
 </body>
 </html>
