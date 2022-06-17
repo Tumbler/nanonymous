@@ -140,7 +140,7 @@ func startSubscription(ws *websocket.Conn) error {
       }
    }`
 
-   if (verbosity >= 5) {
+   if (verbosity >= 7) {
       fmt.Print(request)
    }
 

@@ -61,6 +61,12 @@ var activeTransactionList = make(map[string][]byte)
 
 var random *rand.Rand
 
+// Random info about used ports:
+// 41721    Nanonymous request port
+// 17076    RCP (test net)
+// 17078    Web sockets (test net)
+
+// interface to allow pgx to pass around comms and txs interchangeably.
 type psqlDB interface {
    Begin(ctx context.Context) (pgx.Tx, error)
    Exec(ctx context.Context, sql string, arguments ...interface{}) (pgconn.CommandTag, error)
@@ -73,8 +79,6 @@ var Warning *log.Logger
 var Error *log.Logger
 
 var args []string
-
-//nano_1au1x8qym6i9k9311jfqpat7r3r7npg6ae5sibo63tq6nas5ghycaqzsny5j
 
 var verbosity int
 func main() {
@@ -89,277 +93,18 @@ func main() {
          if (err != nil) {
             panic(err)
          }
+
          returnAllReceiveable()
+
       } else if (strings.ToLower(args[0]) == "-c") {
          // Command line interface
-         var usr string
-         var seed keyMan.Key
          err = initNanoymousCore(true)
          if (err != nil) {
             panic(err)
          }
 
-         menu:
-         for {
-            fmt.Print("1. Generate Seed\n",
-                      "2. Get Account info\n",
-                      "3. Insert into database\n",
-                      "4. Send pretend request for new address\n",
-                      "5. Find total balance\n",
-                      "6. Pretend nano receive\n",
-                      "7. Get Wallet Info\n",
-                      "8. Add nano to wallet\n",
-                      "9. Get block count\n",
-                      "A. Clear PoW\n",
-                      "B. Telemetry\n",
-                      "C. Get Account Info\n",
-                      "D. Sign Block\n",
-                      "E. Block Info\n",
-                      "H. OpenAccount\n",
-                      "I. GenerateWork\n",
-                      "J. Send\n",
-                      "K. Recive All\n",
-                      "L. Black list\n",
-                      "M. Get Pending\n",
-                      "N. Check Balance\n",
-                      "O. Channel Test\n",
-                      "P. Test\n",
-                   )
-            fmt.Scan(&usr)
+         CLI()
 
-            switch (strings.ToUpper(usr)) {
-            case "1":
-               keyMan.WalletVerbose(true)
-
-               err := keyMan.GenerateSeed(&seed)
-               if (err != nil){
-                  fmt.Println(err.Error())
-               }
-
-               keyMan.WalletVerbose(false)
-            case "2":
-               verbosity = 10
-               fmt.Print("Seed: ")
-               fmt.Scan(&usr)
-               seed, _ := strconv.Atoi(usr)
-               fmt.Print("Index: ")
-               fmt.Scan(&usr)
-               index, _ := strconv.Atoi(usr)
-               seedKey, _ := getSeedFromIndex(seed, index)
-               _, err := getAccountInfo(seedKey.NanoAddress)
-               if (err != nil) {
-                  fmt.Println("error: ", err.Error())
-               }
-               _, _, err = getAccountBalance(seedKey.NanoAddress)
-               if (err != nil) {
-                  fmt.Println("error: ", err.Error())
-               }
-
-            case "3":
-               var newSeed keyMan.Key
-
-               conn, err := pgx.Connect(context.Background(), databaseUrl)
-               if (err != nil) {
-                  fmt.Println("main: ", err)
-                  return
-               }
-               defer conn.Close(context.Background())
-
-               err = keyMan.GenerateSeed(&newSeed)
-               if (err != nil) {
-                  fmt.Println("main: ", err)
-                  break
-               }
-
-               hexString := hex.EncodeToString(newSeed.Seed)
-               fmt.Println("seed: ", hexString)
-
-               _, err = insertSeed(conn, newSeed.Seed)
-
-               if (err != nil) {
-                  fmt.Println("main: ", err)
-                  break //menu
-               }
-
-            case "4":
-               verbosity = 5
-               adhocAddress := "nano_1hiqiw6j9wo33moia3scoajhheweysiq5w1xjqeqt8m6jx6so6gj39pae5ea"
-               blarg, _, err := getNewAddress(adhocAddress)
-               if (err != nil) {
-                  fmt.Println(err)
-               }
-               fmt.Println("New address: ", blarg.NanoAddress)
-            case "5":
-               verbosity = 5
-               _, err := findTotalBalance()
-               if (err != nil) {
-                  fmt.Println("err: ", err.Error())
-               }
-            case "6":
-               seed, _ := getSeedFromIndex(1, 7)
-               err := receivedNano(seed.NanoAddress)
-               if (err != nil) {
-                  fmt.Println("err: ", err.Error())
-               }
-
-            case "7":
-               keyMan.WalletVerbose(true)
-               verbosity = 5
-               fmt.Scan(&usr)
-               seed, _ := strconv.Atoi(usr)
-               fmt.Scan(&usr)
-               index, _ := strconv.Atoi(usr)
-
-               _, err := getSeedFromIndex(seed, index)
-               if (err != nil) {
-                  fmt.Println(err.Error())
-               }
-
-            case "8":
-               fmt.Print("Seed: ")
-               fmt.Scan(&usr)
-               seed, _ := strconv.Atoi(usr)
-               fmt.Print("Index: ")
-               fmt.Scan(&usr)
-               index, _ := strconv.Atoi(usr)
-               fmt.Print("Nano: ")
-               fmt.Scan(&usr)
-               nano, _ := strconv.Atoi(usr)
-
-               manualWalletUpdate(seed, index, int64(nano))
-
-            case "9":
-               verbosity = 5
-               getBlockCount()
-            case "A":
-               verbosity = 5
-               fmt.Print("Seed: ")
-               fmt.Scan(&usr)
-               seed, _ := strconv.Atoi(usr)
-               fmt.Print("Index: ")
-               fmt.Scan(&usr)
-               index, _ := strconv.Atoi(usr)
-               seedKey, _ := getSeedFromIndex(seed, index)
-               err := clearPoW(seedKey.NanoAddress)
-               if (err != nil) {
-                  fmt.Println("error: ", err.Error())
-               }
-            case "B":
-               verbosity = 5
-               err := telemetry()
-               if (err != nil) {
-                  fmt.Println("err: ", err.Error())
-               }
-            case "C":
-               verbosity = 5
-               getAccountInfo("nano_1afhc54bhcqkrdwz7rwmwcexfssnwsbbkzwfhj3a7wxa17k93zbh3k4cknkb")
-            case "E":
-               verbosity = 5
-               h, _ := hex.DecodeString("EECE7188B8557634EBCFCCA9ABB5A640556FA67AD9AC13E9BE4D767A7230C040")
-               block, _ := getBlockInfo(h)
-               fmt.Println("Block", block)
-
-            case "H":
-               received, _, _,  err := Receive("nano_17iperkf8wx68akk66t4zynhuep7oek397nghh75oenahauch41g6pfgtrnu")
-               if (err != nil) {
-                  fmt.Println("Error: ", err.Error())
-               }
-               fmt.Println("Received:", received)
-
-            case "I":
-               var seedSend *keyMan.Key
-               var seedReceive *keyMan.Key
-               seedSend, _ = getSeedFromIndex(1, 0)
-               seedReceive, _ = getSeedFromIndex(1, 12)
-               SendEasy(seedSend.NanoAddress,
-                        seedReceive.NanoAddress,
-                        nt.NewRawFromNano(0.50),
-                        false)
-            case "J":
-               // Send commnad
-               verbosity = 5
-               fmt.Print("Seed: ")
-               fmt.Scan(&usr)
-               seed, _ := strconv.Atoi(usr)
-               fmt.Print("Index: ")
-               fmt.Scan(&usr)
-               index, _ := strconv.Atoi(usr)
-               sendKey, _ := getSeedFromIndex(seed, index)
-               fmt.Print("Nano address: ")
-               fmt.Scan(&usr)
-               nanoAddress := usr
-               toPubKey, err := keyMan.AddressToPubKey(nanoAddress)
-               if (err != nil) {
-                  fmt.Println("Error: ", err.Error())
-                  continue
-               }
-               fmt.Print("Amount in Nano: ")
-               fmt.Scan(&usr)
-               amountNano, _ := strconv.ParseFloat(usr, 64)
-               amountRaw := nt.NewRawFromNano(amountNano)
-               Send(sendKey, toPubKey, amountRaw, nil, nil, -1)
-            case "K":
-               verbosity = 5
-
-               for i := 0; i <= 41; i++ {
-                  fmt.Println("--------------", i, "-------------")
-                  seedReceive, _ := getSeedFromIndex(1, i)
-                  err := ReceiveAll(seedReceive.NanoAddress)
-                  if (err != nil) {
-                     fmt.Println("Error:", err.Error())
-                  }
-               }
-            case "L":
-               conn, err := pgx.Connect(context.Background(), databaseUrl)
-               if (err != nil) {
-                  fmt.Println(err.Error())
-               }
-               defer conn.Close(context.Background())
-
-               seedSend, _ := getSeedFromIndex(1, 0)
-               seedReceive, _ := getSeedFromIndex(1, 8)
-               blacklist(conn, seedSend.PublicKey, seedReceive.PublicKey)
-
-            case "M":
-               verbosity = 5
-               seed, _ := getSeedFromIndex(1, 5)
-               blarg, _ := getPendingHashes(seed.NanoAddress)
-               fmt.Println(blarg[seed.NanoAddress][0])
-            case "N":
-               verbosity = 5
-               //fmt.Print("Seed: ")
-               //fmt.Scan(&usr)
-               //seed, _ := strconv.Atoi(usr)
-               //fmt.Print("Index: ")
-               //fmt.Scan(&usr)
-               //index, _ := strconv.Atoi(usr)
-               for index := 0; index <= 41; index++ {
-                  seedkey, _ := getSeedFromIndex(1, index)
-                  err := checkBalance(seedkey.NanoAddress)
-                  if (err != nil) {
-                     fmt.Println(err.Error())
-                  }
-               }
-            case "O":
-               verbosity = 5
-
-               seedkey, _ := getSeedFromIndex(1, 0)
-               go preCalculateNextPoW(seedkey.NanoAddress, true)
-               //time.Sleep(5 * time.Second)
-               work := calculateNextPoW(seedkey.NanoAddress, true)
-
-               fmt.Println("work: ", work)
-            case "P":
-               verbosity = 10
-
-               err := returnAllReceiveable()
-               if (err != nil) {
-                  fmt.Println(fmt.Errorf("main: %w", err))
-               }
-            default:
-               break menu
-            }
-         }
       } else {
          // Default operation, but with changed verbosity
          defaultOperation()
@@ -455,15 +200,10 @@ func initNanoymousCore(mainInstance bool) error {
    }
 
    feeDividend = int64(math.Trunc(100/FEE_PERCENT))
-   minPayment = oneNano()
+   minPayment = nt.OneNano()
 
    // Some things to do for only the main instance
    if (mainInstance) {
-
-      err := checkForOtherInstances()
-      if (err != nil) {
-         return fmt.Errorf("initNanoymousCore: %w", err)
-      }
 
       resetInUse()
 
@@ -484,22 +224,26 @@ func initNanoymousCore(mainInstance bool) error {
    return nil
 }
 
+// listen is the default operation of nanonymousCore. It listens on port 41721
+// for incoming requests from the front end and passes them off to the handler.
 func listen() error {
    const INSTANCE_PORT = 41721
 
    listener, err := net.Listen("tcp", fmt.Sprintf(":%d", INSTANCE_PORT))
    if (err != nil) {
       if (strings.Index(err.Error(), "in use") != -1) {
-         return fmt.Errorf("checkForOtherInstances: Another instance was detected")
+         return fmt.Errorf("listen: Another instance was detected")
       } else {
-         return fmt.Errorf("checkForOtherInstances: %w", err)
+         return fmt.Errorf("listen: %w", err)
       }
    }
    defer listener.Close()
 
    // Listen for eternity to incoming address requests
    for {
-      fmt.Println("Listening....")
+      if (verbosity >= 3) {
+         fmt.Println("Listening....")
+      }
       conn, err := listener.Accept()
       if (err != nil) {
          Error.Println("Error with single instance port:", err.Error())
@@ -510,6 +254,12 @@ func listen() error {
    return nil
 }
 
+// handleRequest takes an established connection and responds to it. There are
+// only two types of expected requests.
+//    (1) Get a new address: Retuns the next valid address in the database
+//    (2) Register Transaction: Regesiters a callback for a particular
+//        transaction. On completion of the transaction nanonymous will return
+//        the final send's hash.
 func handleRequest(conn net.Conn) error {
    // look into conn.LocalAddr() and conn.RemotAddr()
    buff := make([]byte, 1024)
@@ -559,6 +309,274 @@ func handleRequest(conn net.Conn) error {
    conn.Close()
 
    return nil
+}
+
+func CLI() {
+   var usr string
+   var seed keyMan.Key
+
+   menu:
+   for {
+      fmt.Print(
+      "1. Generate Seed\n",
+      "2. Get Account info\n",
+      "3. Insert into database\n",
+      "4. Send pretend request for new address\n",
+      "5. Find total balance\n",
+      "6. Pretend nano receive\n",
+      "7. Get Wallet Info\n",
+      "8. Add nano to wallet\n",
+      "9. Get block count\n",
+      "A. Clear PoW\n",
+      "B. Telemetry\n",
+      "C. Get Account Info\n",
+      "D. Sign Block\n",
+      "E. Block Info\n",
+      "H. OpenAccount\n",
+      "I. GenerateWork\n",
+      "J. Send\n",
+      "K. Recive All\n",
+      "L. Black list\n",
+      "M. Get Pending\n",
+      "N. Check Balance\n",
+      "O. Channel Test\n",
+      "P. Test\n",
+   )
+   fmt.Scan(&usr)
+
+   switch (strings.ToUpper(usr)) {
+   case "1":
+      keyMan.WalletVerbose(true)
+
+      err := keyMan.GenerateSeed(&seed)
+      if (err != nil){
+         fmt.Println(err.Error())
+      }
+
+      keyMan.WalletVerbose(false)
+   case "2":
+      verbosity = 10
+      fmt.Print("Seed: ")
+      fmt.Scan(&usr)
+      seed, _ := strconv.Atoi(usr)
+      fmt.Print("Index: ")
+      fmt.Scan(&usr)
+      index, _ := strconv.Atoi(usr)
+      seedKey, _ := getSeedFromIndex(seed, index)
+      _, err := getAccountInfo(seedKey.NanoAddress)
+      if (err != nil) {
+         fmt.Println("error: ", err.Error())
+      }
+      _, _, err = getAccountBalance(seedKey.NanoAddress)
+      if (err != nil) {
+         fmt.Println("error: ", err.Error())
+      }
+
+   case "3":
+      var newSeed keyMan.Key
+
+      conn, err := pgx.Connect(context.Background(), databaseUrl)
+      if (err != nil) {
+         fmt.Println("main: ", err)
+         return
+      }
+      defer conn.Close(context.Background())
+
+      err = keyMan.GenerateSeed(&newSeed)
+      if (err != nil) {
+         fmt.Println("main: ", err)
+         break
+      }
+
+      hexString := hex.EncodeToString(newSeed.Seed)
+      fmt.Println("seed: ", hexString)
+
+      _, err = insertSeed(conn, newSeed.Seed)
+
+      if (err != nil) {
+         fmt.Println("main: ", err)
+         break //menu
+      }
+
+   case "4":
+      verbosity = 5
+      adhocAddress := "nano_1hiqiw6j9wo33moia3scoajhheweysiq5w1xjqeqt8m6jx6so6gj39pae5ea"
+      blarg, _, err := getNewAddress(adhocAddress)
+      if (err != nil) {
+         fmt.Println(err)
+      }
+      fmt.Println("New address: ", blarg.NanoAddress)
+   case "5":
+      verbosity = 5
+      _, err := findTotalBalance()
+      if (err != nil) {
+         fmt.Println("err: ", err.Error())
+      }
+   case "6":
+      seed, _ := getSeedFromIndex(1, 7)
+      err := receivedNano(seed.NanoAddress)
+      if (err != nil) {
+         fmt.Println("err: ", err.Error())
+      }
+
+   case "7":
+      keyMan.WalletVerbose(true)
+      verbosity = 5
+      fmt.Scan(&usr)
+      seed, _ := strconv.Atoi(usr)
+      fmt.Scan(&usr)
+      index, _ := strconv.Atoi(usr)
+
+      _, err := getSeedFromIndex(seed, index)
+      if (err != nil) {
+         fmt.Println(err.Error())
+      }
+
+   case "8":
+      fmt.Print("Seed: ")
+      fmt.Scan(&usr)
+      seed, _ := strconv.Atoi(usr)
+      fmt.Print("Index: ")
+      fmt.Scan(&usr)
+      index, _ := strconv.Atoi(usr)
+      fmt.Print("Nano: ")
+      fmt.Scan(&usr)
+      nano, _ := strconv.Atoi(usr)
+
+      manualWalletUpdate(seed, index, int64(nano))
+
+   case "9":
+      verbosity = 5
+      getBlockCount()
+   case "A":
+      verbosity = 5
+      fmt.Print("Seed: ")
+      fmt.Scan(&usr)
+      seed, _ := strconv.Atoi(usr)
+      fmt.Print("Index: ")
+      fmt.Scan(&usr)
+      index, _ := strconv.Atoi(usr)
+      seedKey, _ := getSeedFromIndex(seed, index)
+      err := clearPoW(seedKey.NanoAddress)
+      if (err != nil) {
+         fmt.Println("error: ", err.Error())
+      }
+   case "B":
+      verbosity = 5
+      err := telemetry()
+      if (err != nil) {
+         fmt.Println("err: ", err.Error())
+      }
+   case "C":
+      verbosity = 5
+      getAccountInfo("nano_1afhc54bhcqkrdwz7rwmwcexfssnwsbbkzwfhj3a7wxa17k93zbh3k4cknkb")
+   case "E":
+      verbosity = 5
+      h, _ := hex.DecodeString("EECE7188B8557634EBCFCCA9ABB5A640556FA67AD9AC13E9BE4D767A7230C040")
+      block, _ := getBlockInfo(h)
+      fmt.Println("Block", block)
+
+   case "H":
+      received, _, _,  err := Receive("nano_17iperkf8wx68akk66t4zynhuep7oek397nghh75oenahauch41g6pfgtrnu")
+      if (err != nil) {
+         fmt.Println("Error: ", err.Error())
+      }
+      fmt.Println("Received:", received)
+
+   case "I":
+      var seedSend *keyMan.Key
+      var seedReceive *keyMan.Key
+      seedSend, _ = getSeedFromIndex(1, 0)
+      seedReceive, _ = getSeedFromIndex(1, 12)
+      SendEasy(seedSend.NanoAddress,
+      seedReceive.NanoAddress,
+      nt.NewRawFromNano(0.50),
+      false)
+   case "J":
+      // Send commnad
+      verbosity = 5
+      fmt.Print("Seed: ")
+      fmt.Scan(&usr)
+      seed, _ := strconv.Atoi(usr)
+      fmt.Print("Index: ")
+      fmt.Scan(&usr)
+      index, _ := strconv.Atoi(usr)
+      sendKey, _ := getSeedFromIndex(seed, index)
+      fmt.Print("Nano address: ")
+      fmt.Scan(&usr)
+      nanoAddress := usr
+      toPubKey, err := keyMan.AddressToPubKey(nanoAddress)
+      if (err != nil) {
+         fmt.Println("Error: ", err.Error())
+         continue
+      }
+      fmt.Print("Amount in Nano: ")
+      fmt.Scan(&usr)
+      amountNano, _ := strconv.ParseFloat(usr, 64)
+      amountRaw := nt.NewRawFromNano(amountNano)
+      Send(sendKey, toPubKey, amountRaw, nil, nil, -1)
+   case "K":
+      verbosity = 5
+
+      for i := 0; i <= 41; i++ {
+         fmt.Println("--------------", i, "-------------")
+         seedReceive, _ := getSeedFromIndex(1, i)
+         err := ReceiveAll(seedReceive.NanoAddress)
+         if (err != nil) {
+            fmt.Println("Error:", err.Error())
+         }
+      }
+   case "L":
+      conn, err := pgx.Connect(context.Background(), databaseUrl)
+      if (err != nil) {
+         fmt.Println(err.Error())
+      }
+      defer conn.Close(context.Background())
+
+      seedSend, _ := getSeedFromIndex(1, 0)
+      seedReceive, _ := getSeedFromIndex(1, 8)
+      blacklist(conn, seedSend.PublicKey, seedReceive.PublicKey)
+
+   case "M":
+      verbosity = 5
+      seed, _ := getSeedFromIndex(1, 5)
+      blarg, _ := getPendingHashes(seed.NanoAddress)
+      fmt.Println(blarg[seed.NanoAddress][0])
+   case "N":
+      verbosity = 5
+      //fmt.Print("Seed: ")
+      //fmt.Scan(&usr)
+      //seed, _ := strconv.Atoi(usr)
+      //fmt.Print("Index: ")
+      //fmt.Scan(&usr)
+      //index, _ := strconv.Atoi(usr)
+      for index := 0; index <= 41; index++ {
+         seedkey, _ := getSeedFromIndex(1, index)
+         err := checkBalance(seedkey.NanoAddress)
+         if (err != nil) {
+            fmt.Println(err.Error())
+         }
+      }
+   case "O":
+      verbosity = 5
+
+      seedkey, _ := getSeedFromIndex(1, 0)
+      go preCalculateNextPoW(seedkey.NanoAddress, true)
+      //time.Sleep(5 * time.Second)
+      work := calculateNextPoW(seedkey.NanoAddress, true)
+
+      fmt.Println("work: ", work)
+   case "P":
+      verbosity = 10
+
+      err := returnAllReceiveable()
+      if (err != nil) {
+         fmt.Println(fmt.Errorf("main: %w", err))
+      }
+   default:
+      break menu
+   }
+}
 }
 
 // getNewAddress finds the next availalbe address given the keys stored in the
@@ -771,8 +789,8 @@ func blacklistHash(sendingAddress []byte, receivingHash nt.BlockHash) error {
    return nil
 }
 
-// receivedNano is a large function that does most of the work for nanonymous.
-// Upon receiving nano it does 5 distinct things:
+// receivedNano is a large function that does most of the back-end work for
+// nanonymous.  Upon receiving nano it does 5 distinct things:
 //    (1) Updates the database with the newly recived nano
 //    (2) Checks if we were expecting the tranaction
 //    (3) Calculates the fee
@@ -867,6 +885,8 @@ func receivedNano(nanoAddress string) error {
 }
 
 var lock sync.Mutex
+// findSendingWallets is just a sub function of receivedNano(). It's only here
+// for readablity and Mutexing the database.
 func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
    var foundEntry bool
    var err error
@@ -990,6 +1010,8 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
    return nil
 }
 
+// sendNanoToClient is just a subfunction of receivedNano(). It's just here for
+// readability.
 func sendNanoToClient(t *Transaction) error {
    var err error
 
@@ -1039,6 +1061,99 @@ func sendNanoToClient(t *Transaction) error {
    }
 
    return nil
+}
+// Send is intended to be used with receivedNano() (although it doesn't have to be). It's a wrapper to sendNano that gives callbacks to the transaction manager when done.
+func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan transactionComm, errCh chan error, i int) (nt.BlockHash, error) {
+   var tComm transactionComm
+
+   newHash, err := sendNano(fromKey, toPublicKey, amount)
+   if (err != nil) {
+      if (errCh != nil) {
+         if (verbosity >= 5) {
+            fmt.Println("Error with send!!!")
+         }
+         if (i >= 0) {
+            err = fmt.Errorf(">>%d<< %w", i, err)
+         }
+         errCh <- err
+      }
+      return nil, fmt.Errorf("Send: %w", err)
+   }
+
+   setAddressNotInUse(fromKey.NanoAddress)
+
+   if (commCh != nil) {
+      tComm.i = i
+      tComm.hash = newHash
+      commCh <- tComm
+   }
+
+   return newHash, nil
+}
+
+// ReceiveAndSend is a function that is inded to be used with receivedNano(). It
+// receives all funds to an internal wallet, and then, with the direction of the
+// transaction manager sends the funds to the client.
+func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan transactionComm, errCh chan error, transactionWg *sync.WaitGroup, abort *bool) {
+   wg.Add(1)
+   defer wg.Done()
+
+   var tComm transactionComm
+
+   // Wait until all sends have processed and confirmed
+   transactionWg.Wait()
+   transactionWg.Add(1)
+   if (*abort) {
+      return
+   }
+
+   // All transactions are still pending. Receive the funds.
+   err := ReceiveAll(transitionalKey.NanoAddress)
+   if (err != nil) {
+      err = fmt.Errorf("ReceiveAndSend: %w", err)
+      errCh <- err
+   } else {
+      tComm.i = 2
+      commCh <- tComm
+   }
+
+   // Wait until all receives have processed and confirmed
+   transactionWg.Wait()
+   transactionWg.Add(1)
+   if (*abort) {
+      return
+   }
+
+   // Finally, send to client.
+   newHash, err := Send(transitionalKey, toPublicKey, amount, nil, nil, -1)
+   if (err != nil) {
+      err = fmt.Errorf("ReceiveAndSend: %w", err)
+      errCh <- err
+   } else {
+      tComm.i = 3
+      tComm.hash = newHash
+      commCh <- tComm
+   }
+}
+
+// SendEasy is just a wrapper for Send(). If you have the info already Send()
+// is more efficient so don't overuse this function.
+func SendEasy(from string, to string, amount *nt.Raw, all bool) {
+
+   fromKey, _, _, err := getSeedFromAddress(from)
+   toKey, _, _, err := getSeedFromAddress(to)
+   if (err != nil) {
+      toKey.PublicKey, _ = keyMan.AddressToPubKey(to)
+   }
+
+   if (all) {
+      err = sendAllNano(&fromKey, toKey.PublicKey)
+   } else {
+      _, err = Send(&fromKey, toKey.PublicKey, amount, nil, nil, -1)
+      if (err != nil && verbosity >= 5) {
+         fmt.Println("Error: ", err.Error())
+      }
+   }
 }
 
 // rawToNANO is used to convert raw to NANO AKA Mnano (the communnity just calls
@@ -1127,11 +1242,16 @@ func checkBlackList(parentSeedId int, index int, clientAddress []byte) (bool, *k
    }
 }
 
+// getClientAddress is an interface to work with the active transaction list.
+// Takes an internal wallet and returns the registered client address.
 func getClientAddress(parentSeedId int, index int) []byte {
    key := strconv.Itoa(parentSeedId) + "-" + strconv.Itoa(index)
    return activeTransactionList[key]
 }
 
+// setClientAddress is an interface to work with the active transaction list.
+// Adds or removes an entry that maps one of our internal wallets to a client
+// address.
 func setClientAddress(parentSeedId int, index int, clientAddress []byte) error {
    key := strconv.Itoa(parentSeedId) + "-" + strconv.Itoa(index)
    if (activeTransactionList[key] != nil) {
@@ -1147,96 +1267,9 @@ func setClientAddress(parentSeedId int, index int, clientAddress []byte) error {
    return nil
 }
 
-func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan transactionComm, errCh chan error, transactionWg *sync.WaitGroup, abort *bool) {
-   wg.Add(1)
-   defer wg.Done()
-
-   var tComm transactionComm
-
-   // Wait until all sends have processed and confirmed
-   transactionWg.Wait()
-   transactionWg.Add(1)
-   if (*abort) {
-      return
-   }
-
-   // All transactions are still pending. Receive the funds.
-   err := ReceiveAll(transitionalKey.NanoAddress)
-   if (err != nil) {
-      err = fmt.Errorf("ReceiveAndSend: %w", err)
-      errCh <- err
-   } else {
-      tComm.i = 2
-      commCh <- tComm
-   }
-
-   // Wait until all receives have processed and confirmed
-   transactionWg.Wait()
-   transactionWg.Add(1)
-   if (*abort) {
-      return
-   }
-
-   // Finally, send to client.
-   newHash, err := Send(transitionalKey, toPublicKey, amount, nil, nil, -1)
-   if (err != nil) {
-      err = fmt.Errorf("ReceiveAndSend: %w", err)
-      errCh <- err
-   } else {
-      tComm.i = 3
-      tComm.hash = newHash
-      commCh <- tComm
-   }
-}
-
-func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan transactionComm, errCh chan error, i int) (nt.BlockHash, error) {
-   var tComm transactionComm
-
-   newHash, err := sendNano(fromKey, toPublicKey, amount)
-   if (err != nil) {
-      if (errCh != nil) {
-         if (verbosity >= 5) {
-            fmt.Println("Error with send!!!")
-         }
-         if (i >= 0) {
-            err = fmt.Errorf(">>%d<< %w", i, err)
-         }
-         errCh <- err
-      }
-      return nil, fmt.Errorf("Send: %w", err)
-   }
-
-   setAddressNotInUse(fromKey.NanoAddress)
-
-   if (commCh != nil) {
-      tComm.i = i
-      tComm.hash = newHash
-      commCh <- tComm
-   }
-
-   return newHash, nil
-}
-
-// SendEasy is just a wrapper for Send(). If you have the info already Send()
-// is more efficient so don't overuse this function.
-func SendEasy(from string, to string, amount *nt.Raw, all bool) {
-
-   fromKey, _, _, err := getSeedFromAddress(from)
-   toKey, _, _, err := getSeedFromAddress(to)
-   if (err != nil) {
-      toKey.PublicKey, _ = keyMan.AddressToPubKey(to)
-   }
-
-   if (all) {
-      err = sendAllNano(&fromKey, toKey.PublicKey)
-   } else {
-      _, err = Send(&fromKey, toKey.PublicKey, amount, nil, nil, -1)
-      if (err != nil && verbosity >= 5) {
-         fmt.Println("Error: ", err.Error())
-      }
-   }
-}
-
+// sendNano is the base-level function to send nano. Takes an internal key
+// object to send from, a public key to send to, and of cource the amount to
+// send in raw. Returns the block hash of the resulting block.
 func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt.BlockHash, error) {
    var block keyMan.Block
    var newHash nt.BlockHash
@@ -1325,6 +1358,7 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt
    return newHash, nil
 }
 
+// Wrapper to sendNano() that sends the total balance of the wallet.
 func sendAllNano(fromKey *keyMan.Key, toPublicKey []byte) error {
    defer setAddressNotInUse(fromKey.NanoAddress)
 
@@ -1341,6 +1375,7 @@ func sendAllNano(fromKey *keyMan.Key, toPublicKey []byte) error {
    return nil
 }
 
+// Uhhhhh prob delete this funciton, TODO
 func manualWalletUpdate(seed int, index int, nano int64) error {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
@@ -1370,6 +1405,7 @@ func manualWalletUpdate(seed int, index int, nano int64) error {
    return nil
 }
 
+// needs improvment but can probaby be in CLI TODO
 func ReceiveAll(account string) error {
 
    for {
@@ -1385,6 +1421,9 @@ func ReceiveAll(account string) error {
    return nil
 }
 
+// Receive takes the next available receivable block and receives it. Returns
+// the amount received, the block hash of the created block, and the number of
+// remaining pending/receivable hashes.
 func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
    var block keyMan.Block
    var pendingInfo BlockInfo
@@ -1671,6 +1710,7 @@ func getPoW(nanoAddress string, isReceiveBlock bool) (string, error) {
    return PoW, nil
 }
 
+// TODO
 func checkBalance(nanoAddress string) error {
 
    balance, receiveable, _ := getAccountBalance(nanoAddress)
@@ -1693,6 +1733,8 @@ func checkBalance(nanoAddress string) error {
    return nil
 }
 
+// calculateFee applies the stored fee percent, but takes out any resulting dust
+// because ain't nobody got time for that.
 func calculateFee(payment *nt.Raw) *nt.Raw {
 
    // Find base fee simply by taking the percentage
@@ -1700,18 +1742,14 @@ func calculateFee(payment *nt.Raw) *nt.Raw {
 
    // Don't want the user to have to deal with dust so I'll round the fee down
    // to the nearest .001 * minimum
-   minDust := oneNano().Div(minPayment, nt.NewRaw(1000))
+   minDust := nt.OneNano().Div(minPayment, nt.NewRaw(1000))
 
-   _, dust := oneNano().DivMod(fee, minDust)
+   _, dust := nt.OneNano().DivMod(fee, minDust)
 
    // Remove any dust from the fee
    fee.Sub(fee, dust)
 
    return fee
-}
-
-func oneNano() *nt.Raw {
-   return nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)
 }
 
 // returnAllReceivable checks all wallets in all seeds and finds any receiveable
@@ -1785,32 +1823,6 @@ func returnAllReceiveable() error {
          }
       }
    }
-
-   return nil
-}
-
-func checkForOtherInstances() error {
-   const INSTANCE_PORT = 41720
-
-   listener, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", INSTANCE_PORT))
-   if (err != nil) {
-      if (strings.Index(err.Error(), "in use") != -1) {
-         return fmt.Errorf("checkForOtherInstances: Another instance was detected")
-      } else {
-         return fmt.Errorf("checkForOtherInstances: %w", err)
-      }
-   }
-
-   // Listen for eternity to essentially block the port
-   go func() {
-      for {
-         conn, err := listener.Accept()
-         if (err != nil) {
-            Error.Println("Error with single instance port:", err.Error())
-         }
-         conn.Close()
-      }
-   }()
 
    return nil
 }

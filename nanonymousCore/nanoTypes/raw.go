@@ -76,6 +76,10 @@ func NewRawFromNano(nano float64) *Raw {
    return raw
 }
 
+func OneNano() *Raw {
+   return NewRaw(0).Exp(NewRaw(10), NewRaw(30), nil)
+}
+
 func (r Raw) String() string {
    return r.Int.String()
 }

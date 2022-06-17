@@ -85,7 +85,7 @@ func transactionManager(t *Transaction) {
             //           refund the user!
             nanoAddress, _ := keyMan.PubKeyToAddress(t.paymentAddress)
             Error.Println("Refund failed!! Address:", nanoAddress, " error:", err.Error())
-            // TODO email myself??
+            SendEmail("Refund failed!! Address: "+ nanoAddress +" error: "+ err.Error())
          }
          reverseTransitionalAddress(t)
          t.abort = true
