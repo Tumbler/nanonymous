@@ -527,7 +527,7 @@ func getNanoUSDValue() (float64, error) {
 }
 
 // TODO attach to new email
-func sendEamil(contents string) error {
+func sendEmail(contents string) error {
    return nil
    from := "TumblerTerrall@gmail.com"
    password := ""
