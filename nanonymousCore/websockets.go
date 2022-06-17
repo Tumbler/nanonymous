@@ -242,6 +242,7 @@ func handleNotification(cBlock ConfirmationBlock) {
    defer wg.Done()
 
    msg := cBlock.Message
+   // Send to one of our tracked addresses
    if (msg.Block.SubType == "send") {
       if (addressExsistsInDB(msg.Block.LinkAsAccount)) {
          // Check if any transaction manager is expecting this and give to them instead
@@ -266,8 +267,16 @@ func handleNotification(cBlock ConfirmationBlock) {
                fmt.Println(" External Send")
                fmt.Println("Starting Transaction!")
             }
-            receivedNano(msg.Block.LinkAsAccount)
+            if (addressIsReceiveOnly(msg.Block.LinkAsAccount)) {
+               // Address flagged, don't start a transaction
+               Receive(msg.Block.LinkAsAccount)
+            } else {
+               receivedNano(msg.Block.LinkAsAccount)
+            }
          }
+      } else {
+         // Tracking an address that we don't own?
+         Warning.Println("Tracked address not in DB")
       }
    } else if (msg.Block.SubType == "receive") {
       if (verbosity >= 5) {

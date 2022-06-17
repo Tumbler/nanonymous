@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS wallets(
       ON DELETE CASCADE,
    pow TEXT,
    in_use BOOL DEFAULT true,
+   receive_only BOOL DEFAULT false,
    PRIMARY KEY (parent_seed, index)
 );
 

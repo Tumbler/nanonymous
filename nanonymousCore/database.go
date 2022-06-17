@@ -365,6 +365,29 @@ func addressExsistsInDB(nanoAddress string) bool {
    }
 }
 
+func addressIsReceiveOnly(nanoAddress string) bool {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return false
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "receive_only " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "\"hash\" = $1;"
+
+   pubKey, _ := keyMan.AddressToPubKey(nanoAddress)
+   hash := blake2b.Sum256(pubKey)
+   var receiveOnly bool
+   err = conn.QueryRow(context.Background(), queryString, hash).Scan(&receiveOnly)
+
+   return receiveOnly
+}
+
 // inserSeed saves an encrytped version of the seed given into the database.
 func insertSeed(conn psqlDB, seed []byte) (int, error) {
    var id int

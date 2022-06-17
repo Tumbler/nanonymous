@@ -173,6 +173,7 @@ func Test_findTotalBalance(t *testing.T) {
    }
 }
 
+// TODO add test for recive_only
 func Test_receivedNano(t *testing.T) {
    databaseUrl = "postgres://test:testing@localhost:5432/gotests"
    databasePassword = "testing"
