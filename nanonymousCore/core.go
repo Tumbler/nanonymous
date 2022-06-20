@@ -272,7 +272,7 @@ func handleRequest(conn net.Conn) error {
    if (len(array) >= 2 && array[0] == "newaddress") {
       var subArray = strings.Split(array[1], "=")
       if (len(subArray) >= 2 && subArray[0] == "address") {
-         newKey, _, err := getNewAddress(subArray[1])
+         newKey, _, err := getNewAddress(subArray[1], false)
          if (err != nil) {
             fmt.Println("handleRequest: ", err.Error())
             conn.Write([]byte("There was an error, please try again later"))
@@ -314,7 +314,7 @@ func handleRequest(conn net.Conn) error {
 // getNewAddress finds the next availalbe address given the keys stored in the
 // database and returns address B. If "receivingAddress" A is not an empty
 // string, then it will also place A->B into the blacklist.
-func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
+func getNewAddress(receivingAddress string, receiveOnly bool) (*keyMan.Key, int, error) {
    var seed keyMan.Key
 
    conn, err := pgx.Connect(context.Background(), databaseUrl)
@@ -381,12 +381,12 @@ func getNewAddress(receivingAddress string) (*keyMan.Key, int, error) {
    // Add to list of managed wallets
    queryString =
    "INSERT INTO "+
-      "wallets(parent_seed, index, balance, hash) " +
+      "wallets(parent_seed, index, balance, hash, receive_only) " +
    "VALUES " +
-      "($1, $2, 0, $3)"
+      "($1, $2, 0, $3, $4)"
 
    hash := blake2b.Sum256(seed.PublicKey)
-   rowsAffected, err := tx.Exec(context.Background(), queryString, id, seed.Index, hash[:])
+   rowsAffected, err := tx.Exec(context.Background(), queryString, id, seed.Index, hash[:], receiveOnly)
    if (err != nil) {
       return nil, 0, fmt.Errorf("getNewAddress: %w", err)
    }
@@ -757,7 +757,7 @@ func sendNanoToClient(t *Transaction) error {
       t.commChannel <- *new(transactionComm)
    } else if (len(t.sendingKeys) > 1) {
       // Need to do a multi-send; Get a new wallet to combine all funds into
-      t.transitionalKey, t.transitionSeedId, err = getNewAddress("")
+      t.transitionalKey, t.transitionSeedId, err = getNewAddress("", false)
       if (err != nil) {
          return fmt.Errorf("sendNanoToClient: %w", err)
       }

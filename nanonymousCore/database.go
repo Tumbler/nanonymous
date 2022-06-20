@@ -236,6 +236,60 @@ func getSeedRowsFromDatabase() (pgx.Rows, error) {
    return rows, nil
 }
 
+func getWalletRowsFromDatabase() (pgx.Rows, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "parent_seed, " +
+      "index, " +
+      "balance " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "receive_only = FALSE " +
+   "ORDER BY " +
+      "parent_seed, " +
+      "index;"
+
+   rows, err := conn.Query(context.Background(), queryString)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+   }
+
+   return rows, nil
+}
+
+func getAllWalletRowsFromDatabase() (pgx.Rows, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "parent_seed, " +
+      "index, " +
+      "balance " +
+   "FROM " +
+      "wallets " +
+   "ORDER BY " +
+      "parent_seed, " +
+      "index;"
+
+   rows, err := conn.Query(context.Background(), queryString)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+   }
+
+   return rows, nil
+}
+
 func getCurrentIndexFromDatabase(id int) (int, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
@@ -386,6 +440,46 @@ func addressIsReceiveOnly(nanoAddress string) bool {
    err = conn.QueryRow(context.Background(), queryString, hash).Scan(&receiveOnly)
 
    return receiveOnly
+}
+
+func setAddressReceiveOnly(nanoAddress string) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "UPDATE " +
+      "wallets " +
+   "SET " +
+      "\"receive_only\" = TRUE " +
+   "WHERE " +
+      "\"hash\" = $1;"
+
+   pubKey,  _ := keyMan.AddressToPubKey(nanoAddress)
+   nanoAddressHash := blake2b.Sum256(pubKey)
+   conn.Exec(context.Background(), queryString, nanoAddressHash[:])
+}
+
+func setAddressNotReceiveOnly(nanoAddress string) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "UPDATE " +
+      "wallets " +
+   "SET " +
+      "\"receive_only\" = FALSE " +
+   "WHERE " +
+      "\"hash\" = $1;"
+
+   pubKey,  _ := keyMan.AddressToPubKey(nanoAddress)
+   nanoAddressHash := blake2b.Sum256(pubKey)
+   conn.Exec(context.Background(), queryString, nanoAddressHash[:])
 }
 
 // inserSeed saves an encrytped version of the seed given into the database.

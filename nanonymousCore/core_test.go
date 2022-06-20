@@ -119,7 +119,7 @@ func Test_getNewAddress(t *testing.T) {
    }
 
    for _, test := range test1 {
-      key, _, err := getNewAddress(test.inputAddress)
+      key, _, err := getNewAddress(test.inputAddress, false)
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }

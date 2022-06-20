@@ -14,46 +14,109 @@ import (
 
    // 3rd party packages
    pgx "github.com/jackc/pgx/v4"
+   "github.com/chzyer/readline"
 )
 
 func CLI() {
    var usr string
    var seed keyMan.Key
+   verbosity = 5
 
    menu:
    for {
       fmt.Print(
-         //"1. Wallet\n"
-         //"2. Database\n"
-         //"3. RCP\n"
-         "1. Generate Seed\n",
-         "2. Get Account info\n",
-         "3. Insert into database\n",
-         "4. Send pretend request for new address\n",
-         "5. Find total balance\n",
-         "6. Pretend nano receive\n",
-         "7. Get Wallet Info\n",
-         "8. Add nano to wallet\n",
-         "9. Get block count\n",
-         "A. Clear PoW\n",
-         "B. Telemetry\n",
-         "C. Get Account Info\n",
-         "D. Sign Block\n",
-         "E. Block Info\n",
-         "H. OpenAccount\n",
-         "I. GenerateWork\n",
-         "J. Send\n",
-         "K. Recive All\n",
-         "L. Black list\n",
-         "M. Get Pending\n",
-         "N. Check Balance\n",
-         "O. Channel Test\n",
-         "P. Test\n",
+         "1. Wallet\n",
+         "2. Database\n",
+         "3. RCP\n",
+         //"1. Generate Seed\n",
+         //"2. Get Account info\n",
+         //"3. Insert into database\n",
+         //"4. Send pretend request for new address\n",
+         //"5. Find total balance\n",
+         //"6. Pretend nano receive\n",
+         //"7. Get Wallet Info\n",
+         //"8. Add nano to wallet\n",
+         //"9. Get block count\n",
+         //"A. Clear PoW\n",
+         //"B. Telemetry\n",
+         //"C. Get Account Info\n",
+         //"D. Sign Block\n",
+         //"E. Block Info\n",
+         //"H. OpenAccount\n",
+         //"I. GenerateWork\n",
+         //"J. Send\n",
+         //"K. Recive All\n",
+         //"L. Black list\n",
+         //"M. Get Pending\n",
+         //"N. Check Balance\n",
+         //"O. Channel Test\n",
+         //"P. Test\n",
       )
       fmt.Scan(&usr)
 
       switch (strings.ToUpper(usr)) {
       case "1":
+         myKey, err := getSeedFromIndex(1, 0)
+         rawBalance, _ := getBalance(myKey.NanoAddress)
+         NanoBalance := rawToNANO(rawBalance)
+         format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+         wallet, err := readline.New(format)
+         if (err != nil) {
+            fmt.Println(fmt.Errorf("CLI: %w", err))
+         }
+
+         defer wallet.Close()
+
+         walletMenu:
+         for {
+            println()
+            line, err := wallet.Readline()
+            if (err != nil) {
+               break
+            }
+            array := strings.Split(line, " ")
+
+            switch(array[0]) {
+               case "send":
+                  CLIsend(myKey, array)
+               case "ls":
+                  fallthrough
+               case "list":
+                  err = CLIlist(array)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
+               case "select":
+                  fallthrough
+               case "set":
+                  err = CLIselect(wallet, myKey, array)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
+               case "new":
+                  err = CLInew(wallet, myKey, array)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
+               case "peek":
+                  err = CLIpeek(array)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
+               case "receiveonly":
+                  err = CLIreceiveOnly(array)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
+               case "exit":
+                  break walletMenu
+               case "q":
+                  break walletMenu
+               default:
+                  println(array[0], `not recognized as a command. Try "help" or "-h"`)
+            }
+         }
+      case "one":
          keyMan.WalletVerbose(true)
 
          err := keyMan.GenerateSeed(&seed)
@@ -62,7 +125,7 @@ func CLI() {
          }
 
          keyMan.WalletVerbose(false)
-      case "2":
+      case "two":
          verbosity = 10
          fmt.Print("Seed: ")
          fmt.Scan(&usr)
@@ -80,7 +143,7 @@ func CLI() {
             fmt.Println("error: ", err.Error())
          }
 
-      case "3":
+      case "three":
          var newSeed keyMan.Key
 
          conn, err := pgx.Connect(context.Background(), databaseUrl)
@@ -109,7 +172,7 @@ func CLI() {
       case "4":
          verbosity = 5
          adhocAddress := "nano_1hiqiw6j9wo33moia3scoajhheweysiq5w1xjqeqt8m6jx6so6gj39pae5ea"
-         blarg, _, err := getNewAddress(adhocAddress)
+         blarg, _, err := getNewAddress(adhocAddress, false)
          if (err != nil) {
             fmt.Println(err)
          }
@@ -285,4 +348,172 @@ func CLI() {
          break menu
       }
    }
+}
+
+func CLIsend(myKey *keyMan.Key, args []string) {
+   toPubKey, err := keyMan.AddressToPubKey(args[2])
+   if (err != nil) {
+      println(args[2], "is not a valid address")
+      return
+   }
+
+   amountNano, err := strconv.ParseFloat(args[1], 64)
+   if (err != nil) {
+      println(args[2], "is not a valid nano amount")
+      return
+   }
+
+   amountRaw := nt.NewRawFromNano(amountNano)
+   _, err = Send(myKey, toPubKey, amountRaw, nil, nil, -1)
+   if (err != nil) {
+      println(fmt.Errorf("CLIsend: %w", err))
+   }
+}
+
+func CLIlist(args []string) error {
+   var err error
+   var rows pgx.Rows
+
+   var ignoreZeroBalance bool
+   if (contains(args, "-z")) {
+      ignoreZeroBalance = true
+   }
+
+   if (contains(args, "-a")) {
+      rows, err = getAllWalletRowsFromDatabase()
+   } else {
+      rows, err = getWalletRowsFromDatabase()
+   }
+
+   if (err != nil) {
+      return fmt.Errorf("CLIlist: %w", err)
+   }
+
+   for (rows.Next()) {
+      var seed int
+      var index int
+      var balance = nt.NewRaw(0)
+
+      rows.Scan(&seed, &index, balance)
+
+      if (ignoreZeroBalance && balance.Cmp(nt.NewRaw(0)) == 0) {
+         continue
+      }
+
+      balanceInNano := rawToNANO(balance)
+
+      fmt.Print(seed, ",", index, ":  Ӿ ", balanceInNano, "\n")
+   }
+
+   return nil
+}
+
+func CLIselect(r *readline.Instance, myKey *keyMan.Key, args []string) error {
+
+   seed, err := strconv.Atoi(args[1])
+   if (err != nil) {
+      return fmt.Errorf("CLIselect: %w", err)
+   }
+
+   index, err := strconv.Atoi(args[2])
+   if (err != nil) {
+      return fmt.Errorf("CLIselect: %w", err)
+   }
+
+   myKey, err = getSeedFromIndex(seed, index)
+   if (err != nil) {
+      return fmt.Errorf("CLIselect: %w", err)
+   }
+
+   rawBalance, _ := getBalance(myKey.NanoAddress)
+   NanoBalance := rawToNANO(rawBalance)
+   format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+
+   r.SetPrompt(format)
+
+   return nil
+}
+
+func CLInew(r *readline.Instance, myKey *keyMan.Key, args []string) error {
+
+   var receiveOnly bool
+   if (contains(args, "receiveonly")) {
+      receiveOnly = true
+   }
+   key, seed, err := getNewAddress("", receiveOnly)
+   if (err != nil) {
+      return fmt.Errorf("CLInew: %w", err)
+   }
+
+   myKey, err = getSeedFromIndex(seed, key.Index)
+   if (err != nil) {
+      return fmt.Errorf("CLIselect: %w", err)
+   }
+
+   rawBalance, _ := getBalance(myKey.NanoAddress)
+   NanoBalance := rawToNANO(rawBalance)
+   format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+
+   r.SetPrompt(format)
+
+   return nil
+}
+
+func CLIpeek(args []string) error {
+
+   seed, err := strconv.Atoi(args[1])
+   if (err != nil) {
+      return fmt.Errorf("CLIpeek: %w", err)
+   }
+
+   index, err := strconv.Atoi(args[2])
+   if (err != nil) {
+      return fmt.Errorf("CLIpeek: %w", err)
+   }
+
+   tmpKey, err := getSeedFromIndex(seed, index)
+   if (err != nil) {
+      return fmt.Errorf("CLIpeek: %w", err)
+   }
+
+   rawBalance, _ := getBalance(tmpKey.NanoAddress)
+   NanoBalance := rawToNANO(rawBalance)
+   fmt.Printf("%s(%d,%d): Ӿ %f\n", tmpKey.NanoAddress, seed, tmpKey.Index, NanoBalance)
+
+   return nil
+}
+
+func contains(a []string, search string) bool {
+   for _, s := range a {
+      if s == search {
+         return true
+      }
+   }
+   return false
+}
+
+func CLIreceiveOnly(args []string) error {
+
+   seed, err := strconv.Atoi(args[1])
+   if (err != nil) {
+      return fmt.Errorf("CLIreceiveOnly: %w", err)
+   }
+
+   index, err := strconv.Atoi(args[2])
+   if (err != nil) {
+      return fmt.Errorf("CLIreceiveOnly: %w", err)
+   }
+
+   key, err := getSeedFromIndex(seed, index)
+   if (err != nil) {
+      return fmt.Errorf("CLIreceiveOnly: %w", err)
+   }
+
+   if (contains(args, "off")) {
+      setAddressNotReceiveOnly(key.NanoAddress)
+   } else {
+      setAddressReceiveOnly(key.NanoAddress)
+   }
+
+   return nil
 }
