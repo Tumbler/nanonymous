@@ -43,6 +43,29 @@ func getAccountBalance(nanoAddress string) (*nt.Raw, *nt.Raw, error) {
    return response.Balance, response.Receivable, nil
 }
 
+func getAccountBlockCount(nanoAddress string) (int, error) {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action":  "account_block_count",
+      "account": "`+ nanoAddress +`"
+    }`
+
+   response := struct {
+      BlockCount nt.JInt `json:"block_count"`
+      Error string
+   }{}
+
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      return 0, fmt.Errorf("getAddressBalance: %w", err)
+   }
+
+   return int(response.BlockCount), nil
+}
+
 func getOwnerOfBlock(hash string) (string, error) {
 
    url := "http://"+ nodeIP
@@ -246,7 +269,7 @@ type AccountInfo struct {
    Balance *nt.Raw
    ModifiedTimestamp nt.JInt      `json:"modified_timestamp"`
    BlockCount nt.JInt             `json:"block_count"`
-   Account_Version nt.JInt        `json:"account_version"`
+   AccountVersion nt.JInt         `json:"account_version"`
    ConfirmationHeight nt.JInt     `json:"confirmation_height"`
    ConfirmationHeightFrontier nt.BlockHash `json:"confirmation_height_frontier"`
    Error string
@@ -301,7 +324,7 @@ func getAccountHistory(nanoAddress string, num int) (AccountHistory, error) {
    var response AccountHistory
    err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
-      return response, fmt.Errorf("getAccountInfo: %w", err)
+      return response, fmt.Errorf("getAccountHistory: %w", err)
    }
 
    return response, nil

@@ -272,7 +272,7 @@ func handleRequest(conn net.Conn) error {
    if (len(array) >= 2 && array[0] == "newaddress") {
       var subArray = strings.Split(array[1], "=")
       if (len(subArray) >= 2 && subArray[0] == "address") {
-         newKey, _, err := getNewAddress(subArray[1], false)
+         newKey, _, err := getNewAddress(subArray[1], false, 0)
          if (err != nil) {
             fmt.Println("handleRequest: ", err.Error())
             conn.Write([]byte("There was an error, please try again later"))
@@ -314,7 +314,7 @@ func handleRequest(conn net.Conn) error {
 // getNewAddress finds the next availalbe address given the keys stored in the
 // database and returns address B. If "receivingAddress" A is not an empty
 // string, then it will also place A->B into the blacklist.
-func getNewAddress(receivingAddress string, receiveOnly bool) (*keyMan.Key, int, error) {
+func getNewAddress(receivingAddress string, receiveOnly bool, seedId int) (*keyMan.Key, int, error) {
    var seed keyMan.Key
 
    conn, err := pgx.Connect(context.Background(), databaseUrl)
@@ -329,18 +329,35 @@ func getNewAddress(receivingAddress string, receiveOnly bool) (*keyMan.Key, int,
    }
    defer tx.Rollback(context.Background())
 
-   queryString :=
-   "SELECT " +
-      "id, " +
-      "pgp_sym_decrypt_bytea(seed, $1), " +
-      "current_index " +
-   "FROM " +
-      "seeds " +
-   "WHERE " +
-      "current_index < $2 AND " +
-      "active = true " +
-   "ORDER BY " +
-      "id;"
+   var queryString string
+   if (seedId == 0) {
+      queryString =
+      "SELECT " +
+         "id, " +
+         "pgp_sym_decrypt_bytea(seed, $1), " +
+         "current_index " +
+      "FROM " +
+         "seeds " +
+      "WHERE " +
+         "current_index < $2 AND " +
+         "active = true " +
+      "ORDER BY " +
+         "id;"
+   } else {
+      queryString =
+      "SELECT " +
+         "id, " +
+         "pgp_sym_decrypt_bytea(seed, $1), " +
+         "current_index " +
+      "FROM " +
+         "seeds " +
+      "WHERE " +
+         "current_index < $2 AND " +
+         "active = true AND " +
+         "id = "+ strconv.Itoa(seedId) +" " +
+      "ORDER BY " +
+         "id;"
+   }
 
    rows, err := tx.Query(context.Background(), queryString, databasePassword, MAX_INDEX)
    if (err != nil) {
@@ -757,7 +774,7 @@ func sendNanoToClient(t *Transaction) error {
       t.commChannel <- *new(transactionComm)
    } else if (len(t.sendingKeys) > 1) {
       // Need to do a multi-send; Get a new wallet to combine all funds into
-      t.transitionalKey, t.transitionSeedId, err = getNewAddress("", false)
+      t.transitionalKey, t.transitionSeedId, err = getNewAddress("", false, 0)
       if (err != nil) {
          return fmt.Errorf("sendNanoToClient: %w", err)
       }
