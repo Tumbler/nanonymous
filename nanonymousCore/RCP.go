@@ -75,7 +75,7 @@ func getOwnerOfBlock(hash string) (string, error) {
    request :=
    `{
       "action":  "block_account",
-      "account": "`+ hash +`"
+      "hash": "`+ hash +`"
     }`
 
    response := struct {
@@ -296,6 +296,47 @@ func getAccountInfo(nanoAddress string) (AccountInfo, error) {
    return response, nil
 }
 
+func getAccountRep(nanoAddress string) (AccountInfo, error) {
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "account_representative",
+      "account": "`+ nanoAddress +`"
+    }`
+
+   var response AccountInfo
+
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      return response, fmt.Errorf("getAccountRep: %w", err)
+   }
+
+   return response, nil
+}
+
+func getAccountWeight(nanoAddress string) (*nt.Raw, error) {
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "account_weight",
+      "account": "`+ nanoAddress +`"
+    }`
+
+   response := struct {
+      Weight *nt.Raw
+      Error string
+   }{}
+
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      return nil, fmt.Errorf("getAccountRep: %w", err)
+   }
+
+   return response.Weight, nil
+}
+
 type AccountHistory struct {
    History []struct {
       Type string
@@ -382,10 +423,154 @@ func getBlockInfo(hash nt.BlockHash) (BlockInfo, error) {
    var response BlockInfo
    err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
-      return response, fmt.Errorf("getABlockInfo: %w", err)
+      return response, fmt.Errorf("getBlockInfo: %w", err)
    }
 
    return response, nil
+}
+
+func getAvailableSupply () (*nt.Raw, error) {
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "available_supply"
+    }`
+
+    response := struct {
+       Available *nt.Raw
+       Error string
+    }{}
+
+   err := rcpCall(request, &response, url, nil)
+   if (err != nil) {
+      return nil, fmt.Errorf("getAvailableSupply: %w", err)
+   }
+
+   return response.Available, nil
+}
+
+func printBootstrapStatus() error {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "bootstrap_status"
+    }`
+
+   response := struct {
+      Error string
+   }{}
+
+   verboseSave := verbosity
+   verbosity = 9
+   err := rcpCall(request, &response, url, nil)
+   if (err != nil) {
+      return fmt.Errorf("printBootstrapStatus: %w", err)
+   }
+   verbosity = verboseSave
+
+   return nil
+}
+
+func printConfirmationQuorum() error {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "confirmation_quorum"
+    }`
+
+   response := struct {
+      Error string
+   }{}
+
+   verboseSave := verbosity
+   verbosity = 9
+   err := rcpCall(request, &response, url, nil)
+   if (err != nil) {
+      return fmt.Errorf("printBootstrapStatus: %w", err)
+   }
+   verbosity = verboseSave
+
+   return nil
+}
+
+func getBlocksInChain(block nt.BlockHash, count int) ([]nt.BlockHash, error) {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "chain",
+      "block": "`+ block.String() +`",
+      "count": "`+ strconv.Itoa(count) +`"
+    }`
+
+   response := struct {
+      Blocks []nt.BlockHash
+      Error string
+   }{}
+
+   err := rcpCall(request, &response, url, nil)
+   if (err != nil) {
+      return nil, fmt.Errorf("getBlocksInChain: %w", err)
+   }
+
+   return response.Blocks, nil
+
+}
+
+func getActiveConfirmations() (string, int, int, error) {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "confirmation_active"
+    }`
+
+   response := struct {
+      Confirmations string
+      Unconfirmed nt.JInt
+      Confirmed nt.JInt
+      Error string
+   }{}
+
+   err := rcpCall(request, &response, url, nil)
+   if (err != nil) {
+      return "", 0, 0, fmt.Errorf("getActiveConfirmations: %w", err)
+   }
+
+   return response.Confirmations, int(response.Unconfirmed), int(response.Confirmed), nil
+
+}
+
+func printConfirmationHistory() error {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "confirmation_history"
+    }`
+
+   response := struct {
+      Error string
+   }{}
+
+   verboseSave := verbosity
+   verbosity = 9
+   err := rcpCall(request, &response, url, nil)
+   if (err != nil) {
+      return fmt.Errorf("printBootstrapStatus: %w", err)
+   }
+   verbosity = verboseSave
+
+   return nil
+
 }
 
 func generateWorkOnNode(hash nt.BlockHash, difficulty string) (string, error) {

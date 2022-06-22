@@ -24,6 +24,24 @@ func CLI() {
       verbosity = 5
    }
 
+   myKey, err := getSeedFromIndex(1, 0)
+   rawBalance, _ := getBalance(myKey.NanoAddress)
+   NanoBalance := rawToNANO(rawBalance)
+   format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+   wallet, err := readline.New(format)
+   wallet.Config.AutoComplete = walletCompleter
+   if (err != nil) {
+      fmt.Println(fmt.Errorf("CLI: %w", err))
+   }
+   defer wallet.Close()
+
+   RPC, err := readline.New("RCP> ")
+   RPC.Config.AutoComplete = RCPCompleter
+   if (err != nil) {
+      fmt.Println(fmt.Errorf("CLI: %w", err))
+   }
+   defer RPC.Close()
+
    menu:
    for {
       fmt.Print(
@@ -58,18 +76,6 @@ func CLI() {
 
       switch (strings.ToUpper(usr)) {
       case "1":
-         myKey, err := getSeedFromIndex(1, 0)
-         rawBalance, _ := getBalance(myKey.NanoAddress)
-         NanoBalance := rawToNANO(rawBalance)
-         format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
-         wallet, err := readline.New(format)
-         wallet.Config.AutoComplete = walletCompleter
-         if (err != nil) {
-            fmt.Println(fmt.Errorf("CLI: %w", err))
-         }
-
-         defer wallet.Close()
-
          walletMenu:
          for {
             println()
@@ -115,6 +121,12 @@ func CLI() {
                   fallthrough
                case "help":
                   CLIhelp(array)
+               case "verbosity":
+                  if (len(array) >= 2 && len(array[1]) > 0) {
+                     verbosity, _ = strconv.Atoi(array[1])
+                  } else {
+                     fmt.Println(" Verbosity: ", verbosity)
+                  }
                case "exit":
                   fallthrough
                case "q":
@@ -124,14 +136,6 @@ func CLI() {
             }
          }
       case "2":
-         RPC, err := readline.New("RCP> ")
-         RPC.Config.AutoComplete = RCPCompleter
-         if (err != nil) {
-            fmt.Println(fmt.Errorf("CLI: %w", err))
-         }
-
-         defer RPC.Close()
-
          RCPMenu:
          for {
             println()
@@ -191,6 +195,7 @@ func CLI() {
                      accountHistory, err := getAccountHistory(array[1], histNum)
                      if (err != nil) {
                         fmt.Println("RCP error: ", err.Error())
+                        continue
                      }
                      for i, block := range accountHistory.History {
                         fmt.Println()
@@ -220,6 +225,7 @@ func CLI() {
                      accountInfo, err := getAccountInfo(array[1])
                      if (err != nil) {
                         fmt.Println("RCP error: ", err.Error())
+                        continue
                      }
                      fmt.Println()
                      fmt.Println("Account info for", array[1], ":")
@@ -237,11 +243,191 @@ func CLI() {
                   } else {
                      fmt.Println("Not enough arguments... Expecting a nano address.")
                   }
+               case "account_representative":
+                  if (len(array) >= 2) {
+                     // validate the address
+                     _, err := keyMan.AddressToPubKey(array[1])
+                     if (err != nil) {
+                        fmt.Println("Invalid Address!")
+                        continue
+                     }
+                     accountInfo, err := getAccountRep(array[1])
+                     if (err != nil) {
+                        fmt.Println("RCP error: ", err.Error())
+                        continue
+                     }
+                     fmt.Println()
+                     fmt.Println("Account rep for", array[1], ":")
+                     fmt.Println("  representative: ", accountInfo.Representative)
+                     fmt.Println()
+
+                  } else {
+                     fmt.Println("Not enough arguments... Expecting a nano address.")
+                  }
+               case "account_weight":
+                  if (len(array) >= 2) {
+                     // validate the address
+                     _, err := keyMan.AddressToPubKey(array[1])
+                     if (err != nil) {
+                        fmt.Println("Invalid Address!")
+                        continue
+                     }
+                     weightRaw, err := getAccountWeight(array[1])
+                     if (err != nil) {
+                        fmt.Println("RCP error: ", err.Error())
+                        continue
+                     }
+                     fmt.Println()
+                     fmt.Println("Weight delegated to", array[1], ":")
+                     fmt.Print  ("  weight: ", weightRaw)
+                     fmt.Print  (" (", rawToNANO(weightRaw), ")")
+                     fmt.Println()
+
+                  } else {
+                     fmt.Println("Not enough arguments... Expecting a nano address.")
+                  }
+               case "available_supply":
+                  supply, err := getAvailableSupply()
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                  }
+                  fmt.Println()
+                  fmt.Print("Supply: ", supply, " (", rawToNANO(supply), ")")
+                  fmt.Println()
+               case "block_account":
+                  if (len(array) >= 2) {
+                     address, err := getOwnerOfBlock(array[1])
+                     if (err != nil) {
+                        fmt.Println("RCP error: ", err.Error())
+                        continue
+                     }
+                     fmt.Println()
+                     fmt.Println("Owner of hash", array[1], ":")
+                     fmt.Println("  account: ", address)
+                     fmt.Println()
+
+                  } else {
+                     fmt.Println("Not enough arguments... Expecting a block hash")
+                  }
+               case "block_count":
+                  count, unchecked, cemented, err := getBlockCount()
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                  }
+                  fmt.Println("  count: ", count)
+                  fmt.Println("  unchecked: ", unchecked)
+                  fmt.Println("  cemented:  ", cemented)
+               case "block_info":
+                  if (len(array) >= 2) {
+                     var hash nt.BlockHash
+                     hash, err = hex.DecodeString(array[1])
+                     if (err != nil) {
+                        fmt.Println("Invalid hash!")
+                        continue
+                     }
+                     blockInfo, err := getBlockInfo(hash)
+                     if (err != nil) {
+                        fmt.Println("RCP error: ", err.Error())
+                        continue
+                     }
+                     fmt.Println()
+                     fmt.Println("Block info for", array[1], ":")
+                     fmt.Print  ("  amount: ", blockInfo.Amount)
+                     fmt.Print  (" (", rawToNANO(blockInfo.Amount), ")\n")
+                     fmt.Println("  contents: ")
+                     fmt.Println("    type: ", blockInfo.Contents.Type)
+                     fmt.Println("    account: ", blockInfo.Contents.Account)
+                     fmt.Println("    previous: ", blockInfo.Contents.Previous)
+                     fmt.Print  ("    balance: ", blockInfo.Contents.Balance)
+                     fmt.Print  (" (", rawToNANO(blockInfo.Contents.Balance), ")\n")
+                     fmt.Println("    link: ", blockInfo.Contents.Link)
+                     fmt.Println("    link_as_account: ", blockInfo.Contents.LinkAsAccount)
+                     fmt.Println("    signature: ", blockInfo.Contents.Signature)
+                     fmt.Println("    work: ", blockInfo.Contents.Work)
+                     fmt.Println("  height:  ", blockInfo.Height)
+                     fmt.Println("  local_timestamp: ", blockInfo.LocalTimestamp)
+                     fmt.Println("  successor: ", blockInfo.Successor)
+                     fmt.Println("  confirmed: ", blockInfo.Confirmed)
+                     fmt.Println("  sybtype: ", blockInfo.Subtype)
+                     fmt.Println()
+                  }
+               case "bootstrap_status":
+                  err := printBootstrapStatus()
+                  if (err != nil) {
+                     fmt.Println("RCP error:", err.Error())
+                  }
+
+               case "chain":
+                  if (len(array) >= 2) {
+                     var count = -1
+                     if (len(array) >= 3) {
+                        count, _ = strconv.Atoi(array[2])
+                     }
+                     hash, err := hex.DecodeString(array[1])
+                     if (err != nil) {
+                        fmt.Println("Invalid hash!")
+                        continue
+                     }
+                     blocks, err := getBlocksInChain(hash, count)
+                     if (err != nil) {
+                        fmt.Println("RCP error: ", err.Error())
+                        continue
+                     }
+                     fmt.Println()
+                     fmt.Println("Blocks in chain:", array[1], ":")
+                     for _, block := range blocks {
+                        fmt.Println("   ", block)
+                     }
+                     fmt.Println()
+                  } else {
+                     fmt.Println("Not enough arguments... Expecting a block hash")
+                  }
+
+               case "confirmation_active":
+                  //var showBlocks bool
+                  //if (contains(array, "showblocks")) {
+                     //showBlocks = true
+                  //}
+
+                  confirmations, unconfirmed, confirmed, err := getActiveConfirmations()
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                     continue
+                  }
+
+                  fmt.Println()
+                  //if (showBlocks) {
+                     //for _, block := range confirmations {
+                        //fmt.Println(" ", block)
+                     //}
+                  //} else {
+                     fmt.Println("  confirmations: ", confirmations)
+                  //}
+                  fmt.Println("  unconfirmed: ", unconfirmed)
+                  fmt.Println("  confirmed: ", confirmed)
+                  fmt.Println()
+               case "confirmation_history":
+                  err := printConfirmationHistory()
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                  }
+               case "confirmation_quorum":
+                  err := printConfirmationQuorum()
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                  }
+               case "verbosity":
+                  if (len(array) >= 2 && len(array[1]) > 0) {
+                     verbosity, _ = strconv.Atoi(array[1])
+                  } else {
+                     fmt.Println(" Verbosity: ", verbosity)
+                  }
                case "q":
                   fallthrough
                case "exit":
                   break RCPMenu
                default:
+                  fmt.Println(array[0], "is not a recognized command.")
             }
 
          }
@@ -798,6 +984,7 @@ var walletCompleter = readline.NewPrefixCompleter(
    ),
    readline.PcItem("help"),
    readline.PcItem("exit"),
+   readline.PcItem("verbosity"),
 )
 
 var RCPCompleter = readline.NewPrefixCompleter(
@@ -805,4 +992,18 @@ var RCPCompleter = readline.NewPrefixCompleter(
    readline.PcItem("account_block_count"),
    readline.PcItem("account_history"),
    readline.PcItem("account_info"),
+   readline.PcItem("account_representative"),
+   readline.PcItem("account_weight"),
+   readline.PcItem("available_supply"),
+   readline.PcItem("block_account"),
+   readline.PcItem("block_count"),
+   readline.PcItem("block_info"),
+   readline.PcItem("bootstrap_status"),
+   readline.PcItem("chain"),
+   readline.PcItem("confirmation_active",
+      readline.PcItem("showblocks"),
+   ),
+   readline.PcItem("verbosity"),
+   readline.PcItem("confirmation_history"),
+   readline.PcItem("confirmation_quorum"),
 )

@@ -914,6 +914,9 @@ func SendEasy(from string, to string, amount *nt.Raw, all bool) {
 // convert when outputing for human readable format.
 func rawToNANO(raw *nt.Raw) float64 {
    // 1 NANO is 10^30 raw
+   if (raw == nil) {
+      return float64(0)
+   }
    rawConv := new(big.Int).Exp(big.NewInt(10), big.NewInt(30), nil)
    rawConvFloat := new(big.Float).SetInt(rawConv)
    rawFloat := new(big.Float).SetInt(raw.Int)

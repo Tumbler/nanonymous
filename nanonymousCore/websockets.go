@@ -243,7 +243,7 @@ func handleNotification(cBlock ConfirmationBlock) {
 
    msg := cBlock.Message
    // Send to one of our tracked addresses
-   if (msg.Block.SubType == "send") {
+   if (msg.Block.Subtype == "send") {
       if (addressExsistsInDB(msg.Block.LinkAsAccount)) {
          // Check if any transaction manager is expecting this and give to them instead
          if (addressExsistsInDB(msg.Account)) {
@@ -278,7 +278,7 @@ func handleNotification(cBlock ConfirmationBlock) {
          // Tracking an address that we don't own?
          Warning.Println("Tracked address not in DB")
       }
-   } else if (msg.Block.SubType == "receive") {
+   } else if (msg.Block.Subtype == "receive") {
       if (verbosity >= 5) {
          fmt.Println(" Receive")
       }

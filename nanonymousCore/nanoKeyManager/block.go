@@ -23,7 +23,7 @@ type Block struct {
    LinkAsAccount  string        `json:"link_as_account"`
    Signature      nt.HexData    `json:"signature"`
    Work           nt.HexData    `json:"work"`
-   SubType        string
+   Subtype        string
    Seed           Key
 }
 
