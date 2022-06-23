@@ -457,8 +457,8 @@ func reverseTransitionalAddress(t *Transaction) {
    ch := make(chan string)
    registerConfirmationListener(nanoAddress, ch, "receive")
    defer unregisterConfirmationListener(nanoAddress, "receive")
-   hashes, _ := getPendingHashes(nanoAddress)
-   numToReceive := len(hashes[nanoAddress])
+   hashes, _ := getReceivable(nanoAddress, -1)
+   numToReceive := len(hashes)
 
    ReceiveAll(nanoAddress)
 

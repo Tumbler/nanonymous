@@ -1053,7 +1053,7 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt
          return nil, fmt.Errorf("sendNano: %w", err)
       }
 
-      if (verbosity >= 5) {
+      if (verbosity >= 6) {
          fmt.Println("account:", block.Account)
          fmt.Println("representative:", block.Representative)
          fmt.Println("balance:", block.Balance)
@@ -1191,11 +1191,11 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
    }
 
    if !(inTesting) {
-      pendingHashes, _ := getPendingHashes(account)
-      numOfPendingHashes = len(pendingHashes[account])
+      pendingHashes, _ := getReceivable(account, -1)
+      numOfPendingHashes = len(pendingHashes)
 
       if (numOfPendingHashes > 0) {
-         pendingHash := pendingHashes[account][0]
+         pendingHash := pendingHashes[0]
          pendingInfo, _ = getBlockInfo(pendingHash)
          accountInfo, err := getAccountInfo(account)
          if (err != nil) {
@@ -1547,12 +1547,12 @@ func returnAllReceiveable() error {
             continue
          }
 
-         hashes, err := getPendingHashes(seed.NanoAddress)
+         hashes, err := getReceivable(seed.NanoAddress, -1)
          if (err != nil) {
-            Warning.Println("getPendingHashes failed on routine pending check:", err.Error())
+            Warning.Println("getReceivable failed on routine pending check:", err.Error())
             return fmt.Errorf("returnAllReceiveable: %w", err)
          }
-         numberOfHashes := len(hashes[seed.NanoAddress])
+         numberOfHashes := len(hashes)
 
          for j := 0; j < numberOfHashes; j++ {
             if (verbosity >= 5) {

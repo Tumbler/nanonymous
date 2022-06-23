@@ -27,8 +27,8 @@ func CLI() {
    myKey, err := getSeedFromIndex(1, 0)
    rawBalance, _ := getBalance(myKey.NanoAddress)
    NanoBalance := rawToNANO(rawBalance)
-   format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
-   wallet, err := readline.New(format)
+   prompt := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+   wallet, err := readline.New(prompt)
    wallet.Config.AutoComplete = walletCompleter
    if (err != nil) {
       fmt.Println(fmt.Errorf("CLI: %w", err))
@@ -41,6 +41,14 @@ func CLI() {
       fmt.Println(fmt.Errorf("CLI: %w", err))
    }
    defer RPC.Close()
+
+   DB, err := readline.New("DB> ")
+   DB.Config.AutoComplete = DBCompleter
+   if (err != nil) {
+      fmt.Println(fmt.Errorf("CLI: %w", err))
+   }
+   defer DB.Close()
+
 
    menu:
    for {
@@ -78,7 +86,8 @@ func CLI() {
       case "1":
          walletMenu:
          for {
-            println()
+            fmt.Println()
+            wallet.SetPrompt(prompt)
             line, err := wallet.Readline()
             if (err != nil) {
                break
@@ -87,7 +96,7 @@ func CLI() {
 
             switch(array[0]) {
                case "send":
-                  CLIsend(myKey, array)
+                  CLIsend(myKey, array, &prompt)
                case "ls":
                   fallthrough
                case "list":
@@ -98,17 +107,22 @@ func CLI() {
                case "select":
                   fallthrough
                case "set":
-                  err = CLIselect(wallet, myKey, array)
+                  err = CLIselect(myKey, array, &prompt)
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
                case "new":
-                  err = CLInew(wallet, myKey, array)
+                  err = CLInew(myKey, array, &prompt)
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
                case "peek":
                   err = CLIpeek(array)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
+               case "receive":
+                  err = CLIreceive(myKey, array, &prompt)
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
@@ -138,13 +152,13 @@ func CLI() {
       case "2":
          RCPMenu:
          for {
-            println()
+            fmt.Println()
             line, err := RPC.Readline()
             if (err != nil) {
                break
             }
             array := strings.Split(strings.ToLower(line), " ")
-            println()
+            fmt.Println()
 
             switch(array[0]) {
                case "account_balance":
@@ -416,6 +430,166 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println("RCP error: ", err.Error())
                   }
+               case "delgators_count":
+                  if (len(array) >= 2) {
+                     // validate the address
+                     _, err := keyMan.AddressToPubKey(array[1])
+                     if (err != nil) {
+                        fmt.Println("Invalid Address!")
+                        continue
+                     }
+                     delegators, err := getNumberOfDelegators(array[1])
+                     if (err != nil) {
+                        fmt.Println("RCP error: ", err.Error())
+                        continue
+                     }
+                     fmt.Println()
+                     fmt.Println("Number of delegators for", array[1], ":")
+                     fmt.Print  ("  count: ", delegators)
+                     fmt.Println()
+
+                  } else {
+                     fmt.Println("Not enough arguments... Expecting a nano address.")
+                  }
+               case "frontier_count":
+                  count, err := getFrontierCount()
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                     continue
+                  }
+                  fmt.Println()
+                  fmt.Println("Frontiers: ", count)
+                  fmt.Println()
+               case "peers":
+                  err := printPeers()
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                     continue
+                  }
+               case "receivable":
+                  if (len(array) >= 2) {
+                     // validate the address
+                     _, err := keyMan.AddressToPubKey(array[1])
+                     if (err != nil) {
+                        fmt.Println("Invalid Address!")
+                        continue
+                     }
+                     var count = -1
+                     if (len(array) >= 3) {
+                        count, _ = strconv.Atoi(array[2])
+                     }
+                     blocks, err := getReceivable(array[1], count)
+                     if (err != nil) {
+                        fmt.Println("RCP error: ", err.Error())
+                        continue
+                     }
+                     fmt.Println()
+                     for _, block := range blocks {
+                        fmt.Println("  ", block)
+                     }
+                     fmt.Println()
+
+                  } else {
+                     fmt.Println("Not enough arguments... Expecting a nano address.")
+                  }
+               case "republish":
+                  if (len(array) >= 2) {
+                     hash, err := hex.DecodeString(array[1])
+                     if (err != nil) {
+                        fmt.Println("Invalid hash!")
+                        continue
+                     }
+                     err = republish(hash)
+                     if (err != nil) {
+                        fmt.Println("RCP error: ", err.Error())
+                        continue
+                     }
+                     fmt.Println()
+                  } else {
+                     fmt.Println("Not enough arguments... Expecting a block hash")
+                  }
+               case "stats":
+                  if (len(array) >= 2) {
+                     if (array[1] == "counters" ||
+                         array[1] == "samples" ||
+                         array[1] == "objects" ||
+                         array[1] == "database") {
+                        err := printStats(array[1])
+                        if (err != nil) {
+                           fmt.Println("RCP error: ", err.Error())
+                           continue
+                        }
+                     } else {
+                        fmt.Println("Bad argument... Expecting \"counters\", \"samples\", \"objects\", or \"database.\"")
+                     }
+                  } else {
+                     fmt.Println("Not enough arguments... Expecting \"counters\", \"samples\", \"objects\", or \"database.\"")
+                  }
+               case "successors":
+                  if (len(array) >= 2) {
+                     hash, err := hex.DecodeString(array[1])
+                     if (err != nil) {
+                        fmt.Println("Invalid hash!")
+                        continue
+                     }
+                     var count = -1
+                     if (len(array) >= 3) {
+                        count, _ = strconv.Atoi(array[2])
+                     }
+                     blocks, err := getSuccessors(hash, count)
+                     if (err != nil) {
+                        fmt.Println("RCP error: ", err.Error())
+                        continue
+                     }
+                     for i, block := range blocks {
+                        fmt.Println("  successor", i, ":", block)
+                     }
+                     fmt.Println()
+                  } else {
+                     fmt.Println("Not enough arguments... Expecting a block hash")
+                  }
+               case "telemetry":
+                  err := printTelemetry()
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                     continue
+                  }
+               case "version":
+                  err := printVersion()
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                     continue
+                  }
+               case "unchecked":
+                  var count = 1
+                  if (len(array) >= 2) {
+                     count, _ = strconv.Atoi(array[1])
+                  }
+                  verboseSave := verbosity
+                  verbosity = 9
+                  _, err := getUncheckedBlocks(count)
+                  verbosity = verboseSave
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                     continue
+                  }
+               case "uptime":
+                  secs, err := getUptime()
+                  if (err != nil) {
+                     fmt.Println("RCP error: ", err.Error())
+                     continue
+                  }
+                  fmt.Println()
+                  fmt.Println("Uptime is", secs, "seconds.")
+                  if (secs > 3600) {
+                     hours := secs / 3600
+                     mins := secs / 60 % 60
+                     fmt.Println("That's", hours, "hours and", mins, "minutes.")
+                  } else if (secs > 180) {
+                     mins := secs / 60
+                     fmt.Println("That's", mins, "minutes.")
+                  }
+                  fmt.Println()
                case "verbosity":
                   if (len(array) >= 2 && len(array[1]) > 0) {
                      verbosity, _ = strconv.Atoi(array[1])
@@ -430,6 +604,48 @@ func CLI() {
                   fmt.Println(array[0], "is not a recognized command.")
             }
 
+         }
+      case "3":
+         DBMenu:
+         for {
+            fmt.Println()
+            line, err := DB.Readline()
+            if (err != nil) {
+               break
+            }
+            array := strings.Split(strings.ToLower(line), " ")
+            fmt.Println()
+
+            switch(array[0]) {
+               case "select":
+                  if (len(array) >= 2) {
+                     switch(array[1]) {
+                        case "seeds":
+                        case "wallets":
+                           CLIprintWallets()
+                           rows, err := getAllWalletRowsFromDatabase()
+                           if (err != nil) {
+                              fmt.Println(fmt.Errorf("CLI: %w", err))
+                              continue
+                           }
+                           printPsqlRows(rows)
+                        default:
+                           fmt.Println("Table not recognized")
+                     }
+                  } else {
+                     fmt.Println("Not enough arguments... Expecting a table.")
+                  }
+               case "verbosity":
+                  if (len(array) >= 2 && len(array[1]) > 0) {
+                     verbosity, _ = strconv.Atoi(array[1])
+                  } else {
+                     fmt.Println(" Verbosity: ", verbosity)
+                  }
+               case "q":
+                  fallthrough
+               case "exit":
+                  break DBMenu
+            }
          }
       case "one":
          keyMan.WalletVerbose(true)
@@ -623,11 +839,6 @@ func CLI() {
          seedReceive, _ := getSeedFromIndex(1, 8)
          blacklist(conn, seedSend.PublicKey, seedReceive.PublicKey)
 
-      case "M":
-         verbosity = 5
-         seed, _ := getSeedFromIndex(1, 5)
-         blarg, _ := getPendingHashes(seed.NanoAddress)
-         fmt.Println(blarg[seed.NanoAddress][0])
       case "N":
          verbosity = 5
          //fmt.Print("Seed: ")
@@ -665,24 +876,30 @@ func CLI() {
    }
 }
 
-func CLIsend(myKey *keyMan.Key, args []string) {
+func CLIsend(myKey *keyMan.Key, args []string, prompt *string) {
    toPubKey, err := keyMan.AddressToPubKey(args[2])
    if (err != nil) {
-      println(args[2], "is not a valid address")
+      fmt.Println(args[2], "is not a valid address")
       return
    }
 
    amountNano, err := strconv.ParseFloat(args[1], 64)
    if (err != nil) {
-      println(args[1], "is not a valid nano amount")
+      fmt.Println(args[1], "is not a valid nano amount")
       return
    }
 
    amountRaw := nt.NewRawFromNano(amountNano)
    _, err = Send(myKey, toPubKey, amountRaw, nil, nil, -1)
    if (err != nil) {
-      println(fmt.Errorf("CLIsend: %w", err))
+      fmt.Println(fmt.Errorf("CLIsend: %w", err))
    }
+
+   rawBalance, _ := getBalance(myKey.NanoAddress)
+   NanoBalance := rawToNANO(rawBalance)
+   format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+
+   *prompt = format
 }
 
 func CLIlist(args []string) error {
@@ -708,8 +925,11 @@ func CLIlist(args []string) error {
       var seed int
       var index int
       var balance = nt.NewRaw(0)
+      var dummy1 string
+      var dummy2 bool
+      var dummy3 bool
 
-      rows.Scan(&seed, &index, balance)
+      rows.Scan(&seed, &index, balance, &dummy1, &dummy2, &dummy3)
 
       if (ignoreZeroBalance && balance.Cmp(nt.NewRaw(0)) == 0) {
          continue
@@ -723,7 +943,7 @@ func CLIlist(args []string) error {
    return nil
 }
 
-func CLIselect(r *readline.Instance, myKey *keyMan.Key, args []string) error {
+func CLIselect(myKey *keyMan.Key, args []string, prompt *string) error {
 
    seed, err := strconv.Atoi(args[1])
    if (err != nil) {
@@ -735,21 +955,47 @@ func CLIselect(r *readline.Instance, myKey *keyMan.Key, args []string) error {
       return fmt.Errorf("CLIselect: %w", err)
    }
 
-   myKey, err = getSeedFromIndex(seed, index)
+   newKey, err := getSeedFromIndex(seed, index)
    if (err != nil) {
       return fmt.Errorf("CLIselect: %w", err)
    }
+
+   *myKey = *newKey
 
    rawBalance, _ := getBalance(myKey.NanoAddress)
    NanoBalance := rawToNANO(rawBalance)
    format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
 
-   r.SetPrompt(format)
+   *prompt = format
 
    return nil
 }
 
-func CLInew(r *readline.Instance, myKey *keyMan.Key, args []string) error {
+func CLIreceive(myKey *keyMan.Key, args []string, prompt *string) error {
+
+   raw, block, numLeft, err := Receive(myKey.NanoAddress)
+   if (err != nil) {
+      return fmt.Errorf("CLIreceive: %w", err)
+   }
+   if (len(block) == 0) {
+      fmt.Println("Nothing to receive!")
+      return nil
+   }
+   fmt.Print  ("   Received ", raw, " (", rawToNANO(raw), ")\n")
+   fmt.Println("   block:", block)
+   fmt.Println("   receives remaining:", numLeft)
+   fmt.Println()
+
+   rawBalance, _ := getBalance(myKey.NanoAddress)
+   NanoBalance := rawToNANO(rawBalance)
+   format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+
+   *prompt = format
+
+   return nil
+}
+
+func CLInew(myKey *keyMan.Key, args []string, prompt *string) error {
 
    var receiveOnly bool
    var newSeed bool
@@ -771,10 +1017,12 @@ func CLInew(r *readline.Instance, myKey *keyMan.Key, args []string) error {
          return fmt.Errorf("CLInew: %w", err)
       }
 
-      myKey, err = getSeedFromIndex(seed, key.Index)
+      newKey, err := getSeedFromIndex(seed, key.Index)
       if (err != nil) {
-         return fmt.Errorf("CLIselect: %w", err)
+         return fmt.Errorf("CLInew: %w", err)
       }
+
+      *myKey = *newKey
    } else {
       // new seed
       conn, err := pgx.Connect(context.Background(), databaseUrl)
@@ -798,11 +1046,11 @@ func CLInew(r *readline.Instance, myKey *keyMan.Key, args []string) error {
       }
    }
 
-      rawBalance, _ := getBalance(myKey.NanoAddress)
-      NanoBalance := rawToNANO(rawBalance)
-      format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+   rawBalance, _ := getBalance(myKey.NanoAddress)
+   NanoBalance := rawToNANO(rawBalance)
+   format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
 
-   r.SetPrompt(format)
+   *prompt = format
 
    return nil
 }
@@ -968,6 +1216,95 @@ func CLIhelpreceiveOnly() {
    )
 }
 
+func CLIprintWallets() {
+   rows, err := getWalletRowsFromDatabase()
+   if (err != nil) {
+      fmt.Println(fmt.Errorf("CLI: %w", err))
+      return
+   }
+   var lengths [2]int
+   // Go through once to count, and then again to print.
+   for rows.Next() {
+      var seed int
+      var index int
+      var balance = nt.NewRaw(0)
+      var pow string
+      var inUse bool
+      var receiveOnly bool
+
+      rows.Scan(&seed, &index, balance, &pow, &inUse, &receiveOnly)
+      idlen := len(strconv.Itoa(seed) +"-"+ strconv.Itoa(index))
+      if (lengths[0] < idlen + 1) {
+         lengths[0] = idlen + 1
+      }
+      ballen := len(balance.String() +" ("+ fmt.Sprintf("%f", rawToNANO(balance)) +")")
+      if (lengths[1] < ballen + 1) {
+         lengths[1] = ballen + 1
+      }
+   }
+   rows, err = getAllWalletRowsFromDatabase()
+   if (err != nil) {
+      fmt.Println(fmt.Errorf("CLI: %w", err))
+      return
+   }
+   afterPad1 := strings.Repeat(" ", (lengths[0]-1)/2)
+   beforePad1 := strings.Repeat(" ", (lengths[0]-1) - (lengths[0]-1)/2)
+   afterPad2 := strings.Repeat(" ", (lengths[1]-6)/2)
+   beforePad2 := strings.Repeat(" ", (lengths[1]-6) - (lengths[1]-6)/2)
+   fmt.Print(beforePad1 +"ID"+ afterPad1 +
+   "|"+ beforePad2 +"balance"+ afterPad2 +
+   "|       pow        | use | receive \n")
+   fmt.Print(strings.Repeat("-", lengths[0]+1) +"+"+
+   strings.Repeat("-", lengths[1]+1) +
+   "+------------------+-----+---------\n")
+
+   for rows.Next() {
+      var seed int
+      var index int
+      var balance = nt.NewRaw(0)
+      var pow string
+      var inUse bool
+      var receiveOnly bool
+
+      rows.Scan(&seed, &index, balance, &pow, &inUse, &receiveOnly)
+      id := strconv.Itoa(seed) +"-"+ strconv.Itoa(index)
+      bal := balance.String() +" ("+ fmt.Sprintf("%f", rawToNANO(balance)) +")"
+      idPadding := strings.Repeat(" ", lengths[0] - len(id))
+      balPadding := strings.Repeat(" ", lengths[1] - len(bal))
+      var useString string
+      if (inUse) {
+         useString = "t"
+      } else {
+         useString = "f"
+      }
+      var receiveString string
+      if (inUse) {
+         receiveString = "t"
+      } else {
+         receiveString = "f"
+      }
+      if (len(pow) == 0) {
+         pow = "                "
+      }
+
+      fmt.Print(idPadding + id + " |")
+      fmt.Print(balPadding + bal + " |")
+      fmt.Print(" "+ pow +" |")
+      fmt.Print("  "+ useString +"  |")
+      fmt.Print("   "+ receiveString +"\n")
+   }
+   fmt.Println()
+}
+
+func printPsqlRows(rows pgx.Rows) {
+
+   blarg := rows.FieldDescriptions()
+   fmt.Println(len(blarg))
+   fmt.Println(string(blarg[0].Name))
+   //fmt.Println(rows.FieldDescriptions())
+   //fmt.Println(rows.Values())
+}
+
 var walletCompleter = readline.NewPrefixCompleter(
    readline.PcItem("new",
       readline.PcItem("receiveonly"),
@@ -979,6 +1316,7 @@ var walletCompleter = readline.NewPrefixCompleter(
    readline.PcItem("select"),
    readline.PcItem("set"),
    readline.PcItem("peek"),
+   readline.PcItem("receive"),
    readline.PcItem("receiveonly",
       readline.PcItem("off"),
    ),
@@ -1006,4 +1344,30 @@ var RCPCompleter = readline.NewPrefixCompleter(
    readline.PcItem("verbosity"),
    readline.PcItem("confirmation_history"),
    readline.PcItem("confirmation_quorum"),
+   readline.PcItem("delgators_count"),
+   readline.PcItem("frontier_count"),
+   readline.PcItem("peers"),
+   readline.PcItem("receivable"),
+   readline.PcItem("republish"),
+   readline.PcItem("stats",
+      readline.PcItem("counters"),
+      readline.PcItem("samples"),
+      readline.PcItem("objects"),
+      readline.PcItem("database"),
+   ),
+   readline.PcItem("successors"),
+   readline.PcItem("telemetry"),
+   readline.PcItem("version"),
+   readline.PcItem("unchecked"),
+   readline.PcItem("uptime"),
+)
+
+var DBCompleter = readline.NewPrefixCompleter(
+   readline.PcItem("select",
+      readline.PcItem("seeds"),
+      readline.PcItem("wallets"),
+      readline.PcItem("blacklist"),
+      readline.PcItem("profitrecord"),
+   ),
+   readline.PcItem("verbosity"),
 )

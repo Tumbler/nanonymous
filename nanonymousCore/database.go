@@ -247,7 +247,10 @@ func getWalletRowsFromDatabase() (pgx.Rows, error) {
    "SELECT " +
       "parent_seed, " +
       "index, " +
-      "balance " +
+      "balance, " +
+      "pow, " +
+      "in_use, " +
+      "receive_only " +
    "FROM " +
       "wallets " +
    "WHERE " +
@@ -275,7 +278,10 @@ func getAllWalletRowsFromDatabase() (pgx.Rows, error) {
    "SELECT " +
       "parent_seed, " +
       "index, " +
-      "balance " +
+      "balance, " +
+      "pow, " +
+      "in_use, " +
+      "receive_only " +
    "FROM " +
       "wallets " +
    "ORDER BY " +

@@ -165,6 +165,7 @@ func printPeers() error {
    if (err != nil) {
       return fmt.Errorf("getAddressBalance: %w", err)
    }
+   verbosity = verboseSave
 
    return nil
 }
@@ -371,14 +372,20 @@ func getAccountHistory(nanoAddress string, num int) (AccountHistory, error) {
    return response, nil
 }
 
-func getPendingHashes(nanoAddress string) (map[string][]nt.BlockHash, error) {
+func getAccountsPending(nanoAddresses []string) (map[string][]nt.BlockHash, error) {
 
    url := "http://"+ nodeIP
+
+   var addressString string
+   for _, address := range nanoAddresses {
+      addressString += `"`+ address + `", `
+   }
+   addressString = strings.Trim(addressString, ", ")
 
    request :=
    `{
       "action": "accounts_pending",
-      "accounts": ["`+ nanoAddress +`"],
+      "accounts": [`+ addressString +`],
       "count": "-1"
     }`
 
@@ -391,12 +398,215 @@ func getPendingHashes(nanoAddress string) (map[string][]nt.BlockHash, error) {
    if (err != nil) {
       // Filter out blank block error
       if !(strings.Contains(err.Error(), "cannot unmarshal string into Go struct field .Blocks")) {
-         return nil, fmt.Errorf("getPendingHashes: %w", err)
+         return nil, fmt.Errorf("getAccountsPending: %w", err)
       }
    }
 
    return response.Blocks, nil
 }
+
+// Same as above, but for only one account
+func getReceivable(nanoAddress string, count int) ([]nt.BlockHash, error) {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "receivable",
+      "account": "`+ nanoAddress +`",
+      "count": "`+ strconv.Itoa(count) +`"
+    }`
+
+   response := struct {
+      Blocks []nt.BlockHash
+      Error string
+   }{}
+
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      // Filter out blank block error
+      if !(strings.Contains(err.Error(), "cannot unmarshal string into Go struct field .Blocks")) {
+         return nil, fmt.Errorf("getReceivable: %w", err)
+      }
+   }
+
+   return response.Blocks, nil
+}
+
+func republish(hash nt.BlockHash) error {
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "republish",
+      "hash": "`+ hash.String() +`"
+    }`
+
+   response := struct {
+      Error string
+   }{}
+
+   verboseSave := verbosity
+   verbosity = 9
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      return fmt.Errorf("republish: %w", err)
+   }
+   verbosity = verboseSave
+
+   return nil
+}
+
+func printStats(argument string) error {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "stats",
+      "type": "`+ argument +`"
+    }`
+
+   response := struct {
+      Error string
+   }{}
+
+   verboseSave := verbosity
+   verbosity = 9
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      return fmt.Errorf("printStats: %w", err)
+   }
+   verbosity = verboseSave
+
+   return nil
+}
+
+func getSuccessors(block nt.BlockHash, count int) ([]nt.BlockHash, error) {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "successors",
+      "block": "`+ block.String() +`",
+      "count": "`+ strconv.Itoa(count) +`"
+    }`
+
+   response := struct {
+      Blocks []nt.BlockHash
+      Error string
+   }{}
+
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      // Filter out blank block error
+      if !(strings.Contains(err.Error(), "cannot unmarshal string into Go struct field .Blocks")) {
+         return nil, fmt.Errorf("getSuccessors: %w", err)
+      }
+   }
+
+   return response.Blocks, nil
+
+}
+
+func printTelemetry() error {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "telemetry"
+    }`
+
+   response := struct {
+      Error string
+   }{}
+
+   verboseSave := verbosity
+   verbosity = 9
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      return fmt.Errorf("printTelemetry: %w", err)
+   }
+   verbosity = verboseSave
+
+   return nil
+}
+
+func printVersion() error {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "version"
+    }`
+
+   response := struct {
+      Error string
+   }{}
+
+   verboseSave := verbosity
+   verbosity = 9
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      return fmt.Errorf("printVersion: %w", err)
+   }
+   verbosity = verboseSave
+
+   return nil
+}
+
+func getUncheckedBlocks(count int) (map[string]keyMan.Block, error) {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "unchecked",
+      "json_block": "true",
+      "count": "`+ strconv.Itoa(count) +`"
+    }`
+
+   response := struct {
+      Blocks map[string]keyMan.Block
+      Error string
+   }{}
+
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      // Filter out blank block error
+      if !(strings.Contains(err.Error(), "cannot unmarshal string into Go struct field .Blocks")) {
+         return nil, fmt.Errorf("getUncheckedBlocks: %w", err)
+      }
+   }
+
+   return response.Blocks, nil
+}
+
+func getUptime() (int, error) {
+
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "uptime"
+    }`
+
+   response := struct {
+      Seconds nt.JInt
+      Error string
+   }{}
+
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      return 0, fmt.Errorf("getUptime: %w", err)
+   }
+
+   return int(response.Seconds), nil
+}
+
 
 type BlockInfo struct {
    Amount *nt.Raw
@@ -448,6 +658,49 @@ func getAvailableSupply () (*nt.Raw, error) {
    }
 
    return response.Available, nil
+}
+
+func getNumberOfDelegators(nanoAddress string) (int, error) {
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "delegators_count",
+      "account": "`+ nanoAddress +`"
+    }`
+
+   response := struct {
+      Count nt.JInt
+      Error string
+   }{}
+
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      return -1, fmt.Errorf("getAccountHistory: %w", err)
+   }
+
+   return int(response.Count), nil
+}
+
+func getFrontierCount() (int, error) {
+   url := "http://"+ nodeIP
+
+   request :=
+   `{
+      "action": "frontier_count"
+    }`
+
+   response := struct {
+      Count nt.JInt
+      Error string
+   }{}
+
+   err := rcpCallWithTimeout(request, &response, url, 5000)
+   if (err != nil) {
+      return -1, fmt.Errorf("getAccountHistory: %w", err)
+   }
+
+   return int(response.Count), nil
 }
 
 func printBootstrapStatus() error {
