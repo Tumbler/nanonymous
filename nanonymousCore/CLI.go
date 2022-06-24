@@ -6,6 +6,7 @@ import (
    "encoding/hex"
    "strings"
    "strconv"
+   "time"
    _"embed"
 
    // Local packages
@@ -14,6 +15,7 @@ import (
 
    // 3rd party packages
    pgx "github.com/jackc/pgx/v4"
+   "github.com/jackc/pgtype"
    "github.com/chzyer/readline"
 )
 
@@ -621,14 +623,38 @@ func CLI() {
                   if (len(array) >= 2) {
                      switch(array[1]) {
                         case "seeds":
-                        case "wallets":
-                           CLIprintWallets()
-                           rows, err := getAllWalletRowsFromDatabase()
+                           // TODO copy without accessing DB???
+                           rows, err := getEncryptedSeedRowsFromDatabase()
+                           rowsCopy, err := getEncryptedSeedRowsFromDatabase()
                            if (err != nil) {
                               fmt.Println(fmt.Errorf("CLI: %w", err))
                               continue
                            }
-                           printPsqlRows(rows)
+                           printPsqlRows(rows, rowsCopy)
+                        case "wallets":
+                           rows, err := getAllWalletRowsFromDatabase()
+                           rowsCopy, err := getAllWalletRowsFromDatabase()
+                           if (err != nil) {
+                              fmt.Println(fmt.Errorf("CLI: %w", err))
+                              continue
+                           }
+                           printPsqlRows(rows, rowsCopy)
+                        case "blacklist":
+                           rows, err := getBlacklistRowsFromDatabase()
+                           rowsCopy, err := getBlacklistRowsFromDatabase()
+                           if (err != nil) {
+                              fmt.Println(fmt.Errorf("CLI: %w", err))
+                              continue
+                           }
+                           printPsqlRows(rows, rowsCopy)
+                        case "profitrecord":
+                           rows, err := getProfitRowsFromDatabase()
+                           rowsCopy, err := getProfitRowsFromDatabase()
+                           if (err != nil) {
+                              fmt.Println(fmt.Errorf("CLI: %w", err))
+                              continue
+                           }
+                           printPsqlRows(rows, rowsCopy)
                         default:
                            fmt.Println("Table not recognized")
                      }
@@ -1216,93 +1242,151 @@ func CLIhelpreceiveOnly() {
    )
 }
 
-func CLIprintWallets() {
-   rows, err := getWalletRowsFromDatabase()
-   if (err != nil) {
-      fmt.Println(fmt.Errorf("CLI: %w", err))
-      return
+func printPsqlRows(rows pgx.Rows, rowsCopy pgx.Rows) {
+
+   const INT = 23
+   const BIGINT = 20
+   const NUMERIC = 1700
+   const STRING = 25
+   const BOOL = 16
+   const HASH = 17
+   const TIMESTAMP = 1184
+   const FLOAT = 701
+
+   const TIME_FORMAT = "2006-01-02_15:04:05.000"
+
+   titles := rows.FieldDescriptions()
+   var lengths = make([]int, len(titles))
+
+   // Find all lengths
+   for i, header := range titles {
+      lengths[i] = len(string(header.Name))
    }
-   var lengths [2]int
-   // Go through once to count, and then again to print.
-   for rows.Next() {
-      var seed int
-      var index int
-      var balance = nt.NewRaw(0)
-      var pow string
-      var inUse bool
-      var receiveOnly bool
+   for (rows.Next()) {
+      values, err := rows.Values()
+      if (err != nil) {
+         fmt.Println("Error :", err.Error())
+      }
+      for i, value := range values {
+         switch(titles[i].DataTypeOID) {
+            case BIGINT:
+               if (lengths[i] < len(strconv.Itoa(int(value.(int64))))) {
+                  lengths[i] = len(strconv.Itoa(int(value.(int64))))
+               }
+            case INT:
+               if (lengths[i] < len(strconv.Itoa(int(value.(int32))))) {
+                  lengths[i] = len(strconv.Itoa(int(value.(int32))))
+               }
+            case FLOAT:
+               if (lengths[i] < len(fmt.Sprintf("%.2f", (value.(float64))))) {
+                  lengths[i] = len(fmt.Sprintf("%.2f", (value.(float64))))
+               }
+            case NUMERIC:
+               numberString := value.(pgtype.Numeric).Int.String() + strings.Repeat("0", int(value.(pgtype.Numeric).Exp))
+               raw, _ := nt.OneNano().SetString(numberString, 10)
+               numberString += " ("+ fmt.Sprintf("%f", rawToNANO(raw)) + ")"
+               if (lengths[i] < len(numberString)) {
+                  lengths[i] = len(numberString)
+               }
+            case STRING:
+               if (lengths[i] < len(value.(string))) {
+                  lengths[i] = len(value.(string))
+               }
+            case HASH:
+               if (string(titles[i].Name) == "seed") {
+                  if (lengths[i] < len("lol no")) {
+                     lengths[i] = len("lol no")
+                  }
+               } else {
+                  stringRep := "\\x"+ hex.EncodeToString(value.([]uint8))
+                  if (lengths[i] < len(stringRep)) {
+                     lengths[i] = len(stringRep)
+                  }
+               }
+            case TIMESTAMP:
+               if (lengths[i] < len(value.(time.Time).Format(TIME_FORMAT))) {
+                  lengths[i] = len(value.(time.Time).Format(TIME_FORMAT))
+               }
+            case BOOL:
+               // Max length of one so title will always be the correct length
+         }
+      }
 
-      rows.Scan(&seed, &index, balance, &pow, &inUse, &receiveOnly)
-      idlen := len(strconv.Itoa(seed) +"-"+ strconv.Itoa(index))
-      if (lengths[0] < idlen + 1) {
-         lengths[0] = idlen + 1
-      }
-      ballen := len(balance.String() +" ("+ fmt.Sprintf("%f", rawToNANO(balance)) +")")
-      if (lengths[1] < ballen + 1) {
-         lengths[1] = ballen + 1
-      }
    }
-   rows, err = getAllWalletRowsFromDatabase()
-   if (err != nil) {
-      fmt.Println(fmt.Errorf("CLI: %w", err))
-      return
-   }
-   afterPad1 := strings.Repeat(" ", (lengths[0]-1)/2)
-   beforePad1 := strings.Repeat(" ", (lengths[0]-1) - (lengths[0]-1)/2)
-   afterPad2 := strings.Repeat(" ", (lengths[1]-6)/2)
-   beforePad2 := strings.Repeat(" ", (lengths[1]-6) - (lengths[1]-6)/2)
-   fmt.Print(beforePad1 +"ID"+ afterPad1 +
-   "|"+ beforePad2 +"balance"+ afterPad2 +
-   "|       pow        | use | receive \n")
-   fmt.Print(strings.Repeat("-", lengths[0]+1) +"+"+
-   strings.Repeat("-", lengths[1]+1) +
-   "+------------------+-----+---------\n")
 
-   for rows.Next() {
-      var seed int
-      var index int
-      var balance = nt.NewRaw(0)
-      var pow string
-      var inUse bool
-      var receiveOnly bool
-
-      rows.Scan(&seed, &index, balance, &pow, &inUse, &receiveOnly)
-      id := strconv.Itoa(seed) +"-"+ strconv.Itoa(index)
-      bal := balance.String() +" ("+ fmt.Sprintf("%f", rawToNANO(balance)) +")"
-      idPadding := strings.Repeat(" ", lengths[0] - len(id))
-      balPadding := strings.Repeat(" ", lengths[1] - len(bal))
-      var useString string
-      if (inUse) {
-         useString = "t"
-      } else {
-         useString = "f"
+   // Print header
+   for i, header := range titles {
+      if (i > 0) {
+         fmt.Print("|")
       }
-      var receiveString string
-      if (inUse) {
-         receiveString = "t"
-      } else {
-         receiveString = "f"
-      }
-      if (len(pow) == 0) {
-         pow = "                "
-      }
-
-      fmt.Print(idPadding + id + " |")
-      fmt.Print(balPadding + bal + " |")
-      fmt.Print(" "+ pow +" |")
-      fmt.Print("  "+ useString +"  |")
-      fmt.Print("   "+ receiveString +"\n")
+      fmt.Print(headerSpacing(string(header.Name), lengths[i]))
    }
    fmt.Println()
+   for i := 0; i < len(titles); i++ {
+      if (i > 0) {
+         fmt.Print("+")
+      }
+      fmt.Print(strings.Repeat("-", lengths[i]+2))
+   }
+   fmt.Println()
+
+   // Print table
+   for (rowsCopy.Next()) {
+      values, _ := rowsCopy.Values()
+      for i, value := range values {
+         if (i > 0) {
+            fmt.Print("|")
+         }
+         switch(titles[i].DataTypeOID) {
+            case BIGINT:
+               fmt.Print(" ", spacing(strconv.Itoa(int(value.(int64))), lengths[i]), " ")
+            case INT:
+               fmt.Print(" ", spacing(strconv.Itoa(int(value.(int32))), lengths[i]), " ")
+            case FLOAT:
+               fmt.Print(" ", spacing(fmt.Sprintf("%.2f", (value.(float64))), lengths[i]), " ")
+            case NUMERIC:
+               // Convert Numeric to string
+               numberString := value.(pgtype.Numeric).Int.String() + strings.Repeat("0", int(value.(pgtype.Numeric).Exp))
+               raw, _ := nt.OneNano().SetString(numberString, 10)
+               numberString += " ("+ fmt.Sprintf("%f", rawToNANO(raw)) + ")"
+               fmt.Print(" ", spacing(numberString, lengths[i]), " ")
+            case STRING:
+               fmt.Print(" ", spacing(value.(string), lengths[i]), " ")
+            case HASH:
+               if (string(titles[i].Name) == "seed") {
+                  fmt.Print(" lol no ")
+               } else {
+                  stringRep := hex.EncodeToString(value.([]uint8))
+                  fmt.Print(" \\x", stringRep, " ")
+               }
+            case BOOL:
+               if (value.(bool)) {
+                  fmt.Print(" ", spacing("t", lengths[i]), " ")
+               } else {
+                  fmt.Print(" ", spacing("f", lengths[i]), " ")
+               }
+            case TIMESTAMP:
+               fmt.Print(" ", spacing(value.(time.Time).Format(TIME_FORMAT), lengths[i]), " ")
+         }
+      }
+      fmt.Println()
+   }
 }
 
-func printPsqlRows(rows pgx.Rows) {
+func spacing(input string, desiredLen int) string {
+   output := strings.Repeat(" ", desiredLen - len(input))
+   output += input
+   return output
+}
 
-   blarg := rows.FieldDescriptions()
-   fmt.Println(len(blarg))
-   fmt.Println(string(blarg[0].Name))
-   //fmt.Println(rows.FieldDescriptions())
-   //fmt.Println(rows.Values())
+func headerSpacing(input string, desiredLen int) string {
+   // Account for spacing
+   desiredLen += 2
+
+   output := strings.Repeat(" ", (desiredLen - len(input)) - (desiredLen - len(input))/2)
+   output += input
+   output += strings.Repeat(" ", (desiredLen - len(input))/2)
+   return output
 }
 
 var walletCompleter = readline.NewPrefixCompleter(

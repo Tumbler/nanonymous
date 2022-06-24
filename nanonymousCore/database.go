@@ -236,6 +236,33 @@ func getSeedRowsFromDatabase() (pgx.Rows, error) {
    return rows, nil
 }
 
+func getEncryptedSeedRowsFromDatabase() (pgx.Rows, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "id, " +
+      "seed, " +
+      "current_index " +
+   "FROM " +
+      "seeds " +
+   "WHERE " +
+      "current_index <= $1 " +
+   "ORDER BY " +
+      "id;"
+
+   rows, err := conn.Query(context.Background(), queryString, MAX_INDEX)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+   }
+
+   return rows, nil
+}
+
 func getWalletRowsFromDatabase() (pgx.Rows, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
@@ -258,6 +285,54 @@ func getWalletRowsFromDatabase() (pgx.Rows, error) {
    "ORDER BY " +
       "parent_seed, " +
       "index;"
+
+   rows, err := conn.Query(context.Background(), queryString)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+   }
+
+   return rows, nil
+}
+
+func getBlacklistRowsFromDatabase() (pgx.Rows, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "hash " +
+   "FROM " +
+      "blacklist;"
+
+   rows, err := conn.Query(context.Background(), queryString)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+   }
+
+   return rows, nil
+}
+
+func getProfitRowsFromDatabase() (pgx.Rows, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "id, " +
+      "trans_id, " +
+      "time, " +
+      "nano_gained, " +
+      "nano_usd_value " +
+   "FROM " +
+      "profit_record " +
+   "ORDER BY " +
+      "trans_id;"
 
    rows, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
