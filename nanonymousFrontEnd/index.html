@@ -2,115 +2,7 @@
 <html>
 <head>
 <title>Nanonymous</title>
-<style>
-    body {
-       width: 100%;
-       margin: 0;
-       background-color: rgba(49,49,51,1);
-    }
-    #outerbody {
-       width: 100%;
-       margin: 0;
-       overflow-x: hidden;
-    }
-    #innerbody {
-       width: 45em;
-       margin: 0 auto;
-       font-family: DMSans-Medium;
-       color: white;
-    }
-    #Hero {
-       display: flex;
-    }
-    #TransactionButtondiv {
-       order: 0;
-       flex-grow: 1;
-
-       margin-bottom: 25px;
-       /*background: orange;*/
-    }
-    #TransactionButtonSvg {
-       position: relative;
-       width: 60%;
-       left: 20%;
-
-       /*background: brown;*/
-    }
-    #TransactionButton {
-
-       fill: rgba(15,194,212,1);
-    }
-    #HeroText {
-       order: 0;
-       flex-grow: 1;
-
-       font-size: 1.69em;
-
-       color: rgba(15,194,212,1);
-
-       margin-bottom: 25px;
-       /*background: green;*/
-    }
-    #Q3 {
-       order: 1;
-       flex-grow: 1;
-
-       margin-top: 25px;
-       /*background: red;*/
-    }
-    #Q4 {
-       order: 1;
-       flex-grow: 1;
-
-       margin-top: 25px;
-       /*background: blue;*/
-    }
-    #sendImg {
-       position: relative;
-       left: 5%;
-       width: 90%;
-    }
-    #buttonImage {
-       position: absolute;
-       height: 100%;
-       top: 25%;
-       height: 50%;
-
-       left: 10%;
-       width: 13%;
-    }
-    #buttonText {
-       position: absolute;
-       height: 100%;
-       top: 33%;
-
-       left: 25%;
-       width: 65%;
-
-       text-align: center;
-       font-size: 1.30em;
-       color: black;
-    }
-    .Line {
-      stroke: rgba(11,209,223,1);
-      stroke-width: 3px;
-      height: 3px;
-
-      position: relative;
-    }
-    #Aboutpng {
-       width: 17em;
-       order: -1;
-
-       margin-top: 50px;
-    }
-    #FAQpng {
-       width: 11em;
-       order: 1;
-
-       margin-top: 50px;
-    }
-</style>
+<link rel="stylesheet" href="css/index.css">
 <img src="images/1_nospace.svg" alt="Nanonymous" style="width=150px; height:150px; display:block; margin-left: auto; margin-right: auto; margin-top: 50px; margin-bottom: 100px; width: 50%;">
 </head>
 <body>
@@ -154,8 +46,11 @@
             <line class="Line" x1="25" y1="75" x2="9999" y2="75" />
          </svg>
       </div>
-      <p>Nanonymouse uses many managed accounts to give you privacy when sending your Nano. This allows you to send funds without exposing your ballance or address.
-      </p>
+      <div class="content" id="About">
+         <p style="margin-top: 50px; margin-bottom: 50px;">Nanonymous uses many managed accounts to give you privacy when sending your Nano. This allows you to send funds without exposing your balance or address.
+         </p>
+         <p> More features coming soon! </p>
+      </div>
 
       <div style="display: flex;">
          <svg width="9999px" height="80px" style="margin-left: -600%; margin-right: 25;">
@@ -163,9 +58,72 @@
          </svg>
          <img id="FAQpng" src="images/FAQ.png">
       </div>
+      <div class="content">
+         <div class="Qbox">
+            <button type="button" class="collapsible">
+               Q: Can my address be found if the recipient uses a blockchain browser?
+               <div class="animate closed">
+                  <div class="plus-minus">
+                     <div class="horizontal"></div>
+                     <div class="vertical"></div>
+                  </div>
+               </div>
+            </button>
+            <div class="answer">
+               <p>A: Your address will never be linked to the recipient's address from transactions that Nanonymous initiates. </p>
+            </div>
+         </div>
+         <div class="Qbox">
+            <button type="button" class="collapsible">
+               Q: What happens if I you get hacked? Does all my information get leaked?
+               <div class="animate closed">
+                  <div class="plus-minus">
+                     <div class="horizontal"></div>
+                     <div class="vertical"></div>
+                  </div>
+               </div>
+            </button>
+            <div class="answer">
+               <p>A: We store as little about our clients as possible, and use one-way hashes to ensure the data we do save can't be used to determine our client's addresses.
+            </div>
+         </div>
+         <div class="Qbox">
+            <button type="button" class="collapsible">
+               Q: What happens if I typed the wrong address?
+               <div class="animate closed">
+                  <div class="plus-minus">
+                     <div class="horizontal"></div>
+                     <div class="vertical"></div>
+                  </div>
+               </div>
+            </button>
+            <div class="answer">
+               <p>A: Typically that would create an invalid address and the transaction would abort, but we are not responsible for incorrect addresses. We only ensure the funds go to a valid account that you specify.
+            </div>
+         </div>
+      </div>
 
-      <p><em>Thank you</em></p>
    </div>
    </div>
 </body>
 </html>
+
+<script>
+   var coll = document.getElementsByClassName("collapsible");
+   var i;
+
+   for (i = 0; i < coll.length; i++) {
+      coll[i].addEventListener("click", function() {
+
+         var content = this.nextElementSibling;
+         this.classList.toggle('opened');
+         this.classList.toggle('closed');
+         if (content.style.maxHeight) {
+            content.style.maxHeight = null;
+         } else {
+            content.style.maxHeight = content.scrollHeight + "px";
+         }
+      });
+   }
+
+</script>

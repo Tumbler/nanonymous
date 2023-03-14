@@ -1,0 +1,195 @@
+ body {
+    width: 100%;
+    margin: 0;
+    background-color: rgba(49,49,51,1);
+ }
+ #outerbody {
+    width: 100%;
+    margin: 0;
+    overflow-x: hidden;
+ }
+ #innerbody {
+    width: 45em;
+    margin: 0 auto;
+    font-family: DMSans-Medium;
+    color: white;
+ }
+ #Hero {
+    display: flex;
+ }
+ #TransactionButtondiv {
+    order: 0;
+    flex-grow: 1;
+
+    margin-bottom: 25px;
+ }
+ #TransactionButtonSvg {
+    position: relative;
+    width: 60%;
+    left: 20%;
+
+ }
+ #TransactionButton {
+
+    fill: rgba(15,194,212,1);
+ }
+ #HeroText {
+    order: 0;
+    flex-grow: 1;
+
+    font-size: 1.69em;
+
+    color: rgba(15,194,212,1);
+
+    margin-bottom: 25px;
+ }
+ #Q3 {
+    order: 1;
+    flex-grow: 1;
+
+    margin-top: 25px;
+ }
+ #Q4 {
+    order: 1;
+    flex-grow: 1;
+
+    margin-top: 25px;
+ }
+ #sendImg {
+    position: relative;
+    left: 5%;
+    width: 90%;
+ }
+ #buttonImage {
+    position: absolute;
+    height: 100%;
+    top: 25%;
+    height: 50%;
+
+    left: 10%;
+    width: 13%;
+ }
+ #buttonText {
+    position: absolute;
+    height: 100%;
+    top: 33%;
+
+    left: 25%;
+    width: 65%;
+
+    text-align: center;
+    font-size: 1.30em;
+    color: black;
+ }
+ .Line {
+   stroke: rgba(11,209,223,1);
+   stroke-width: 3px;
+   height: 3px;
+
+   position: relative;
+ }
+ #Aboutpng {
+    width: 17em;
+    order: -1;
+
+    margin-top: 50px;
+    margin-bottom: 50px;
+ }
+ #FAQpng {
+    width: 11em;
+    order: 1;
+
+    margin-top: 50px;
+    margin-bottom: 30px;
+ }
+ #About{
+    font-size: 1.5em
+ }
+ .content {
+    margin-top: 50px;
+    margin-bottom: 50px;
+    margin-left: 75px;
+    margin-right: 75px;
+ }
+ .Qbox {
+    border-color: rgba(11,209,223,1);
+    border-width: 2px;
+    border-radius: 10px;
+    border-style: solid;
+
+    padding-top: 15px;
+    padding-bottom: 15px;
+    margin-top: 30px;
+    margin-bottom: 30px;
+ }
+ .collapsible {
+    cursor: pointer;
+    width: 100%;
+    border: none;
+    padding-left: 20px;
+    background-color: rgba(49,49,51,1);
+
+    display: flex;
+    justify-content: space-between;
+
+    color: white;
+    text-align: left;
+    font-weight: bold;
+    font-size: 0.9em;
+ }
+ .answer {
+    padding: 0 18px;
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.5s ease-out;
+ }
+ /* Plus/Minus animation */
+ .closed .vertical {
+    transition: all 0.5s ease-in-out;
+    opacity: 1;
+ }
+ .closed .horizontal {
+    transition: all 0.5s ease-in-out;
+    opacity: 1;
+ }
+
+ .opened .vertical {
+    transition: all 0.5s ease-in-out;
+    transform: rotate(180deg);
+    opacity: 0;
+ }
+ .opened .horizontal {
+    transition: all 0.5s ease-in-out;
+    transform: rotate(180deg);
+    opacity: 1;
+ }
+
+ .animate {
+    height: 1em;
+    width: 1em;
+    font-size: 1em;
+ }
+
+ .animate .plus-minus {
+    margin-top: 8px;
+    margin-left: 12px;
+    position: relative;
+ }
+ .animate .plus-minus .horizontal {
+    border-radius: 10px;
+    position: absolute;
+    background-color: rgba(15,194,212,1);
+    width: 30px;
+    height: 4px;
+    margin-left: -30px;
+    margin-top: -2.5px;
+ }
+ .animate .plus-minus .vertical {
+    border-radius: 10px;
+    position: absolute;
+    background-color: rgba(15,194,212,1);
+    width: 4px;
+    height: 30px;
+    margin-left: -17px;
+    margin-top: -15px;
+ }
