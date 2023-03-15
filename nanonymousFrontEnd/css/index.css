@@ -9,13 +9,23 @@
     overflow-x: hidden;
  }
  #innerbody {
-    width: 45em;
+    max-width: 45em;
     margin: 0 auto;
     font-family: DMSans-Medium;
     color: white;
  }
  #Hero {
     display: flex;
+    flex-wrap: wrap-reverse;
+ }
+ .HeroContainer {
+    display: flex;
+    flex-direction: column;
+    flex-grow:1;
+    width: 50%;
+    min-width: 15em;
+    margin-top: 40px;
+    margin-bottom: 40px;
  }
  #TransactionButtondiv {
     order: 0;
@@ -24,6 +34,7 @@
     margin-bottom: 25px;
  }
  #TransactionButtonSvg {
+    min-width: 10em;
     position: relative;
     width: 60%;
     left: 20%;
@@ -136,6 +147,9 @@
     text-align: left;
     font-weight: bold;
     font-size: 0.9em;
+ }
+ .collable {
+    padding-right: 25px;
  }
  .answer {
     padding: 0 18px;

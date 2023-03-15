@@ -1,15 +1,17 @@
 <!DOCTYPE html>
 <html>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <head>
 <title>Nanonymous</title>
 <link rel="stylesheet" href="css/index.css">
+<link rel="stylesheet" href="css/common.css">
 <img src="images/1_nospace.svg" alt="Nanonymous" style="width=150px; height:150px; display:block; margin-left: auto; margin-right: auto; margin-top: 50px; margin-bottom: 100px; width: 50%;">
 </head>
 <body>
    <div id=outerbody>
    <div id=innerbody>
       <div id=Hero>
-         <div style="display: flex; flex-direction: column; flex-grow:1; width: 50%; order:0">
+         <div class="HeroContainer" style="order:0">
             <div id=HeroText>
                A privacy focused service to keep your nano transactions to yourself.
             </div>
@@ -19,14 +21,14 @@
                </a>
             </div>
          </div>
-         <div style="display: flex; flex-direction: column; flex-grow:1; width: 50%; order:1">
+         <div class="HeroContainer" style="order:1">
             <div id="TransactionButtondiv">
                <div id="TransactionButtonSvg">
                   <a href="transaction.html">
                      <svg height="60" width="100%">
                            <rect id="TransactionButton" rx="15%" ry="50%" width="100%" height="60" />
                      </svg>
-                     <img id="buttonImage" src="images/nano-symbol-black@2x.png" alt="Nano.org">
+                     <img id="buttonImage" src="images/nano-symbol-black-no-border.svg" alt="Nano.org">
                      <span id="buttonText">Send Now</span>
                   </a>
                </div>
@@ -61,7 +63,9 @@
       <div class="content">
          <div class="Qbox">
             <button type="button" class="collapsible">
-               Q: Can my address be found if the recipient uses a blockchain browser?
+               <label class="collable">
+                  Q: Can my address be found if the recipient uses a blockchain browser?
+               </label>
                <div class="animate closed">
                   <div class="plus-minus">
                      <div class="horizontal"></div>
@@ -75,7 +79,9 @@
          </div>
          <div class="Qbox">
             <button type="button" class="collapsible">
-               Q: What happens if I you get hacked? Does all my information get leaked?
+               <label class="collable">
+                  Q: What happens if I you get hacked? Does all my information get leaked?
+               </label>
                <div class="animate closed">
                   <div class="plus-minus">
                      <div class="horizontal"></div>
@@ -89,7 +95,9 @@
          </div>
          <div class="Qbox">
             <button type="button" class="collapsible">
-               Q: What happens if I typed the wrong address?
+               <label class="collable">
+                  Q: What happens if I type the wrong address?
+               </label>
                <div class="animate closed">
                   <div class="plus-minus">
                      <div class="horizontal"></div>
@@ -106,6 +114,19 @@
    </div>
    </div>
 </body>
+<footer>
+   <img src="images/name.png" style="margin: auto">
+   <p> Contact us: </p>
+   <div style="position: relative; display: flex; height: 40px; width: 50%; left: 25%;">
+      <img src="images/discord-white.svg" style="margin: auto; height: 90%;">
+      <img src="images/twitter-small.png" style="margin: auto; height: 100%;">
+      <a href="mailto:info@nanonymous.cc" style="margin: auto; height: 70%;">
+         <img src="images/email.png" style="margin: auto; height: 100%;">
+      </a>
+   </div>
+   <p> 2023 &#169; Nanonymous </p>
+   <br/>
+</footer>
 </html>
 
 <script>
