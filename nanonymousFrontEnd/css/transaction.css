@@ -1,0 +1,49 @@
+ body {
+    font-size: 1.40em;
+ }
+ .info {
+    color: grey
+ }
+ .error {
+    color: red
+ }
+ #Transpng {
+    max-width: 90%;
+    order: -1;
+
+    object-fit: contain;
+
+    margin-top: 50px;
+    margin-bottom: 50px;
+ }
+ .inbox {
+    border-radius: 5px;
+    border-color: #0BD1DF;
+    font-size: 0.9em;
+    width: 100px;
+ }
+ .addressbox {
+    border-radius: 5px;
+    border-color: #0BD1DF;
+    font-size: 0.9em;
+    max-width: 100%;
+    height: auto;
+ }
+ #container {
+    position: fixed;
+    top: 0px;
+    left: 50%;
+    transform: translateX(-50%);
+ }
+ #button {
+    background-color: #0BD1DF;
+    color: black;
+    height: 35px;
+    width: 75px;
+
+    border-radius: 15px;
+ }
+ #button:disabled {
+    background-color: #999999;
+    color: #C6C6C6;
+ }

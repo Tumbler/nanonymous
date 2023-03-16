@@ -1,0 +1,33 @@
+ body {
+    width: 100%;
+    margin: 0;
+    background-color: rgba(49,49,51,1);
+ }
+ #outerbody {
+    width: 100%;
+    margin: 0;
+    overflow-x: hidden;
+ }
+ #innerbody {
+    max-width: 45em;
+    margin: 0 auto;
+    font-family: Arial;
+    color: white;
+ }
+ .Line {
+   stroke: rgba(11,209,223,1);
+   stroke-width: 3px;
+   height: 3px;
+
+ }
+ footer {
+    width: 100%;
+    margin: 0 auto;
+    padding-top: 40px;
+
+    text-align: center;
+    font-family: DMSans-Medium;
+    color: white;
+
+    background-color: rgba(21,21,21,1);
+ }
