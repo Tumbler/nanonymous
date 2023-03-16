@@ -16,6 +16,26 @@
     margin-top: 50px;
     margin-bottom: 50px;
  }
+ #instructions:hover {
+    text-decoration: underline;
+    cursor: pointer;
+ }
+ #infopopup {
+    background-color: #777777;
+    border-radius: 15px;
+    border-width: 15px;
+    border-color: black;
+    box-shadow: 3px 6px #111111;
+
+    visibility: hidden;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    min-width: 15em;
+    transform: translate(-50%, -50%);
+
+    padding: 10px;
+ }
  .inbox {
     border-radius: 5px;
     border-color: #0BD1DF;
@@ -28,6 +48,7 @@
     font-size: 0.9em;
     max-width: 100%;
     height: auto;
+    margin-top: 5px;
  }
  #container {
     position: fixed;
@@ -35,7 +56,11 @@
     left: 50%;
     transform: translateX(-50%);
  }
- #button {
+ #AddressContainer {
+    overflow-x: auto;
+    width: 100%;
+ }
+ .nButton {
     background-color: #0BD1DF;
     color: black;
     height: 35px;
@@ -43,7 +68,7 @@
 
     border-radius: 15px;
  }
- #button:disabled {
+ .nButton:disabled {
     background-color: #999999;
     color: #C6C6C6;
  }
