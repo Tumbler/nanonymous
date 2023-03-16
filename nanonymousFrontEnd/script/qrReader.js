@@ -1,6 +1,7 @@
 const video = document.createElement("video");
 const canvasElement = document.getElementById("qr-canvas");
-const canvas = canvasElement.getContext("2d");
+const xElement = document.getElementById("closeCam");
+const canvas = canvasElement.getContext("2d", {willReadFrequently: true});
 const container = document.getElementById("container")
 
 let scanning = false;
@@ -19,12 +20,7 @@ qrcode.callback = (res) => {
       }
       scanning = false;
 
-      video.srcObject.getTracks().forEach(track => {
-         track.stop();
-      });
-
-      canvasElement.hidden = true;
-      container.hidden = true;
+      stopCamera();
 
       if (valid) {
          navigator.vibrate(100);
@@ -33,19 +29,25 @@ qrcode.callback = (res) => {
    }
 };
 
-function requestCamera() {
-   navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "environment" } })
-      .then(function(stream) {
-      scanning = true;
-      canvasElement.hidden = false;
-      container.hidden = false;
-      video.setAttribute("playsinline", true); // required to tell iOS safari we don't want fullscreen
-      video.srcObject = stream;
-      video.play();
-      tick();
-      scan();
-    });
+async function requestCamera() {
+   try {
+      await navigator.mediaDevices
+         .getUserMedia({ video: { facingMode: "environment" } })
+         .then(function(stream) {
+         scanning = true;
+         canvasElement.hidden = false;
+         xElement.hidden = false;
+         container.hidden = false;
+         video.setAttribute("playsinline", true); // required to tell iOS safari we don't want fullscreen
+         video.srcObject = stream;
+         video.play();
+         tick();
+         scan();
+       });
+   } catch(error) {
+      alert("Could not find a camera!");
+      console.error(error);
+   }
 }
 
 function tick() {
@@ -62,4 +64,14 @@ function scan() {
    } catch (e) {
       setTimeout(scan, 333);
    }
+}
+
+function stopCamera() {
+   video.srcObject.getTracks().forEach(track => {
+      track.stop();
+   });
+
+   canvasElement.hidden = true;
+   xElement.hidden = true;
+   container.hidden = true;
 }

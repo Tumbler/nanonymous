@@ -19,8 +19,8 @@
    <div id=innerbody>
       <div style="display: flex;">
          <img id="Transpng" src="images/Transactions.png">
-         <svg width="9999px" style="margin-top: auto; margin-bottom: auto; margin-right: -600%; padding: 0px;">
-            <line class="Line" x1="25" y1="75" x2="9999" y2="75" />
+         <svg width="9999px" style="margin-top: auto; margin-bottom: auto; margin-right: -600%; margin-left: 2.75%; padding: 0px;">
+            <line class="Line" x1="0" y1="75" x2="9999" y2="75" />
          </svg>
       </div>
       <h2 style="color: #0BD1DF">Enter your transaction details below</h2>
@@ -28,7 +28,7 @@
          <p>How does this work?</p><img src="images/info-white.svg" style="height: 20px; margin-top: .75em; margin-left: .25em;"/>
       </div>
       <div id="infopopup">
-         <p> Four easy steps:<br>1: You give us the address you want to send to<br>2: We give you one of our addresses<br>3: You send the funds to our address<br>4: We send the funds to the final address<br> It's that easy!</p>
+         <p id="InfoText"> Four easy steps:<br><br>1: You give us the address you want to send to<br>2: We give you one of our addresses<br>3: You send the funds to our address<br>4: We send the funds to the final address<br> It's that easy!</p>
          <button class="nButton" onclick='(function(){document.getElementById("infopopup").style.visibility="hidden";})();' style="margin: auto;">Got it!</button>
       </div>
       <table>
@@ -70,6 +70,7 @@
 
       <div id="container">
           <canvas hidden="" id="qr-canvas" style="margin: auto;"></canvas>
+          <img id="closeCam" src="images/x.svg" hidden="" onclick='stopCamera();'>
       </div>
 
       <br>
@@ -94,14 +95,15 @@
 <footer>
    <img src="images/name.png" style="margin: auto">
    <p> Contact us: </p>
-   <div style="position: relative; display: flex; height: 40px; width: 50%; left: 25%;">
-      <img src="images/discord-white.svg" style="margin: auto; height: 90%;">
-      <img src="images/twitter-small.png" style="margin: auto; height: 100%;">
-      <a href="mailto:info@nanonymous.cc" style="margin: auto; height: 70%;">
-         <img src="images/email.png" style="margin: auto; height: 100%;">
+   <div id="ContactImgs">
+      <img id="discord" src="images/discord-white.svg">
+      <img id="twitter" src="images/twitter-small.png">
+      <a href="mailto:info@nanonymous.cc" style="margin: auto 20px; height: 70%;">
+         <img id="email" src="images/email.png">
       </a>
    </div>
-   <p> 2023 &#169; Nanonymous </p>
+   <br>
+   <p id="Copywrite"> 2023 &#169; Nanonymous </p>
    <br/>
 </footer>
 </html>

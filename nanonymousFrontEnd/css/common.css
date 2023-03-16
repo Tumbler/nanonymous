@@ -10,9 +10,10 @@
  }
  #innerbody {
     max-width: 45em;
-    margin: 0 auto;
+    margin: 0px auto;
     font-family: Arial;
     color: white;
+    padding: 15px;
  }
  .Line {
    stroke: rgba(11,209,223,1);
@@ -30,4 +31,34 @@
     color: white;
 
     background-color: rgba(21,21,21,1);
+ }
+ #ContactImgs {
+    position: relative;
+    display: flex;
+    justify-content: center;
+
+    height: 40px;
+    width: 50%;
+    left: 25%;
+ }
+ #Copywrite {
+    font-size: 12px;
+ }
+ #discord {
+    margin: auto 20px;
+    height: 90%;
+
+    z-index: 1;
+ }
+ #twitter {
+    margin: auto 20px;
+    height: 100%;
+
+    z-index: 1;
+ }
+ #email {
+    margin: auto;
+    height: 100%;
+
+    z-index: 1;
  }
