@@ -1,7 +1,7 @@
  body {
     width: 100%;
     margin: 0;
-    background-color: rgba(49,49,51,1);
+    background-color: #313133;
  }
  #outerbody {
     width: 100%;
@@ -16,7 +16,7 @@
     padding: 15px;
  }
  .Line {
-   stroke: rgba(11,209,223,1);
+   stroke: #0BD1DF;
    stroke-width: 3px;
    height: 3px;
 
@@ -30,7 +30,7 @@
     font-family: DMSans-Medium;
     color: white;
 
-    background-color: rgba(21,21,21,1);
+    background-color: #151515;
  }
  #ContactImgs {
     position: relative;

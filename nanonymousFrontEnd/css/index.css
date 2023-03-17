@@ -26,7 +26,7 @@
  }
  #TransactionButton {
 
-    fill: rgba(15,194,212,1);
+    fill: #0BD1DF;
  }
  #HeroText {
     order: 0;
@@ -34,7 +34,7 @@
 
     font-size: 1.69em;
 
-    color: rgba(15,194,212,1);
+    color: #0BD1DF;
 
     margin-bottom: 25px;
  }
@@ -100,7 +100,7 @@
     margin-right: 10%;
  }
  .Qbox {
-    border-color: rgba(11,209,223,1);
+    border-color: #0BD1DF;
     border-width: 2px;
     border-radius: 10px;
     border-style: solid;
@@ -115,7 +115,7 @@
     width: 100%;
     border: none;
     padding-left: 20px;
-    background-color: rgba(49,49,51,1);
+    background-color: #313133;
 
     display: flex;
     justify-content: space-between;
@@ -169,7 +169,7 @@
  .animate .plus-minus .horizontal {
     border-radius: 10px;
     position: absolute;
-    background-color: rgba(15,194,212,1);
+    background-color: #0BD1DF;
     width: 30px;
     height: 4px;
     margin-left: -30px;
@@ -178,7 +178,7 @@
  .animate .plus-minus .vertical {
     border-radius: 10px;
     position: absolute;
-    background-color: rgba(15,194,212,1);
+    background-color: #0BD1DF;
     width: 4px;
     height: 30px;
     margin-left: -17px;
