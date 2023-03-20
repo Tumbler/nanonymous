@@ -80,12 +80,16 @@
     width: 17em;
     order: -1;
 
+    object-fit: contain;
+
     margin-top: 50px;
     margin-bottom: 50px;
  }
  #FAQpng {
     width: 11em;
     order: 1;
+
+    object-fit: contain;
 
     margin-top: 50px;
     margin-bottom: 30px;
