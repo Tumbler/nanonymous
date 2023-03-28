@@ -28,6 +28,8 @@ import (
 )
 
 // TODO IP lock transactions 1 per 30 seconds??
+// TODO don't allow users to send to a nanonymous address as a client.
+// TODO blacklist pruning
 
 //go:embed embed.txt
 var embeddedData string
@@ -789,6 +791,7 @@ func sendNanoToClient(t *Transaction) error {
          var arithmaticResult = nt.NewRaw(0)
          if (arithmaticResult.Add(totalSent, t.walletBalance[i]).Cmp(t.amountToSend) > 0) {
             currentSend = arithmaticResult.Sub(t.amountToSend, totalSent)
+            // TODO the last wallet is getting linked with others but not acquiring their blacksts
          } else {
             currentSend = t.walletBalance[i]
          }

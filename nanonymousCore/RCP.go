@@ -21,7 +21,7 @@ import (
 
 func getAccountBalance(nanoAddress string) (*nt.Raw, *nt.Raw, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -45,7 +45,7 @@ func getAccountBalance(nanoAddress string) (*nt.Raw, *nt.Raw, error) {
 
 func getAccountBlockCount(nanoAddress string) (int, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -68,7 +68,7 @@ func getAccountBlockCount(nanoAddress string) (int, error) {
 
 func getOwnerOfBlock(hash string) (string, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    hash = strings.ToUpper(hash)
 
@@ -93,7 +93,7 @@ func getOwnerOfBlock(hash string) (string, error) {
 
 func confirmBlock(hash string) error {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    hash = strings.ToUpper(hash)
 
@@ -121,7 +121,7 @@ func confirmBlock(hash string) error {
 
 func getBlockCount() (*big.Int, *big.Int, *big.Int, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -145,7 +145,7 @@ func getBlockCount() (*big.Int, *big.Int, *big.Int, error) {
 
 func printPeers() error {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -172,7 +172,7 @@ func printPeers() error {
 
 func telemetry() error {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -192,7 +192,7 @@ func telemetry() error {
 
 func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (nt.BlockHash, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    sig := strings.ToUpper(hex.EncodeToString(signature))
 
@@ -228,7 +228,7 @@ func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (nt.B
 
 func publishReceive(block keyMan.Block, signature []byte, proofOfWork string) (nt.BlockHash, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    sig := strings.ToUpper(hex.EncodeToString(signature))
 
@@ -278,7 +278,7 @@ type AccountInfo struct {
 
 func getAccountInfo(nanoAddress string) (AccountInfo, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -298,7 +298,7 @@ func getAccountInfo(nanoAddress string) (AccountInfo, error) {
 }
 
 func getAccountRep(nanoAddress string) (AccountInfo, error) {
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -317,7 +317,7 @@ func getAccountRep(nanoAddress string) (AccountInfo, error) {
 }
 
 func getAccountWeight(nanoAddress string) (*nt.Raw, error) {
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -354,7 +354,7 @@ type AccountHistory struct {
 
 func getAccountHistory(nanoAddress string, num int) (AccountHistory, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -374,7 +374,7 @@ func getAccountHistory(nanoAddress string, num int) (AccountHistory, error) {
 
 func getAccountsPending(nanoAddresses []string) (map[string][]nt.BlockHash, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    var addressString string
    for _, address := range nanoAddresses {
@@ -408,7 +408,7 @@ func getAccountsPending(nanoAddresses []string) (map[string][]nt.BlockHash, erro
 // Same as above, but for only one account
 func getReceivable(nanoAddress string, count int) ([]nt.BlockHash, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -434,7 +434,7 @@ func getReceivable(nanoAddress string, count int) ([]nt.BlockHash, error) {
 }
 
 func republish(hash nt.BlockHash) error {
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -459,7 +459,7 @@ func republish(hash nt.BlockHash) error {
 
 func printStats(argument string) error {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -484,7 +484,7 @@ func printStats(argument string) error {
 
 func getSuccessors(block nt.BlockHash, count int) ([]nt.BlockHash, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -512,7 +512,7 @@ func getSuccessors(block nt.BlockHash, count int) ([]nt.BlockHash, error) {
 
 func printTelemetry() error {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -536,7 +536,7 @@ func printTelemetry() error {
 
 func printVersion() error {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -560,7 +560,7 @@ func printVersion() error {
 
 func getUncheckedBlocks(count int) (map[string]keyMan.Block, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -587,7 +587,7 @@ func getUncheckedBlocks(count int) (map[string]keyMan.Block, error) {
 
 func getUptime() (int, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -621,7 +621,7 @@ type BlockInfo struct {
 
 func getBlockInfo(hash nt.BlockHash) (BlockInfo, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -640,7 +640,7 @@ func getBlockInfo(hash nt.BlockHash) (BlockInfo, error) {
 }
 
 func getAvailableSupply () (*nt.Raw, error) {
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -661,7 +661,7 @@ func getAvailableSupply () (*nt.Raw, error) {
 }
 
 func getNumberOfDelegators(nanoAddress string) (int, error) {
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -683,7 +683,7 @@ func getNumberOfDelegators(nanoAddress string) (int, error) {
 }
 
 func getFrontierCount() (int, error) {
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -705,7 +705,7 @@ func getFrontierCount() (int, error) {
 
 func printBootstrapStatus() error {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -729,7 +729,7 @@ func printBootstrapStatus() error {
 
 func printConfirmationQuorum() error {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -753,7 +753,7 @@ func printConfirmationQuorum() error {
 
 func getBlocksInChain(block nt.BlockHash, count int) ([]nt.BlockHash, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -778,7 +778,7 @@ func getBlocksInChain(block nt.BlockHash, count int) ([]nt.BlockHash, error) {
 
 func getActiveConfirmations() (string, int, int, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -803,7 +803,7 @@ func getActiveConfirmations() (string, int, int, error) {
 
 func printConfirmationHistory() error {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{
@@ -828,7 +828,7 @@ func printConfirmationHistory() error {
 
 func generateWorkOnNode(hash nt.BlockHash, difficulty string) (string, error) {
 
-   url := "http://"+ nodeIP
+   url := "https://"+ nodeIP
 
    request :=
    `{

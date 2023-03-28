@@ -133,6 +133,11 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
+               case "update":
+                  err = CLIupdate(myKey, array, &prompt)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
                case "-h":
                   fallthrough
                case "help":
@@ -147,6 +152,7 @@ func CLI() {
                   fallthrough
                case "q":
                   break walletMenu
+               case "":
                default:
                   println(array[0], `not recognized as a command. Try "help" or "-h"`)
             }
@@ -1140,6 +1146,18 @@ func CLIreceiveOnly(args []string) error {
    return nil
 }
 
+func CLIupdate(myKey *keyMan.Key, args []string, prompt *string) error {
+   checkBalance(myKey.NanoAddress)
+
+   rawBalance, _ := getBalance(myKey.NanoAddress)
+   NanoBalance := rawToNANO(rawBalance)
+   format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+
+   *prompt = format
+
+   return nil
+}
+
 func CLIhelp(args []string) {
    var term string
    if (len(args) >= 2) {
@@ -1404,6 +1422,7 @@ var walletCompleter = readline.NewPrefixCompleter(
    readline.PcItem("receiveonly",
       readline.PcItem("off"),
    ),
+   readline.PcItem("update"),
    readline.PcItem("help"),
    readline.PcItem("exit"),
    readline.PcItem("verbosity"),
