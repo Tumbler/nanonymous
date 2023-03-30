@@ -229,35 +229,6 @@ func initNanoymousCore(mainInstance bool) error {
 
 // listen is the default operation of nanonymousCore. It listens on port 41721
 // for incoming requests from the front end and passes them off to the handler.
-//func listen() error {
-   //const INSTANCE_PORT = 41721
-//
-   //listener, err := net.Listen("tcp", fmt.Sprintf(":%d", INSTANCE_PORT))
-   //if (err != nil) {
-      //if (strings.Index(err.Error(), "in use") != -1) {
-         //return fmt.Errorf("listen: Another instance was detected")
-      //} else {
-         //return fmt.Errorf("listen: %w", err)
-      //}
-   //}
-   //defer listener.Close()
-//
-   //// Listen for eternity to incoming address requests
-   //for {
-      //if (verbosity >= 3) {
-         //fmt.Println("Listening....")
-      //}
-      //conn, err := listener.Accept()
-      //if (err != nil) {
-         //Error.Println("Error with single instance port:", err.Error())
-      //}
-      //go handleRequest(conn)
-   //}
-//
-   //return nil
-//}
-
-// TODO tls attempt
 func listen() error {
    const INSTANCE_PORT = 41721
 
@@ -286,6 +257,9 @@ func listen() error {
       conn, err := listener.Accept()
       if (err != nil) {
          Error.Println("Error with single instance port:", err.Error())
+         if (verbosity >= 3) {
+            fmt.Println("Error with single instance port:", err.Error())
+         }
       }
       go handleRequest(conn)
    }
@@ -304,6 +278,9 @@ func handleRequest(conn net.Conn) error {
    buff := make([]byte, 1024)
    _, err := conn.Read(buff)
    if (err != nil) {
+      if (verbosity >= 3) {
+         fmt.Println("handleRequest1:", err.Error())
+      }
       return fmt.Errorf("handleRequest: %w", err)
    }
    var text = string(buff)
@@ -313,7 +290,9 @@ func handleRequest(conn net.Conn) error {
       if (len(subArray) >= 2 && subArray[0] == "address") {
          newKey, _, err := getNewAddress(subArray[1], false, 0)
          if (err != nil) {
-            fmt.Println("handleRequest: ", err.Error())
+            if (verbosity >= 3) {
+               fmt.Println("handleRequest2: ", err.Error())
+            }
             conn.Write([]byte("There was an error, please try again later"))
             conn.Close()
             return fmt.Errorf("handleRequest: %w", err)
