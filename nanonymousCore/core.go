@@ -1399,10 +1399,17 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
       work, err := generateWorkOnWorkServer(hash, difficulty)
       //work, err := generateWorkOnNode(hash, difficulty)
       if (err != nil) {
+         if (verbosity >= 2) {
+            fmt.Println("Failed to connect to work server", err.Error())
+         }
          Warning.Println("Failed to connect to work server")
+
          // Fall back server
          work, err = generateWorkOnNode(hash, difficulty)
          if (err != nil) {
+            if (verbosity >= 1) {
+               fmt.Println("Failed to generate work")
+            }
             Error.Println("Failed to generate work")
             return ""
          }
