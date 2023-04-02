@@ -120,7 +120,7 @@ function ajaxGetAddress(finalAddress) {
    req.onload = function() {
       if (this.response.includes("address=")) {
          var address = this.response.match(/address=(nano_[a-z0-9]+)/i)[1];
-         document.getElementById("TransactionInfo").innerHTML = "Tap to open wallet if on mobile"
+         document.getElementById("TransactionInfo").innerHTML = "Tap QR code to open wallet if on mobile"
 
          var qrCodeText = "nano:" + address + "?amount=" + raw;
 
