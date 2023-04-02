@@ -766,19 +766,6 @@ func CLI() {
             fmt.Println(err.Error())
          }
 
-      case "8":
-         fmt.Print("Seed: ")
-         fmt.Scan(&usr)
-         seed, _ := strconv.Atoi(usr)
-         fmt.Print("Index: ")
-         fmt.Scan(&usr)
-         index, _ := strconv.Atoi(usr)
-         fmt.Print("Nano: ")
-         fmt.Scan(&usr)
-         nano, _ := strconv.Atoi(usr)
-
-         manualWalletUpdate(seed, index, int64(nano))
-
       case "9":
          verbosity = 5
          getBlockCount()
@@ -924,7 +911,19 @@ func CLIsend(myKey *keyMan.Key, args []string, prompt *string) {
    amountRaw := nt.NewRawFromNano(amountNano)
    _, err = Send(myKey, toPubKey, amountRaw, nil, nil, -1)
    if (err != nil) {
-      fmt.Println(fmt.Errorf("CLIsend: %w", err))
+      if (strings.Contains(err.Error(), "work")) {
+         // Problem with work, try again.
+         if (verbosity >= 5) {
+            fmt.Println("Problem with work, trying again...")
+         }
+         clearPoW(myKey.NanoAddress)
+         _, err = Send(myKey, toPubKey, amountRaw, nil, nil, -1)
+         if (err != nil) {
+            fmt.Println(fmt.Errorf("CLIsend: %w", err))
+         }
+      } else {
+         fmt.Println(fmt.Errorf("CLIsend: %w", err))
+      }
    }
 
    rawBalance, _ := getBalance(myKey.NanoAddress)
@@ -943,10 +942,13 @@ func CLIlist(args []string) error {
       ignoreZeroBalance = true
    }
 
+   var ignoreReceiveOnly bool
    if (contains(args, "-a")) {
       rows, err = getAllWalletRowsFromDatabase()
+      ignoreReceiveOnly = false
    } else {
       rows, err = getWalletRowsFromDatabase()
+      ignoreReceiveOnly = true
    }
 
    if (err != nil) {
@@ -959,9 +961,9 @@ func CLIlist(args []string) error {
       var balance = nt.NewRaw(0)
       var dummy1 string
       var dummy2 bool
-      var dummy3 bool
+      var receiveOnly bool
 
-      rows.Scan(&seed, &index, balance, &dummy1, &dummy2, &dummy3)
+      rows.Scan(&seed, &index, balance, &dummy1, &dummy2, &receiveOnly)
 
       if (ignoreZeroBalance && balance.Cmp(nt.NewRaw(0)) == 0) {
          continue
@@ -969,7 +971,16 @@ func CLIlist(args []string) error {
 
       balanceInNano := rawToNANO(balance)
 
-      fmt.Print(seed, ",", index, ":  Ӿ ", balanceInNano, "\n")
+      var text = ""
+      if (receiveOnly) {
+         text = ", receive_only"
+      }
+
+      if (ignoreReceiveOnly) {
+         fmt.Print(seed, ",", index, ":  Ӿ ", balanceInNano, "\n")
+      } else {
+         fmt.Print(seed, ",", index, ":  Ӿ ", balanceInNano, text, "\n")
+      }
    }
 
    return nil
@@ -1087,6 +1098,7 @@ func CLInew(myKey *keyMan.Key, args []string, prompt *string) error {
    return nil
 }
 
+// TODO make program not crash if you don't have enough arguments
 func CLIpeek(args []string) error {
 
    seed, err := strconv.Atoi(args[1])
@@ -1178,6 +1190,8 @@ func CLIhelp(args []string) {
          CLIhelpnew()
       case "peek":
          CLIhelppeek()
+      case "receive":
+         CLIhelpreceive()
       case "receiveonly":
          CLIhelpreceiveOnly()
       case "-h":
@@ -1196,6 +1210,7 @@ func CLIhelp(args []string) {
          CLIhelplist()
          CLIhelpnew()
          CLIhelppeek()
+         CLIhelpreceive()
          CLIhelpreceiveOnly()
          CLIhelpselect()
          CLIhelpsend()
@@ -1249,6 +1264,11 @@ func CLIhelpsend() {
 func CLIhelpselect() {
    fmt.Println()
    fmt.Print("   - set/select {seed} {index} | Sets the current wallet to indicated seed and index\n")
+}
+
+func CLIhelpreceive() {
+   fmt.Println()
+   fmt.Print("   - receive | Finds the next receivable hash for the active address and receives it\n",)
 }
 
 func CLIhelpreceiveOnly() {

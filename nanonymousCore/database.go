@@ -518,7 +518,12 @@ func addressIsReceiveOnly(nanoAddress string) bool {
    pubKey, _ := keyMan.AddressToPubKey(nanoAddress)
    hash := blake2b.Sum256(pubKey)
    var receiveOnly bool
-   err = conn.QueryRow(context.Background(), queryString, hash).Scan(&receiveOnly)
+   err = conn.QueryRow(context.Background(), queryString, hash[:]).Scan(&receiveOnly)
+   if (err != nil) {
+      // TODO log err
+      fmt.Println("addressIsReceiveOnly: QueryRow failed: %w", err)
+      return false
+   }
 
    return receiveOnly
 }

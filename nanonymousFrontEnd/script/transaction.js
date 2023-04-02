@@ -141,9 +141,9 @@ function ajaxGetAddress(finalAddress) {
       req2.onload = function() {
          if (this.response.includes("hash=")) {
             var hash = this.response.match(/hash=([a-f0-9]+)/i)[1];
-            document.getElementById("TransactionInfo").innerHTML = "Transaction Complete!"
+            document.getElementById("TransactionInfo").innerHTML = "Transaction Complete!<br>See the transaction here:"
 
-            document.getElementById("HashLink").href = "www.nanolooker.com/block/" + hash;
+            document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
             document.getElementById("HashLink").innerHTML = hash;
             document.getElementById("QRdiv").hidden = true;
             document.getElementById("Hashdiv").hidden = false;

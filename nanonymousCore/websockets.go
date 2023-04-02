@@ -259,6 +259,13 @@ func handleNotification(cBlock ConfirmationBlock) {
             } else {
                // Internal send, but no transaction is requesting it so just
                // receive the funds
+               err := BlockUntilReceivable(msg.Block.LinkAsAccount, 5 * time.Minute)
+               if (err != nil) {
+                  if (verbosity >= 6) {
+                     fmt.Println("handleNotification: %w", err)
+                  }
+                  Warning.Println("handleNotification: %w", err)
+               }
                Receive(msg.Block.LinkAsAccount)
             }
          } else {
@@ -268,6 +275,16 @@ func handleNotification(cBlock ConfirmationBlock) {
             }
             if (addressIsReceiveOnly(msg.Block.LinkAsAccount)) {
                // Address flagged, don't start a transaction
+               if (verbosity >= 5) {
+                  fmt.Println("Receive only address.")
+               }
+               err := BlockUntilReceivable(msg.Block.LinkAsAccount, 5 * time.Minute)
+               if (err != nil) {
+                  if (verbosity >= 6) {
+                     fmt.Println("handleNotification: %w", err)
+                  }
+                  Warning.Println("handleNotification: %w", err)
+               }
                Receive(msg.Block.LinkAsAccount)
             } else {
                receivedNano(msg.Block.LinkAsAccount)

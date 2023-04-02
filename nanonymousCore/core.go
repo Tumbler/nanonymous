@@ -288,17 +288,22 @@ func handleRequest(conn net.Conn) error {
    if (len(array) >= 2 && array[0] == "newaddress") {
       var subArray = strings.Split(array[1], "=")
       if (len(subArray) >= 2 && subArray[0] == "address") {
-         newKey, _, err := getNewAddress(subArray[1], false, 0)
-         if (err != nil) {
-            if (verbosity >= 3) {
-               fmt.Println("handleRequest2: ", err.Error())
+         if (addressExsistsInDB(subArray[1]) && !addressIsReceiveOnly(subArray[1])) {
+            // Cannont send to a Nanonymous wallet as the client.
+            conn.Write([]byte("Invalid Request!"))
+         } else {
+            newKey, _, err := getNewAddress(subArray[1], false, 0)
+            if (err != nil) {
+               if (verbosity >= 3) {
+                  fmt.Println("handleRequest2: ", err.Error())
+               }
+               conn.Write([]byte("There was an error, please try again later"))
+               conn.Close()
+               return fmt.Errorf("handleRequest: %w", err)
             }
-            conn.Write([]byte("There was an error, please try again later"))
-            conn.Close()
-            return fmt.Errorf("handleRequest: %w", err)
-         }
 
-         conn.Write([]byte("address="+ newKey.NanoAddress))
+            conn.Write([]byte("address="+ newKey.NanoAddress))
+         }
       } else {
          conn.Write([]byte("Invalid Request!"))
       }
@@ -1029,7 +1034,7 @@ func getClientAddress(parentSeedId int, index int) []byte {
 func setClientAddress(parentSeedId int, index int, clientAddress []byte) error {
    key := strconv.Itoa(parentSeedId) + "-" + strconv.Itoa(index)
    if (activeTransactionList[key] != nil) {
-      return fmt.Errorf("setClientAddress: address already exists in active trnasaction list")
+      return fmt.Errorf("setClientAddress: address already exists in active transaction list")
    }
 
    if (len(clientAddress) != 0 ) {
@@ -1149,36 +1154,6 @@ func sendAllNano(fromKey *keyMan.Key, toPublicKey []byte) error {
    return nil
 }
 
-// Uhhhhh prob delete this funciton, TODO
-func manualWalletUpdate(seed int, index int, nano int64) error {
-   conn, err := pgx.Connect(context.Background(), databaseUrl)
-   if (err != nil) {
-      return fmt.Errorf("manualWalletUpdatn: %w", err)
-   }
-   defer conn.Close(context.Background())
-
-   amount := nt.NewRaw(0).Mul(nt.NewRaw(nano), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))
-
-   queryString :=
-   "UPDATE " +
-      "wallets " +
-   "SET " +
-      "\"balance\" = \"balance\" + $1 " +
-   "WHERE " +
-      "\"parent_seed\" = $2 AND " +
-      "\"index\" = $3;"
-
-   rowsAffected, err := conn.Exec(context.Background(), queryString, amount, seed, index)
-   if (err != nil) {
-      return fmt.Errorf("manualWalletUpdate: Update: %w", err)
-   }
-   if (rowsAffected.RowsAffected() < 1) {
-      return fmt.Errorf("manualWalletUpdate: no rows affected during index incrament")
-   }
-
-   return nil
-}
-
 // needs improvment but can probaby be in CLI TODO
 func ReceiveAll(account string) error {
 
@@ -1190,6 +1165,30 @@ func ReceiveAll(account string) error {
       if (numLeft <= 0) {
          break
       }
+   }
+
+   return nil
+}
+
+func BlockUntilReceivable(account string, d time.Duration) error {
+
+   deadline := time.Now().Add(d)
+
+   for {
+      hashArray, err := getReceivable(account, 1)
+      if (err != nil) {
+         return fmt.Errorf("BlockUntilReceivable: %w", err)
+      }
+
+      if (len(hashArray) > 0) {
+         break
+      }
+
+      if (time.Now().After(deadline)) {
+         break
+      }
+
+      time.Sleep(2 * time.Second)
    }
 
    return nil
@@ -1356,8 +1355,8 @@ func preCalculateNextPoW(nanoAddress string, isReceiveBlock bool) {
    }
 }
 
-var activePoW map[string]int
-var workChannel map[string]chan string
+var activePoW = make(map[string]int, 0)
+var workChannel = make(map[string]chan string, 0)
 
 // calculateNextPoW finds the hash and calculates the PoW using any number of
 // different work servers setup at runtime. It returns the work generated as a
@@ -1368,6 +1367,7 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
       return ""
    }
    // TODO should receiveblocks request work from the node instead?
+   // TODO do we need to make this work for multiple recalls? At the moment the channels would block
 
    // Check if PoW is already being calculated
    if (activePoW[nanoAddress] == 0) {
@@ -1397,7 +1397,6 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
       }
 
       work, err := generateWorkOnWorkServer(hash, difficulty)
-      //work, err := generateWorkOnNode(hash, difficulty)
       if (err != nil) {
          if (verbosity >= 2) {
             fmt.Println("Failed to connect to work server", err.Error())
