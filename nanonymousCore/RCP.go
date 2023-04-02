@@ -924,6 +924,9 @@ func rcpCall(request string, response any, url string, ch chan error) error {
       return fmt.Errorf("NewRequest: %w", err)
    }
 
+   // If not json this will need to change.
+   req.Header.Add("Content-Type", "application/json")
+
    res, err := http.DefaultClient.Do(req)
    if (err != nil) {
       return fmt.Errorf("DefaultClient: %w", err)

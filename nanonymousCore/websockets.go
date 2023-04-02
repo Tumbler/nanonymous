@@ -37,7 +37,6 @@ var numSubsribed int
 const ACCOUNTS_TRACKED = 5000
 
 func websocketListener(ch chan int) {
-   // TODO needs to work over secure connection (wss)
    if (verbosity >= 5) {
       fmt.Println("Started listening to websockets on:", websocketAddress)
    }
