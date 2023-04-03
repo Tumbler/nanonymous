@@ -1,4 +1,16 @@
 <?php
+header('Content-Type: text/event-stream');
+// recommended to prevent caching of event data.
+header('Cache-Control: no-cache');
+
+function keepAlive() {
+    echo "keep alive\n";
+    echo PHP_EOL;
+
+    ob_flush();
+    flush();
+}
+
 $finalAddress=$_GET['address'];
 
 $context = stream_context_create(
@@ -11,8 +23,16 @@ if (!$socket) {
    echo "comm error: $errstr ($errno)<br />\n";
 } else {
    fwrite($socket, "trRequest&address=$finalAddress=");
-   while (($buffer = fgets($socket, 128)) !== false) {
-      $hash = $buffer;
+   while (true) {
+
+      $buffer = fgets($socket);
+      if ($buffer !== false) {
+         if (str_contains($buffer, "hash")) {
+            $hash = $buffer;
+            break;
+         }
+      }
+      keepAlive();
    }
    fclose($socket);
 }
