@@ -860,6 +860,7 @@ func generateWorkOnWorkServer(hash nt.BlockHash, difficulty string) (string, err
    `{
       "action": "work_generate",
       "difficulty": "`+ difficulty +`",
+      "use_peers": "true",
       "hash": "`+ hash.String() +`"
     }`
 
@@ -872,7 +873,7 @@ func generateWorkOnWorkServer(hash nt.BlockHash, difficulty string) (string, err
 
    err := rcpCall(request, &response, workServer, nil)
    if (err != nil) {
-      return "", fmt.Errorf("generateWorkOnNode: %w", err)
+      return "", fmt.Errorf("generateWorkOnWorkServer: %w", err)
    }
 
    return response.Work, nil

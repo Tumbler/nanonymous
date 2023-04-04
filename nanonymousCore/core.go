@@ -31,6 +31,7 @@ import (
 // TODO IP lock transactions 1 per 30 seconds??
 // TODO don't allow users to send to a nanonymous address as a client.
 // TODO blacklist pruning
+// TODO Test what happens if you open two different tabs
 
 //go:embed embed.txt
 var embeddedData string
@@ -57,6 +58,8 @@ const MAX_INDEX = 4294967295
 const FEE_PERCENT = float64(0.2)
 var feeDividend int64
 var minPayment *nt.Raw
+
+var betaMode bool
 
 var wg sync.WaitGroup
 
@@ -109,7 +112,10 @@ func main() {
          CLI()
 
       } else {
-         // Default operation, but with changed verbosity
+         // Default operation, but with changed verbosity or beta
+         if (strings.ToLower(args[0]) == "-beta") {
+            betaMode = true
+         }
          defaultOperation()
       }
    } else {
@@ -202,8 +208,12 @@ func initNanoymousCore(mainInstance bool) error {
       return fmt.Errorf("initNanoymousCore: work server address not found! (Use \"work = {work_server_address}\" in embed.txt)")
    }
 
-   feeDividend = int64(math.Trunc(100/FEE_PERCENT))
-   minPayment = nt.OneNano()
+   if (!betaMode) {
+      feeDividend = int64(math.Trunc(100/FEE_PERCENT))
+      minPayment = nt.OneNano()
+   } else {
+      minPayment = nt.NewRaw(0)
+   }
 
    // Some things to do for only the main instance
    if (mainInstance) {
@@ -261,6 +271,7 @@ func listen() error {
             fmt.Println("Error with single instance port:", err.Error())
          }
       }
+
       go handleRequest(conn)
    }
 
@@ -276,6 +287,7 @@ func listen() error {
 func handleRequest(conn net.Conn) error {
    // look into conn.LocalAddr() and conn.RemotAddr()
    buff := make([]byte, 1024)
+   conn.SetDeadline(time.Now().Add(12 * time.Hour))
    _, err := conn.Read(buff)
    if (err != nil) {
       if (verbosity >= 3) {
@@ -312,15 +324,28 @@ func handleRequest(conn net.Conn) error {
       if (len(subArray) >= 2 && subArray[0] == "address") {
          ch := make(chan nt.BlockHash)
          registerFinalHashListener(subArray[1], ch)
-         conn.SetWriteDeadline(time.Time{})
          var hash nt.BlockHash
-         select {
-            case hash = <- ch:
-            case <-time.After(12 * time.Hour):
-               // Timeout.
-               Info.Println("handleRequest: Hash request timeout")
-               return fmt.Errorf("handleRequest: Hash request timeout")
+
+         // Timeout after 12 hours
+         deadline := time.Now().Add(12 * time.Hour)
+
+         hashloop:
+         for (time.Now().Before(deadline)) {
+            select {
+               case hash = <- ch:
+                  break hashloop
+               case <-time.After(20 * time.Second):
+                  fmt.Println("keepalive")
+                  conn.Write([]byte("keepAlive\n\r"))
+            }
          }
+
+         if (time.Now().After(deadline)) {
+            // Timeout.
+            Info.Println("handleRequest: Hash request timeout")
+            return fmt.Errorf("handleRequest: Hash request timeout")
+         }
+
          unregisterFinalHashListener(subArray[1])
 
          conn.Write([]byte("hash="+ hash.String()))
@@ -539,7 +564,7 @@ func blacklist(conn psqlDB, sendingAddress []byte, receivingAddress []byte) erro
 func blacklistHash(sendingAddress []byte, receivingHash nt.BlockHash) error {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return fmt.Errorf("receivedNano: %w", err)
+      return fmt.Errorf("blacklistHash: %w", err)
    }
    defer conn.Close(context.Background())
 
@@ -582,12 +607,29 @@ func receivedNano(nanoAddress string) error {
       return fmt.Errorf("receivedNano: %w", err)
    }
 
+   err = BlockUntilReceivable(nanoAddress, 5 * time.Minute)
+   if (err != nil) {
+      return fmt.Errorf("receivedNano, funds not receiveable: %w", err)
+   }
+
    payment, receiveHash, _, err := Receive(nanoAddress)
    if (err != nil) {
       return fmt.Errorf("receivedNano: %w", err)
    }
    if (payment == nil || payment.Cmp(nt.NewRaw(0)) == 0) {
       return fmt.Errorf("receivedNano: No payment received")
+   }
+
+   if (minPayment.Cmp(payment) > 0) {
+      // Less than the minimum. Refund it.
+      err := Refund(receiveHash)
+      if (err != nil) {
+         Error.Println("non-transaction Refund failed!! %w", err)
+         return fmt.Errorf("non-transaction Refund failed!! %w", err)
+      }
+
+      // Transaction aborted
+      return nil
    }
 
    // If anything goes wrong the transactionManager will make sure to clean up
@@ -632,7 +674,7 @@ func receivedNano(nanoAddress string) error {
       err = fmt.Errorf("receivedNano: no active transaction available")
       return err
    }
-       //keyMan.NewRaw(0).Div(payment, keyMan.NewRaw(feeDividend))
+
    t.fee = calculateFee(payment)
    t.amountToSend = nt.NewRaw(0).Sub(payment, t.fee)
    if (verbosity >= 5) {
@@ -1517,6 +1559,11 @@ func checkBalance(nanoAddress string) error {
 // because ain't nobody got time for that.
 func calculateFee(payment *nt.Raw) *nt.Raw {
 
+   if (betaMode) {
+      // No fee in beta mode
+      return nt.NewRaw(0)
+   }
+
    // Find base fee simply by taking the percentage
    fee := nt.NewRaw(0).Div(payment, nt.NewRaw(feeDividend))
 
@@ -1586,19 +1633,22 @@ func returnAllReceiveable() error {
             // Found funds. Receive them first and then refund them.
             _, receiveHash, _, _ := Receive(seed.NanoAddress)
 
-            // Poll until block is confirmed
-            for {
-               time.Sleep(5 * time.Second)
+            // Don't refund if wallet is receive only
+            if (!addressIsReceiveOnly(seed.NanoAddress)) {
+               // Poll until block is confirmed
+               for {
+                  time.Sleep(5 * time.Second)
 
-               info, _ := getBlockInfo(receiveHash)
-               if (info.Confirmed) {
-                  break
+                  info, _ := getBlockInfo(receiveHash)
+                  if (info.Confirmed) {
+                     break
+                  }
                }
-            }
 
-            err := Refund(receiveHash)
-            if (err != nil) {
-               Warning.Println("Refund failed on", seed.NanoAddress, "during routine pending check:", err.Error())
+               err := Refund(receiveHash)
+               if (err != nil) {
+                  Warning.Println("Refund failed on", seed.NanoAddress, "during routine pending check:", err.Error())
+               }
             }
          }
       }

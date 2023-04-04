@@ -271,7 +271,6 @@ func handleNotification(cBlock ConfirmationBlock) {
          } else {
             if (verbosity >= 5) {
                fmt.Println(" External Send")
-               fmt.Println("Starting Transaction!")
             }
             if (addressIsReceiveOnly(msg.Block.LinkAsAccount)) {
                // Address flagged, don't start a transaction
@@ -287,7 +286,16 @@ func handleNotification(cBlock ConfirmationBlock) {
                }
                Receive(msg.Block.LinkAsAccount)
             } else {
-               receivedNano(msg.Block.LinkAsAccount)
+               if (verbosity >= 5) {
+                  fmt.Println("Starting Transaction!")
+               }
+               err := receivedNano(msg.Block.LinkAsAccount)
+               if (err != nil) {
+                  if (verbosity >= 5) {
+                     fmt.Println("handleNotification: %w", err)
+                  }
+                  Warning.Println("handleNotification: %w", err)
+               }
             }
          }
       } else {

@@ -133,6 +133,11 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
+               case "clearpow":
+                  err = CLIclearPoW(myKey, array)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
                case "update":
                   err = CLIupdate(myKey, array, &prompt)
                   if (err != nil) {
@@ -1158,6 +1163,18 @@ func CLIreceiveOnly(args []string) error {
    return nil
 }
 
+func CLIclearPoW(myKey *keyMan.Key, args []string) error {
+
+   err := clearPoW(myKey.NanoAddress)
+   if (err != nil) {
+      return fmt.Errorf("CLIclearPoW: %w", err)
+   }
+
+   fmt.Println("PoW cleared")
+
+   return nil
+}
+
 func CLIupdate(myKey *keyMan.Key, args []string, prompt *string) error {
    checkBalance(myKey.NanoAddress)
 
@@ -1443,6 +1460,7 @@ var walletCompleter = readline.NewPrefixCompleter(
       readline.PcItem("off"),
    ),
    readline.PcItem("update"),
+   readline.PcItem("clearpow"),
    readline.PcItem("help"),
    readline.PcItem("exit"),
    readline.PcItem("verbosity"),
