@@ -128,26 +128,33 @@ function ajaxGetAddress(finalAddress) {
          document.getElementById("qr-label").innerHTML = address;
          var qr = new QRious({
             element: document.getElementById("QRCode"),
-            size: 250, value: qrCodeText
+            foreground: '#151515', size: 250, value: qrCodeText
          });
          document.getElementById("QRdiv").hidden = false;
+         document.getElementById("button").hidden = true;
+         setTimeout(window.scrollTo(0,1000),100);
       }
 
       // Wait until transaction is complete and then post the hash.
       var req2 = new XMLHttpRequest();
-      req2.open("POST", "php/getFinalHash.php?address="+ finalAddress)
+      req2.open("POST", "php/getFinalHash.php?address="+ finalAddress, true)
       req2.timeout = 0; // No timeout
 
       req2.onload = function() {
          if (this.response.includes("hash=")) {
             var hash = this.response.match(/hash=([a-f0-9]+)/i)[1];
-            document.getElementById("TransactionInfo").innerHTML = "Transaction Complete!"
+            document.getElementById("TransactionInfo").innerHTML = "Transaction Complete!<br>Final hash:"
 
             document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
             document.getElementById("HashLink").innerHTML = hash;
-            document.getElementById("QRdiv").hidden = true;
+
+            // Animate the address disappearing
+            document.getElementById("QRCode").classList.remove("animate-grow");
+            document.getElementById("QRCode").classList.add("animate-zipRight");
+            document.getElementById("qr-label").classList.remove("animate-fade-in");
+            document.getElementById("qr-label").classList.add("animate-zipRight2");
+
             document.getElementById("Hashdiv").hidden = false;
-            document.getElementById("button").hidden = true;
             document.getElementById("scanQR").hidden = true;
          }
       };
@@ -155,4 +162,22 @@ function ajaxGetAddress(finalAddress) {
    };
    req.send();
 
+}
+
+function off() {
+   document.getElementById("QRCode").classList.remove("animate-grow");
+   document.getElementById("QRCode").classList.add("animate-zipRight");
+   document.getElementById("qr-label").classList.remove("animate-fade-in");
+   document.getElementById("qr-label").classList.add("animate-zipRight2");
+   //document.getElementById("QRdiv").hidden = true;
+   document.getElementById("reset").onclick = on;
+}
+
+function on() {
+   document.getElementById("QRCode").classList.remove("animate-zipRight");
+   document.getElementById("QRCode").classList.add("animate-grow");
+   document.getElementById("qr-label").classList.remove("animate-zipRight2");
+   document.getElementById("qr-label").classList.add("animate-fade-in");
+   //document.getElementById("QRdiv").hidden = false;
+   document.getElementById("reset").onclick = off;
 }
