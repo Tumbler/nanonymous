@@ -10,6 +10,7 @@
 <script type="text/javascript" src="script/lib/nanocurrency.js"></script>
 <script type="text/javascript" src="script/lib/qr_reader.js"></script>
 <script type="text/javascript" src="script/transaction.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 <a href="index.html">
    <img src="images/1_nospace.svg" alt="Nanonymous" style="width=150px; height:150px; display:block; margin-left: auto; margin-right: auto; margin-top: 50px; margin-bottom: 25px; width: 50%;">
 </a>
@@ -92,14 +93,14 @@
    </div>
 
 </body>
-<footer>
+<footer class="foot">
    <img src="images/name.png" style="margin: auto">
    <p> Contact us: </p>
    <div id="ContactImgs">
       <img id="discord" src="images/discord-white.svg">
       <img id="twitter" src="images/twitter-small.png">
       <a href="mailto:info@nanonymous.cc" style="margin: auto 20px; height: 70%;">
-         <img id="email" src="images/email.png">
+         <img id="email" class="clickable" src="images/email.png">
       </a>
    </div>
    <br>
@@ -117,11 +118,3 @@
    }
 
 </script>
-<!--
-         style="margin: auto;
-                position:relative;
-                top: 50%;
-                left:50%;
-                -webkit-transform: translateX(-50%);
-                -ms-transform: translateY(-50%);"
--->

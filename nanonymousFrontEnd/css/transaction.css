@@ -147,7 +147,7 @@
     }
  }
  .animate-zipRight {
-    animation-duration: 0.8s;
+    animation-duration: 0.9s;
     animation-fill-mode: forwards;
     animation-name: animate-zip;
  }
@@ -156,25 +156,6 @@
        transform: translateX(0);
     }
     15% {
-       transform: translateX(-100px);
-    }
-    100% {
-       transform: translateX(1000px);
-    }
- }
- .animate-zipRight2 {
-    animation-duration: 0.9s;
-    animation-fill-mode: forwards;
-    animation-name: animate-zip2;
- }
- @keyframes animate-zip2 {
-    0% {
-       transform: translateX(0);
-    }
-    9% {
-       transform: translateX(0);
-    }
-    23% {
        transform: translateX(-100px);
     }
     100% {
