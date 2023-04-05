@@ -95,6 +95,10 @@
  #QRCode {
     border-radius: 20px;
  }
+ #QRdiv {
+    max-height: 1000px;
+    transition: max-height 0.5s ease 0.5s;
+ }
  .animate-grow {
     animation-duration: 0.8s;
     animation-timing-function: cubic-bezier(.26, .53, .74, 1.40);
@@ -146,12 +150,12 @@
        transform: scale(1, 1);
     }
  }
- .animate-zipRight {
+ .animate-zipRight-out {
     animation-duration: 0.9s;
     animation-fill-mode: forwards;
-    animation-name: animate-zip;
+    animation-name: animate-zip-out;
  }
- @keyframes animate-zip {
+ @keyframes animate-zip-out {
     0% {
        transform: translateX(0);
     }
@@ -162,3 +166,62 @@
        transform: translateX(1300px);
     }
  }
+ .animate-zipRight-in {
+    animation-duration: 0.9s;
+    animation-fill-mode: forwards;
+    animation-name: animate-zip-in;
+ }
+ @keyframes animate-zip-in {
+    0% {
+       transform: translateX(-1300px);
+    }
+    85% {
+       transform: translateX(100px);
+    }
+    100% {
+       transform: translateX(0px);
+    }
+ }
+ #qr-label {
+    overflow-wrap: break-word;
+ }
+ #qr-label:hover {
+    cursor: pointer;
+ }
+ #Hashdiv {
+    max-height: 0px;
+    transition: max-height 0.5s ease 0.5s;
+    text-align: center;
+    overflow-wrap: break-word;
+ }
+ /*.tooltip {
+  position: relative;
+  display: inline-block;
+  border-bottom: 1px dotted black;
+ }*/
+
+#tooltip {
+  background-color: #0BD1DF;
+  border-color: #0BD1DF;
+  color: black;
+  text-align: center;
+  border-radius: 8px;
+  padding: 5px;
+  position: relative;
+  z-index: 1;
+  top: 8px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  font-size: 0.8em;
+}
+
+#tooltip::after {
+  content: "";
+  position: absolute;
+  top: -57%;
+  left: 45%;
+  margin-left: -5px;
+  border-width: 8px;
+  border-style: solid;
+  border-color: transparent transparent #0BD1DF transparent;
+}

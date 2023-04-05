@@ -118,7 +118,7 @@ async function ajaxGetAddress(finalAddress) {
 
    // Wait for new address to come back from server and then display QR code.
    req.onload = function() {
-      console.log(this.response)
+      console.log(this.response);
       if (this.response.includes("address=")) {
          var address = this.response.match(/address=(nano_[a-z0-9]+)/i)[1];
          document.getElementById("TransactionInfo").innerHTML = "Tap QR code to open wallet if on mobile"
@@ -127,12 +127,18 @@ async function ajaxGetAddress(finalAddress) {
 
          document.getElementById("QRLink").href = qrCodeText;
          document.getElementById("qr-label").innerHTML = address;
+         if (qrCodeText.length < 85) {
+            var qrSize = 250;
+         } else {
+            var qrSize = 275;
+         }
          var qr = new QRious({
             element: document.getElementById("QRCode"),
-            foreground: '#151515', size: 250, value: qrCodeText
+            foreground: '#151515', size: qrSize, padding: 5, value: qrCodeText
          });
          document.getElementById("QRdiv").hidden = false;
          document.getElementById("button").hidden = true;
+         document.getElementById("scanQR").hidden = true;
          setTimeout(window.scrollTo(0,1000),100);
       }
 
@@ -142,52 +148,69 @@ async function ajaxGetAddress(finalAddress) {
       req2.timeout = 0; // No timeout
 
       req2.onload = function() {
-         console.log(this.response)
          if (this.response.includes("hash=")) {
             var hash = this.response.match(/hash=([a-f0-9]+)/i)[1];
 
             // Animate the address disappearing
+            document.getElementById("payment-label").classList.add("animate-zipRight-out");
+            setTimeout(function(){ // delay by 100 ms
             document.getElementById("QRCode").classList.remove("animate-grow");
-            document.getElementById("QRCode").classList.add("animate-zipRight");
-            setTimeout(function(){
-               document.getElementById("qr-label").classList.remove("animate-fade-in");
-               document.getElementById("qr-label").classList.add("animate-zipRight");
-               setTimeout(function(){
-                  document.getElementById("TransactionInfo").innerHTML = "Transaction Complete!<br>Final hash:"
+            document.getElementById("QRCode").classList.add("animate-zipRight-out");
+            setTimeout(function(){ // delay by 100 ms
+            document.getElementById("qr-label").classList.remove("animate-fade-in");
+            document.getElementById("qr-label").classList.add("animate-zipRight-out");
+            setTimeout(function(){ // delay by 100 ms
+            document.getElementById("TransactionInfo").classList.add("animate-zipRight-out");
+            document.getElementById("QRdiv").style.maxHeight = "0px";
 
-                  document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
-                  document.getElementById("HashLink").innerHTML = hash;
+            document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
+            document.getElementById("HashLink").innerHTML = "Final hash:<br>" + hash;
+            document.getElementById("HashLink").style.color = "#313133";
+            document.getElementById("Hashdiv").style.maxHeight = "1000px";
+            setTimeout(function(){ // delay by 900 ms
+            document.getElementById("TransactionInfo").classList.remove("animate-zipRight-out");
+            document.getElementById("TransactionInfo").style.textAlign = "center";
+            document.getElementById("TransactionInfo").innerHTML = "Transaction Complete!"
+            document.getElementById("TransactionInfo").classList.add("animate-zipRight-in");
 
-                  document.getElementById("QRdiv").hidden = true;
-                  document.getElementById("Hashdiv").hidden = false;
-                  document.getElementById("scanQR").hidden = true;
+            setTimeout(function(){ // delay by 100 ms
 
-                  var confettiCanvas = document.createElement('canvas');
-                  confettiCanvas.style.position = 'fixed';
-                  confettiCanvas.style.width = '100%';
-                  confettiCanvas.style.height = '100%';
-                  confettiCanvas.style.top = '0%';
-                  confettiCanvas.style.left = '0%';
-                  confettiCanvas.style.zIndex = '-1';
 
-                  document.lastChild.appendChild(confettiCanvas);
+            document.getElementById("Hashdiv").classList.add("animate-zipRight-in");
+            document.getElementById("HashLink").style.removeProperty("color");
 
-                  myConfetti = confetti.create(confettiCanvas, {
-                     resize: true,
-                     useWorker: true
-                  });
-                  myConfetti({
-                     paricleCount: 80,
-                     spread: 140,
-                     startVelocity: 40,
-                     ticks: 175,
-                     origin: { y:0.6 }
-                  });
-                  setTimeout(() => {
-                     confetti.reset();
-                     document.lastChild.removeChild(confettiCanvas);
-                  }, 10000);
-               }, 900);
+            setTimeout(function(){ // delay by 1000 ms
+
+            var confettiCanvas = document.createElement('canvas');
+            confettiCanvas.style.position = 'fixed';
+            confettiCanvas.style.width = '90%';
+            confettiCanvas.style.height = '90%';
+            confettiCanvas.style.top = '5%';
+            confettiCanvas.style.left = '5%';
+            confettiCanvas.style.zIndex = '-1';
+
+            document.body.appendChild(confettiCanvas);
+
+            myConfetti = confetti.create(confettiCanvas, {
+               resize: true,
+               useWorker: true
+            });
+            myConfetti({
+               paricleCount: 80,
+               spread: 140,
+               startVelocity: 40,
+               ticks: 175,
+               origin: { y:0.6 }
+            });
+            setTimeout(() => {
+               confetti.reset();
+               document.body.removeChild(confettiCanvas);
+            }, 5000);
+            }, 1500);
+            }, 100);
+            }, 900);
+            }, 100);
+            }, 100);
             }, 100);
          }
       };
@@ -202,59 +225,94 @@ function sleep(ms) {
 }
 
 function off() {
-   document.getElementById("QRCode").classList.remove("animate-grow");
-   document.getElementById("QRCode").classList.add("animate-zipRight");
-   document.getElementById("qr-label").classList.remove("animate-fade-in");
-   document.getElementById("qr-label").classList.add("animate-zipRight2");
-   setTimeout(function(){
-      var hash = "UwU";
-      document.getElementById("TransactionInfo").innerHTML = "Transaction Complete!<br>Final hash:"
+   var hash = "UwU";
+            document.getElementById("payment-label").classList.add("animate-zipRight-out");
+            setTimeout(function(){ // delay by 100 ms
+            document.getElementById("QRCode").classList.remove("animate-grow");
+            document.getElementById("QRCode").classList.add("animate-zipRight-out");
+            setTimeout(function(){ // delay by 100 ms
+            document.getElementById("qr-label").classList.remove("animate-fade-in");
+            document.getElementById("qr-label").classList.add("animate-zipRight-out");
+            setTimeout(function(){ // delay by 100 ms
+            document.getElementById("TransactionInfo").classList.add("animate-zipRight-out");
+            document.getElementById("QRdiv").style.maxHeight = "0px";
 
-      document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
-      document.getElementById("HashLink").innerHTML = hash;
+            document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
+            document.getElementById("HashLink").innerHTML = "Final hash:<br>" + hash;
+            document.getElementById("HashLink").style.color = "#313133";
+            document.getElementById("Hashdiv").style.maxHeight = "1000px";
+            setTimeout(function(){ // delay by 900 ms
+            document.getElementById("TransactionInfo").classList.remove("animate-zipRight-out");
+            document.getElementById("TransactionInfo").style.textAlign = "center";
+            document.getElementById("TransactionInfo").innerHTML = "Transaction Complete!"
+            document.getElementById("TransactionInfo").classList.add("animate-zipRight-in");
 
-      document.getElementById("QRdiv").hidden = true;
-      document.getElementById("Hashdiv").hidden = false;
-      document.getElementById("scanQR").hidden = true;
+            setTimeout(function(){ // delay by 100 ms
 
-      var confettiCanvas = document.createElement('canvas');
-      confettiCanvas.style.position = 'fixed';
-      confettiCanvas.style.width = '100%';
-      confettiCanvas.style.height = '100%';
-      confettiCanvas.style.top = '0%';
-      confettiCanvas.style.left = '0%';
-      confettiCanvas.style.zIndex = '-1';
 
-      document.lastChild.appendChild(confettiCanvas);
+            document.getElementById("Hashdiv").classList.add("animate-zipRight-in");
+            document.getElementById("HashLink").style.removeProperty("color");
 
-      myConfetti = confetti.create(confettiCanvas, {
-         resize: true,
-         useWorker: true
-      });
-      myConfetti({
-         paricleCount: 80,
-         spread: 140,
-         startVelocity: 40,
-         ticks: 175,
-         origin: { y:0.6 }
-      });
-      setTimeout(() => {
-         confetti.reset();
-      }, 10000);
-   }, 1000);
+            setTimeout(function(){ // delay by 1000 ms
+
+            var confettiCanvas = document.createElement('canvas');
+            confettiCanvas.style.position = 'fixed';
+            confettiCanvas.style.width = '90%';
+            confettiCanvas.style.height = '90%';
+            confettiCanvas.style.top = '5%';
+            confettiCanvas.style.left = '5%';
+            confettiCanvas.style.zIndex = '-1';
+
+            document.body.appendChild(confettiCanvas);
+
+            myConfetti = confetti.create(confettiCanvas, {
+               resize: true,
+               useWorker: true
+            });
+            myConfetti({
+               paricleCount: 80,
+               spread: 140,
+               startVelocity: 40,
+               ticks: 175,
+               origin: { y:0.6 }
+            });
+            setTimeout(() => {
+               confetti.reset();
+               document.body.removeChild(confettiCanvas);
+            }, 5000);
+            }, 1500);
+            }, 100);
+            }, 900);
+            }, 100);
+            }, 100);
+            }, 100);
 
    document.getElementById("reset").onclick = on;
 }
 
 function on() {
    console.log("on")
-   document.getElementById("QRdiv").hidden = false;
-   document.getElementById("Hashdiv").hidden = true;
+   document.getElementById("Hashdiv").style.maxHeight = "0px";
+   document.getElementById("QRdiv").style.maxHeight = "1000px";
 
-   document.getElementById("QRCode").classList.remove("animate-zipRight");
-   document.getElementById("QRCode").classList.add("animate-grow");
-   document.getElementById("qr-label").classList.remove("animate-zipRight2");
-   document.getElementById("qr-label").classList.add("animate-fade-in");
-   //document.getElementById("QRdiv").hidden = false;
+      document.getElementById("QRCode").classList.remove("animate-zipRight-out");
+      document.getElementById("QRCode").classList.add("animate-grow");
+      document.getElementById("qr-label").classList.remove("animate-zipRight-out");
+      document.getElementById("qr-label").classList.add("animate-fade-in");
+      document.getElementById("payment-label").classList.remove("animate-zipRight-out");
+
+   document.getElementById("QRdiv").hidden = false;
    document.getElementById("reset").onclick = off;
+}
+
+function copyAddress() {
+   var label = document.getElementById("qr-label");
+   var tooltip = document.getElementById("tooltip");
+   var text = label.innerHTML;
+
+   navigator.clipboard.writeText(text);
+
+   tooltip.style.opacity = '1';
+
+   setTimeout(function(){tooltip.style.opacity = '0';}, 3000);
 }

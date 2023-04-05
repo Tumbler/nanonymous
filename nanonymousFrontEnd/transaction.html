@@ -78,16 +78,19 @@
 
       <br>
       <div id="QRdiv" style="text-align: center;" hidden=true>
-         <h3 style="text-align: left;"> Send payment here: </h3>
+         <h3 id="payment-label" style="text-align: left;"> Send payment here: </h3>
          <a id="QRLink">
             <canvas id="QRCode" class="animate-grow"></canvas>
          </a>
-         <div id="qr-label" class ="animate-fade-in"></div>
+         <div>
+            <div id="qr-label" class="animate-fade-in" onclick='copyAddress();'></div>
+            <span id="tooltip">Copied!</span>
+         </div>
       </div>
       <br>
-      <label id="TransactionInfo"></label>
-      <div id="Hashdiv" hidden=true>
-         <a id="HashLink" href="google.com">a</a>
+      <div id="TransactionInfo"></div>
+      <div id="Hashdiv">
+         <a id="HashLink"></a>
       </div>
    </div>
    </div>
