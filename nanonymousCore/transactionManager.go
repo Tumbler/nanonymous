@@ -43,7 +43,7 @@ type transactionComm struct {
    hash nt.BlockHash
 }
 
-var registeredFinalHashChannels map[string]chan nt.BlockHash
+var registeredClientComunicationPipes map[string]chan string
 
 var databaseError = errors.New("database error")
 
@@ -101,6 +101,8 @@ func transactionManager(t *Transaction) {
       } else {
          recordProfit(t.fee, t.id)
          Info.Println("Transaction", t.id, "Complete")
+         fmt.Println("finalHash", t.finalHash)
+         fmt.Println("multi?:", t.multiSend)
          sendFinalHash(t.finalHash, t.clientAddress)
       }
    }()
@@ -552,25 +554,33 @@ func retryReceives(t *Transaction, prevError error) bool {
    return true
 }
 
-func registerFinalHashListener(nanoAddress string, ch chan nt.BlockHash) {
+func registerClientComunicationPipe(nanoAddress string, ch chan string) {
    if (inTesting) {
       return
    }
 
-   registeredFinalHashChannels[nanoAddress] = ch
+   registeredClientComunicationPipes[nanoAddress] = ch
 }
 
-func unregisterFinalHashListener(nanoAddress string) {
+func unregisterClientComunicationPipe(nanoAddress string) {
    if (inTesting) {
       return
    }
 
-   delete(registeredFinalHashChannels, nanoAddress)
+   delete(registeredClientComunicationPipes, nanoAddress)
+}
+
+// TODO confusion with the name client. DOes it refer to the sender or the receiver??
+func sendInfoToClient(info string, clientPubkey []byte) {
+   clientAddress, _ := keyMan.PubKeyToAddress(clientPubkey)
+   if (registeredClientComunicationPipes[clientAddress] != nil) {
+      registeredClientComunicationPipes[clientAddress] <- info
+   }
 }
 
 func sendFinalHash(hash nt.BlockHash, pubkey []byte) {
    nanoAddress, _ := keyMan.PubKeyToAddress(pubkey)
-   if (registeredFinalHashChannels[nanoAddress] != nil) {
-      registeredFinalHashChannels[nanoAddress] <- hash
+   if (registeredClientComunicationPipes[nanoAddress] != nil) {
+      registeredClientComunicationPipes[nanoAddress] <- "hash="+ hash.String()
    }
 }

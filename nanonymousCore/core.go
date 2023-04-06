@@ -54,6 +54,8 @@ var testingPendingHashesNum int
 
 const MAX_INDEX = 4294967295
 
+const transactionDeadline = time.Hour
+
 // Fee in %
 const FEE_PERCENT = float64(0.2)
 var feeDividend int64
@@ -223,7 +225,7 @@ func initNanoymousCore(mainInstance bool) error {
       activePoW = make(map[string]int)
       workChannel = make(map[string]chan string)
 
-      registeredFinalHashChannels = make(map[string]chan nt.BlockHash)
+      registeredClientComunicationPipes = make(map[string]chan string)
 
       // Seed randomness
       random = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -288,6 +290,9 @@ func handleRequest(conn net.Conn) error {
    // look into conn.LocalAddr() and conn.RemotAddr()
    buff := make([]byte, 1024)
    conn.SetDeadline(time.Now().Add(12 * time.Hour))
+
+   defer conn.Close();
+
    _, err := conn.Read(buff)
    if (err != nil) {
       if (verbosity >= 3) {
@@ -322,21 +327,41 @@ func handleRequest(conn net.Conn) error {
    } else if (len(array) >= 2 && array[0] == "trRequest") {
       var subArray = strings.Split(array[1], "=")
       if (len(subArray) >= 2 && subArray[0] == "address") {
-         ch := make(chan nt.BlockHash)
-         registerFinalHashListener(subArray[1], ch)
-         var hash nt.BlockHash
+         ch := make(chan string)
+         registerClientComunicationPipe(subArray[1], ch)
+         defer unregisterClientComunicationPipe(subArray[1])
+
+         var response string
 
          // Timeout after 12 hours
-         deadline := time.Now().Add(12 * time.Hour)
+         deadline := time.Now().Add(transactionDeadline)
 
-         hashloop:
+         commloop:
          for (time.Now().Before(deadline)) {
             select {
-               case hash = <- ch:
-                  break hashloop
+               case response = <- ch:
+                  var subArray = strings.Split(response, "=")
+                  if (len(subArray) > 1) {
+                     if (subArray[0] == "hash") {
+                        break commloop
+                     } else {
+                        conn.Write([]byte(response+ "\n"))
+                     }
+                  } else {
+                     // invalid communication
+                     if (verbosity > 1) {
+                        fmt.Println("Warning: Invalid communication:", response)
+                     }
+                     Warning.Println("Warning: Invalid communication:", response)
+                  }
                case <-time.After(20 * time.Second):
-                  fmt.Println("keepalive")
-                  conn.Write([]byte("keepAlive\n\r"))
+                  _, err := conn.Write([]byte("keepAlive\n"))
+                  if (err != nil) {
+                     if (verbosity > 1) {
+                        fmt.Println("Warning! keepAlive: (Client may have just closed the tab)", err)
+                        return fmt.Errorf("Warning! keepAlive: %w (Client may have just closed the tab)", err)
+                     }
+                  }
             }
          }
 
@@ -346,15 +371,11 @@ func handleRequest(conn net.Conn) error {
             return fmt.Errorf("handleRequest: Hash request timeout")
          }
 
-         unregisterFinalHashListener(subArray[1])
-
-         conn.Write([]byte("hash="+ hash.String()))
+         conn.Write([]byte(response))
       } else {
          conn.Write([]byte("Invalid Request!"))
       }
    }
-
-   conn.Close()
 
    return nil
 }
@@ -622,6 +643,7 @@ func receivedNano(nanoAddress string) error {
 
    if (minPayment.Cmp(payment) > 0) {
       // Less than the minimum. Refund it.
+      sendInfoToClient("info=amountTooLow", getClientAddress(parentSeedId, index))
       err := Refund(receiveHash)
       if (err != nil) {
          Error.Println("non-transaction Refund failed!! %w", err)
@@ -1438,7 +1460,8 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
          difficulty = "fffffff800000000"
       }
 
-      work, err := generateWorkOnWorkServer(hash, difficulty)
+      //work, err := generateWorkOnWorkServer(hash, difficulty)
+      work, err := generateWorkOnNode(hash, difficulty)
       if (err != nil) {
          if (verbosity >= 2) {
             fmt.Println("Failed to connect to work server", err.Error())

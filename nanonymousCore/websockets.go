@@ -73,6 +73,8 @@ func websocketListener(ch chan int) {
                if (verbosity >= 5) {
                   fmt.Println(" err: ", err.Error())
                }
+               // TODO try to recover?
+               panic(fmt.Errorf("Lost websockets: %w", err));
             } else {
                go handleNotification(notification)
             }
