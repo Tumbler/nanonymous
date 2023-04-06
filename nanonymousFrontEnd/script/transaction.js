@@ -212,6 +212,14 @@ async function ajaxGetAddress(finalAddress) {
             }, 100);
             }, 100);
             }, 100);
+         } else {
+            /*if (this.response.includes("info="))
+               var info = this.response.match(/info=(.*)/i)[1];
+               if (info == "amountTooLow") {
+                  document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano. Your transaction has been refunded."
+               }
+            // Does this work????
+            req2.onload = this();*/
          }
       };
       req2.send();

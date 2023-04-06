@@ -163,7 +163,7 @@
        transform: translateX(-100px);
     }
     100% {
-       transform: translateX(1300px);
+       transform: translateX(200vw);
     }
  }
  .animate-zipRight-in {
@@ -173,7 +173,7 @@
  }
  @keyframes animate-zip-in {
     0% {
-       transform: translateX(-1300px);
+       transform: translateX(-200vw);
     }
     85% {
        transform: translateX(100px);
@@ -194,12 +194,6 @@
     text-align: center;
     overflow-wrap: break-word;
  }
- /*.tooltip {
-  position: relative;
-  display: inline-block;
-  border-bottom: 1px dotted black;
- }*/
-
 #tooltip {
   background-color: #0BD1DF;
   border-color: #0BD1DF;
@@ -214,7 +208,6 @@
   transition: opacity 0.3s;
   font-size: 0.8em;
 }
-
 #tooltip::after {
   content: "";
   position: absolute;
