@@ -1,5 +1,6 @@
 function showQR() {
    var finalAddress = document.getElementById("finalAddress").value;
+   document.getElementById("errorMessage").innerHTML = "";
    ajaxGetAddress(finalAddress);
 }
 
