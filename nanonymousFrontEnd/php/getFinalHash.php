@@ -2,13 +2,14 @@
 header('Content-Type: text/event-stream');
 // recommended to prevent caching of event data.
 header('Cache-Control: no-cache');
+// Needed for nginx servers
+header('X-Accel-Buffering: no');
 
-function keepAlive() {
-    echo "keep alive\n";
-    echo PHP_EOL;
+function info($response) {
+   echo $response;
 
-    ob_flush();
-    flush();
+   ob_flush();
+   flush();
 }
 
 $finalAddress=$_GET['address'];
@@ -30,9 +31,10 @@ if (!$socket) {
          if (str_contains($buffer, "hash")) {
             $hash = $buffer;
             break;
+         } else {
+            info($buffer);
          }
       }
-      keepAlive();
    }
    fclose($socket);
 }

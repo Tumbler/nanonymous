@@ -147,9 +147,39 @@ async function ajaxGetAddress(finalAddress) {
       req2.open("POST", "php/getFinalHash.php?address="+ finalAddress, true)
       req2.timeout = 0; // No timeout
 
+      req2.abort = function() {
+         console.log("abort:", this.statusText, this.responseText);
+      };
+      req2.error = function() {
+         console.log("error", this.statusText, this.responseText);
+      };
+      req2.timeout = function() {
+         console.log("timeout", this.statusText, this.responseText);
+      };
+      req2.onabort = function() {
+         console.log("onabort", this.statusText, this.responseText);
+      };
+      req2.onerror = function() {
+         console.log("onerror", this.statusText, this.responseText);
+      };
+      req2.onprogress = function() {
+         var line = this.responseText.match(/info=(.*)\n$/i);
+         if (line !== null && line.length > 1) {
+            if (line[1] == "amountTooLow") {
+               document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano. Your transaction has been refunded."
+            }
+         }
+      };
+      req2.ontimeout = function() {
+         console.log("ontimeout", this.statusText, this.responseText);
+      };
+
       req2.onload = function() {
          if (this.response.includes("hash=")) {
+            console.log(this.response);
             var hash = this.response.match(/hash=([a-f0-9]+)/i)[1];
+
+            document.getElementById("errorMessage").innerHTML = "";
 
             // Animate the address disappearing
             document.getElementById("payment-label").classList.add("animate-zipRight-out");
@@ -212,14 +242,6 @@ async function ajaxGetAddress(finalAddress) {
             }, 100);
             }, 100);
             }, 100);
-         } else {
-            /*if (this.response.includes("info="))
-               var info = this.response.match(/info=(.*)/i)[1];
-               if (info == "amountTooLow") {
-                  document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano. Your transaction has been refunded."
-               }
-            // Does this work????
-            req2.onload = this();*/
          }
       };
       req2.send();
