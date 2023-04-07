@@ -32,6 +32,7 @@ import (
 // TODO don't allow users to send to a nanonymous address as a client.
 // TODO blacklist pruning
 // TODO Test what happens if you open two different tabs
+// TODO Same client two senders edge case
 
 //go:embed embed.txt
 var embeddedData string
@@ -262,6 +263,10 @@ func listen() error {
    defer listener.Close()
 
    // Listen for eternity to incoming address requests
+   if (verbosity < 3) {
+      fmt.Println("Listening....")
+   }
+
    for {
       if (verbosity >= 3) {
          fmt.Println("Listening....")
@@ -333,7 +338,6 @@ func handleRequest(conn net.Conn) error {
 
          var response string
 
-         // Timeout after 12 hours
          deadline := time.Now().Add(transactionDeadline)
 
          commloop:
@@ -345,7 +349,7 @@ func handleRequest(conn net.Conn) error {
                      if (subArray[0] == "hash") {
                         break commloop
                      } else {
-                        conn.Write([]byte(response+ "\n"))
+                        conn.Write([]byte(response +"\n"))
                      }
                   } else {
                      // invalid communication
@@ -1460,8 +1464,8 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
          difficulty = "fffffff800000000"
       }
 
-      //work, err := generateWorkOnWorkServer(hash, difficulty)
-      work, err := generateWorkOnNode(hash, difficulty)
+      work, err := generateWorkOnWorkServer(hash, difficulty)
+      //work, err := generateWorkOnNode(hash, difficulty)
       if (err != nil) {
          if (verbosity >= 2) {
             fmt.Println("Failed to connect to work server", err.Error())
