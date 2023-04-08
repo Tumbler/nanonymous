@@ -28,7 +28,7 @@
     left: 20%;
     margin-left: -5px;
 
-    transition: all .3s;
+    transition: all .4s;
     position: relative;
     overflow: hidden;
     z-index: 1;
@@ -52,7 +52,7 @@
     width: 0%;
     height: 100%;
     background-color: #00717F;
-    transition: all .3s;
+    transition: all .4s;
     border-radius: 10rem;
     z-index: -1;
  }
@@ -68,7 +68,7 @@
     left: 10%;
     width: 13%;
 
-    transition: all .2s;
+    transition: all .3s;
  }
  #TransactionButton:hover #buttonImage{
     filter: invert(100%) sepia(100%) saturate(0%) hue-rotate(355deg) brightness(100%) contrast(100%);
@@ -85,7 +85,7 @@
     font-size: 1.30em;
     color: black;
 
-    transition: all .4s;
+    transition: all .5s;
  }
  #TransactionButton:hover #buttonText {
     color: white;
