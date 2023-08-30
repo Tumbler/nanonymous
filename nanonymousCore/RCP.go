@@ -991,14 +991,12 @@ func getNanoUSDValue() (float64, error) {
    return response.Nano.Usd, nil
 }
 
-// TODO attach to new email
 func sendEmail(contents string) error {
-   return nil
-   from := "TumblerTerrall@gmail.com"
-   password := ""
+   from := fromEmail
+   password := emailPass
 
    to := []string {
-      "kingdombound13@gmail.com",
+      toEmail,
    }
 
    smtpHost := "smtp.gmail.com"
@@ -1010,7 +1008,7 @@ func sendEmail(contents string) error {
 
    err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, message)
    if (err != nil) {
-      return fmt.Errorf("sendEamil: %w", err)
+      return fmt.Errorf("sendEmail: %w", err)
    }
 
    return nil

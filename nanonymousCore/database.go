@@ -50,7 +50,7 @@ func getBalance(nanoAddress string) (*nt.Raw, error) {
    defer conn.Close(context.Background())
 
    queryString :=
-   "SELECt " +
+   "SELECT " +
       "balance " +
    "FROM " +
       "wallets " +
@@ -568,7 +568,7 @@ func setAddressNotReceiveOnly(nanoAddress string) {
    conn.Exec(context.Background(), queryString, nanoAddressHash[:])
 }
 
-// inserSeed saves an encrytped version of the seed given into the database.
+// insertSeed saves an encrytped version of the seed given into the database.
 func insertSeed(conn psqlDB, seed []byte) (int, error) {
    var id int
 
@@ -599,6 +599,7 @@ func insertSeed(conn psqlDB, seed []byte) (int, error) {
 // findTotalBalace is a simple function that adds up all the nano there is
 // amongst all the wallets and returns the amount in Nano.
 func findTotalBalance() (float64, error) {
+   // TODO Add mixer to total balance
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return -1.0, fmt.Errorf("FindTotalBalance: %w", err)

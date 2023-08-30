@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS seeds(
    active BOOL DEFAULT true
 );
 
-
 CREATE TABLE IF NOT EXISTS wallets(
    parent_seed INT,
    index BIGINT NOT NULL,
@@ -26,6 +25,7 @@ CREATE TABLE IF NOT EXISTS wallets(
    pow TEXT,
    in_use BOOL DEFAULT true,
    receive_only BOOL DEFAULT false,
+   mixer BOOL DEFAULT false,
    PRIMARY KEY (parent_seed, index)
 );
 

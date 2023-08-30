@@ -740,7 +740,7 @@ func CLI() {
       case "4":
          verbosity = 5
          adhocAddress := "nano_1hiqiw6j9wo33moia3scoajhheweysiq5w1xjqeqt8m6jx6so6gj39pae5ea"
-         blarg, _, err := getNewAddress(adhocAddress, false, 0)
+         blarg, _, err := getNewAddress(adhocAddress, false, false, 0)
          if (err != nil) {
             fmt.Println(err)
          }
@@ -938,6 +938,7 @@ func CLIsend(myKey *keyMan.Key, args []string, prompt *string) {
    *prompt = format
 }
 
+// TODO This function randomly doesn't show all the rows. I don't know why.
 func CLIlist(args []string) error {
    var err error
    var rows pgx.Rows
@@ -964,11 +965,13 @@ func CLIlist(args []string) error {
       var seed int
       var index int
       var balance = nt.NewRaw(0)
-      var dummy1 string
-      var dummy2 bool
       var receiveOnly bool
 
-      rows.Scan(&seed, &index, balance, &dummy1, &dummy2, &receiveOnly)
+      err = rows.Scan(&seed, &index, balance, nil, nil, &receiveOnly)
+      if (err != nil) {
+         fmt.Println("CLILIST:", err)
+         return fmt.Errorf("CLIList: %w", err)
+      }
 
       if (ignoreZeroBalance && balance.Cmp(nt.NewRaw(0)) == 0) {
          continue
@@ -1060,7 +1063,7 @@ func CLInew(myKey *keyMan.Key, args []string, prompt *string) error {
          seedId, _ = strconv.Atoi(args[1])
       }
 
-      key, seed, err := getNewAddress("", receiveOnly, seedId)
+      key, seed, err := getNewAddress("", receiveOnly, false, seedId)
       if (err != nil) {
          return fmt.Errorf("CLInew: %w", err)
       }

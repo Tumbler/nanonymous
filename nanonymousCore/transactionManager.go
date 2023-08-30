@@ -35,6 +35,7 @@ type Transaction struct {
    errChannel chan error
    confirmationChannel chan string
    multiSend bool
+   dirtyAddress int // The sendingKeys address that has been linked to other addresses but not blacklisted
    abort bool
 }
 
@@ -65,15 +66,6 @@ func transactionManager(t *Transaction) {
 
    // We have a lot of clean up to do
    defer func() {
-      // Un-mark all addresses
-      setAddressNotInUse(address)
-      for _, key := range t.sendingKeys {
-         setAddressNotInUse(key.NanoAddress)
-      }
-      if (t.transitionalKey != nil) {
-         setAddressNotInUse(t.transitionalKey.NanoAddress)
-      }
-
       // Remove active transaction
       setClientAddress(t.paymentParentSeedId, t.paymentIndex, nil)
 
@@ -101,10 +93,29 @@ func transactionManager(t *Transaction) {
       } else {
          recordProfit(t.fee, t.id)
          Info.Println("Transaction", t.id, "Complete")
-         fmt.Println("finalHash", t.finalHash)
-         fmt.Println("multi?:", t.multiSend)
+         // TODO debug statements
+         //fmt.Println("finalHash", t.finalHash)
+         //fmt.Println("multi?:", t.multiSend)
          sendFinalHash(t.finalHash, t.clientAddress)
+
+         // Send any dirty addresses to the mixer.
+         if (t.dirtyAddress != -1) {
+            if (verbosity >= 8) {
+               fmt.Println("Sending dirty address to mixer")
+            }
+            sendToMixer(t.sendingKeys[t.dirtyAddress], 0)
+         }
       }
+
+      // Un-mark all addresses
+      setAddressNotInUse(address)
+      for _, key := range t.sendingKeys {
+         setAddressNotInUse(key.NanoAddress)
+      }
+      if (t.transitionalKey != nil) {
+         setAddressNotInUse(t.transitionalKey.NanoAddress)
+      }
+
    }()
 
    // Waiting until first send
@@ -538,6 +549,37 @@ func retryFinalSend(t *Transaction, prevError error) bool {
    return false
 }
 
+func retryOrigReceive(nanoAddress string, prevError error) (*nt.Raw, nt.BlockHash, error) {
+
+   var retryCount int
+
+   var err = prevError
+   var payment *nt.Raw
+   var receiveHash nt.BlockHash
+
+   for (retryCount < RetryNumber) {
+      // If there was some problem with PoW then regenerate it.
+      if (strings.Contains(err.Error(), "work")){
+         clearPoW(nanoAddress)
+      }
+
+      payment, receiveHash, _, err = Receive(nanoAddress)
+      if (err != nil) {
+         if (verbosity >= 5) {
+            fmt.Println("Error with re-receive: ", retryCount, err.Error())
+         }
+         retryCount++
+      } else {
+         return payment, receiveHash, nil
+      }
+
+   }
+
+   Error.Println("Problem with original receive, orig:", prevError, "final:", err)
+
+   return nil, nil, err
+}
+
 func retryReceives(t *Transaction, prevError error) bool {
 
    // If there was some problem with PoW then regenerate it.
@@ -547,10 +589,10 @@ func retryReceives(t *Transaction, prevError error) bool {
 
    err := ReceiveAll(t.transitionalKey.NanoAddress)
    if (err != nil) {
+      Error.Println("ID", t.id, "Problem with multi receives orig:", prevError, "final:", err)
       return false
    }
 
-   Error.Println("ID", t.id, "Problem with multi receives orig:", prevError, "final:", err)
    return true
 }
 

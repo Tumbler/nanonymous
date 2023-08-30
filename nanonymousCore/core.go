@@ -32,7 +32,9 @@ import (
 // TODO don't allow users to send to a nanonymous address as a client.
 // TODO blacklist pruning
 // TODO Test what happens if you open two different tabs
-// TODO Same client two senders edge case
+// TODO Same client two senders edge case // Just need to link it to the accepting address instead of the final address.
+// TODO Find out why website sometimes gets 000000000000000000000000000 for final hash.
+// TODO add panic recovery
 
 //go:embed embed.txt
 var embeddedData string
@@ -46,6 +48,12 @@ var nodeIP string
 var websocketAddress string
 // "work = [work_server_address]" in embed.txt to set this value
 var workServer string
+// "fromEmail = [email address to send from]" in embed.txt to set this value
+var fromEmail string
+// "emailPass = [password of fromEmail]" in embed.txt to set this value
+var emailPass string
+// "toEmail = [email address to send to]" in embed.txt to set this value
+var toEmail string
 
 // Should only be set to true in test functions
 var inTesting = false
@@ -110,6 +118,13 @@ func main() {
          err = initNanoymousCore(true)
          if (err != nil) {
             panic(err)
+         }
+
+         // TODO
+         //fmt.Println("email sent")
+         //err := sendEmail("Test to see if email is working 3")
+         if (err != nil) {
+            fmt.Println("Failed to send email:", err)
          }
 
          CLI()
@@ -194,6 +209,12 @@ func initNanoymousCore(mainInstance bool) error {
             websocketAddress = strings.Trim(word[1], "\r\n")
          case "work":
             workServer = strings.Trim(word[1], "\r\n")
+         case "fromEmail":
+            fromEmail = strings.Trim(word[1], "\r\n")
+         case "emailPass":
+            fmt.Println("email pass:", emailPass)
+         case "toEmail":
+            toEmail = strings.Trim(word[1], "\r\n")
       }
    }
 
@@ -314,7 +335,7 @@ func handleRequest(conn net.Conn) error {
             // Cannont send to a Nanonymous wallet as the client.
             conn.Write([]byte("Invalid Request!"))
          } else {
-            newKey, _, err := getNewAddress(subArray[1], false, 0)
+            newKey, _, err := getNewAddress(subArray[1], false, false, 0)
             if (err != nil) {
                if (verbosity >= 3) {
                   fmt.Println("handleRequest2: ", err.Error())
@@ -387,7 +408,7 @@ func handleRequest(conn net.Conn) error {
 // getNewAddress finds the next availalbe address given the keys stored in the
 // database and returns address B. If "receivingAddress" A is not an empty
 // string, then it will also place A->B into the blacklist.
-func getNewAddress(receivingAddress string, receiveOnly bool, seedId int) (*keyMan.Key, int, error) {
+func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId int) (*keyMan.Key, int, error) {
    var seed keyMan.Key
 
    conn, err := pgx.Connect(context.Background(), databaseUrl)
@@ -471,12 +492,12 @@ func getNewAddress(receivingAddress string, receiveOnly bool, seedId int) (*keyM
    // Add to list of managed wallets
    queryString =
    "INSERT INTO "+
-      "wallets(parent_seed, index, balance, hash, receive_only) " +
+      "wallets(parent_seed, index, balance, hash, receive_only, mixer) " +
    "VALUES " +
-      "($1, $2, 0, $3, $4)"
+      "($1, $2, 0, $3, $4, $5)"
 
    hash := blake2b.Sum256(seed.PublicKey)
-   rowsAffected, err := tx.Exec(context.Background(), queryString, id, seed.Index, hash[:], receiveOnly)
+   rowsAffected, err := tx.Exec(context.Background(), queryString, id, seed.Index, hash[:], receiveOnly, mixer)
    if (err != nil) {
       return nil, 0, fmt.Errorf("getNewAddress: %w", err)
    }
@@ -531,7 +552,7 @@ func getNewAddress(receivingAddress string, receiveOnly bool, seedId int) (*keyM
    // Generate work for first use
    go preCalculateNextPoW(seed.NanoAddress, true)
 
-   if !(inTesting) {
+   if !(inTesting || mixer) {
       // Track confirmations on websocket
       select {
          case addWebSocketSubscription <- seed.NanoAddress:
@@ -639,7 +660,11 @@ func receivedNano(nanoAddress string) error {
 
    payment, receiveHash, _, err := Receive(nanoAddress)
    if (err != nil) {
-      return fmt.Errorf("receivedNano: %w", err)
+      payment, receiveHash, err = retryOrigReceive(nanoAddress, err)
+      if (err != nil) {
+         Error.Println("Original Receive problem:", err)
+         return fmt.Errorf("receivedNano: %w", err)
+      }
    }
    if (payment == nil || payment.Cmp(nt.NewRaw(0)) == 0) {
       return fmt.Errorf("receivedNano: No payment received")
@@ -650,6 +675,7 @@ func receivedNano(nanoAddress string) error {
       sendInfoToClient("info=amountTooLow", getClientAddress(parentSeedId, index))
       err := Refund(receiveHash)
       if (err != nil) {
+         // TODO Email myself??
          Error.Println("non-transaction Refund failed!! %w", err)
          return fmt.Errorf("non-transaction Refund failed!! %w", err)
       }
@@ -667,6 +693,7 @@ func receivedNano(nanoAddress string) error {
    t.paymentParentSeedId = parentSeedId
    t.paymentIndex = index
    t.receiveHash = receiveHash
+   t.dirtyAddress = -1
    defer func () {
       if (err != nil) {
          t.errChannel <- err
@@ -749,7 +776,8 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
       "( parent_seed = $2 AND " +
       "  index = $3 ) AND " +
       "in_use = FALSE AND " +
-      "receive_only = FALSE " +
+      "receive_only = FALSE AND " +
+      "mixer = FALSE " +
    "ORDER BY " +
       "balance, " +
       "index;"
@@ -777,7 +805,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
          return fmt.Errorf("findSendingWallets: %w", err)
       }
       if (!foundEntry) {
-         // Uset this address
+         // Use this address
          t.sendingKeys = append(t.sendingKeys, tmpKey)
          t.walletSeed = append(t.walletSeed, tmpSeed)
          t.walletBalance = append(t.walletBalance, tmpBalance)
@@ -791,6 +819,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
    }
    rows.Close()
 
+   // TODO Need third case for if we have enough with mixer funds
    if (!foundAddress) {
       // No single wallet has enough, try to combine several.
       queryString =
@@ -805,7 +834,8 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
          "parent_seed = $1 AND " +
          "index = $2) AND " +
          "in_use = FALSE AND " +
-         "receive_only = FALSE " +
+         "receive_only = FALSE AND " +
+         "mixer = FALSE " +
       "ORDER BY " +
          "balance, " +
          "index;"
@@ -865,7 +895,7 @@ func sendNanoToClient(t *Transaction) error {
       t.commChannel <- *new(transactionComm)
    } else if (len(t.sendingKeys) > 1) {
       // Need to do a multi-send; Get a new wallet to combine all funds into
-      t.transitionalKey, t.transitionSeedId, err = getNewAddress("", false, 0)
+      t.transitionalKey, t.transitionSeedId, err = getNewAddress("", false, false, 0)
       if (err != nil) {
          return fmt.Errorf("sendNanoToClient: %w", err)
       }
@@ -881,6 +911,9 @@ func sendNanoToClient(t *Transaction) error {
          if (arithmaticResult.Add(totalSent, t.walletBalance[i]).Cmp(t.amountToSend) > 0) {
             currentSend = arithmaticResult.Sub(t.amountToSend, totalSent)
             // TODO the last wallet is getting linked with others but not acquiring their blacksts
+            // TODO Flag dirty address to send it's contents into the mixer once the transaction is complete.
+            t.dirtyAddress = i
+            fmt.Println("Dirty address flagged")
          } else {
             currentSend = t.walletBalance[i]
          }
@@ -935,9 +968,9 @@ func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan t
    return newHash, nil
 }
 
-// ReceiveAndSend is a function that is inded to be used with receivedNano(). It
-// receives all funds to an internal wallet, and then, with the direction of the
-// transaction manager sends the funds to the client.
+// ReceiveAndSend is a function that is intended to be used with receivedNano().
+// It receives all funds to an internal wallet, and then, with the direction of
+// the transaction manager sends the funds to the client.
 func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan transactionComm, errCh chan error, transactionWg *sync.WaitGroup, abort *bool) {
    wg.Add(1)
    defer wg.Done()
