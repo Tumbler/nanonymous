@@ -103,7 +103,14 @@ func transactionManager(t *Transaction) {
             if (verbosity >= 8) {
                fmt.Println("Sending dirty address to mixer")
             }
-            sendToMixer(t.sendingKeys[t.dirtyAddress], 0)
+            err := sendToMixer(t.sendingKeys[t.dirtyAddress], 0)
+
+            if (err != nil) {
+               // TODO debug
+               fmt.Println("Mixer Error:", err.Error())
+               // log and TODO email
+               Error.Println("Mixer Error:", err.Error())
+            }
          }
       }
 

@@ -35,6 +35,11 @@ import (
 // TODO Same client two senders edge case // Just need to link it to the accepting address instead of the final address.
 // TODO Find out why website sometimes gets 000000000000000000000000000 for final hash.
 // TODO add panic recovery
+// TODO does a mian instance and a CLI instance running at the same time interfere with each other??
+// TODO test backup internet
+// TODO make sure complete transactions remove expected from list and no longer link account
+// TODO CLI doesn't update current wallet when you receive nano on it
+// TODO bad work completely halts the -S option
 
 //go:embed embed.txt
 var embeddedData string
@@ -239,6 +244,9 @@ func initNanoymousCore(mainInstance bool) error {
       minPayment = nt.NewRaw(0)
    }
 
+   // Seed randomness
+   random = rand.New(rand.NewSource(time.Now().UnixNano()))
+
    // Some things to do for only the main instance
    if (mainInstance) {
 
@@ -248,9 +256,6 @@ func initNanoymousCore(mainInstance bool) error {
       workChannel = make(map[string]chan string)
 
       registeredClientComunicationPipes = make(map[string]chan string)
-
-      // Seed randomness
-      random = rand.New(rand.NewSource(time.Now().UnixNano()))
 
       ch := make(chan int)
       go websocketListener(ch)
@@ -819,7 +824,6 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
    }
    rows.Close()
 
-   // TODO Need third case for if we have enough with mixer funds
    if (!foundAddress) {
       // No single wallet has enough, try to combine several.
       queryString =
@@ -876,7 +880,26 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
       }
       rows.Close()
       if (!enough) {
-         return fmt.Errorf("findSendingWallets: not enough funds")
+         // Not enough in managed wallets. Check the mixer.
+         _, _, mixerBalance, err := findTotalBalance()
+         if (err != nil) {
+            return fmt.Errorf("findSendingWallets: %w", err)
+         }
+
+         if (mixerBalance.Add(mixerBalance, totalBalance).Cmp(t.amountToSend) >= 0) {
+            // There's enough; add the keys to the transaction manager
+            keys, seeds, balances, err := getKeysFromMixer(t.amountToSend.Sub(t.amountToSend, totalBalance))
+            if (err != nil) {
+               return fmt.Errorf("findSendingWallets: %w", err)
+            }
+
+            t.sendingKeys = append(t.sendingKeys, keys...)
+            t.walletSeed = append(t.walletSeed, seeds...)
+            t.walletBalance = append(t.walletBalance, balances...)
+
+         } else {
+            return fmt.Errorf("findSendingWallets: not enough funds")
+         }
       }
    }
 
@@ -1157,7 +1180,7 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt
    if !(inTesting) {
       accountInfo, err := getAccountInfo(fromKey.NanoAddress)
       if (err != nil) {
-         return nil, fmt.Errorf("sendNano: %w", err)
+         return nil, fmt.Errorf("sendNano: %s %w", fromKey.NanoAddress, err)
       }
 
       // if (Balance < amountToSend)
@@ -1406,6 +1429,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
    return pendingInfo.Amount, newHash, numOfPendingHashes, err
 }
 
+// TODO chekc that all of these are still good active nodes before going live
 // getNewRepresentative returns a random representative from a list of accounts
 // that were recommended by mynano.ninja.
 func getNewRepresentative() string {
@@ -1423,8 +1447,8 @@ func getNewRepresentative() string {
       "nano_3n7ky76t4g57o9skjawm8pprooz1bminkbeegsyt694xn6d31c6s744fjzzz", // humble finland
    }
 
-   rand := random.Intn(len(hardcodedList))
-   return hardcodedList[rand]
+   randAddr := random.Intn(len(hardcodedList))
+   return hardcodedList[randAddr]
 }
 
 // preCalculateNextPoW finds the proper hash, calcluates the PoW and saves it to
@@ -1646,6 +1670,7 @@ func calculateFee(payment *nt.Raw) *nt.Raw {
 // function is designed to be called occasionally by a seperate process to clean
 // up any accidental sends from users.
 func returnAllReceiveable() error {
+   // TODO Might need to make sure it's not an internal send before refunding. I think that might be causing headache....
 
    rows, err := getSeedRowsFromDatabase()
    if (err != nil) {
@@ -1658,9 +1683,6 @@ func returnAllReceiveable() error {
    for rows.Next() {
       rows.Scan(&seed.Seed, &seed.Index)
 
-      if (verbosity >= 5) {
-         fmt.Println("Seed:", strings.ToUpper(hex.EncodeToString(seed.Seed)))
-      }
       // From max index to 0 return all funds
       for i := seed.Index; i >= 0; i-- {
          seed.Index = i
@@ -1668,6 +1690,7 @@ func returnAllReceiveable() error {
 
          if (verbosity >= 5) {
             fmt.Println("  ", seed.NanoAddress)
+            fmt.Println("  index", i)
          }
          // Check to make sure it's not being used in a current transaction
          inUse, err := isAddressInUse(seed.NanoAddress)
@@ -1688,23 +1711,38 @@ func returnAllReceiveable() error {
 
          for j := 0; j < numberOfHashes; j++ {
             if (verbosity >= 5) {
-               fmt.Println("      Refunding")
+               fmt.Println("Receivable hash: ", hashes[j])
             }
             // Found funds. Receive them first and then refund them.
             _, receiveHash, _, _ := Receive(seed.NanoAddress)
 
-            // Don't refund if wallet is receive only
-            if (!addressIsReceiveOnly(seed.NanoAddress)) {
+            blockinfo, _ := getBlockInfo(hashes[j])
+            block := blockinfo.Contents
+
+            // TODO Test to make sure the internal send is being detected correctly
+            // Don't refund if wallet is receive only or it's an internal send
+            if (!addressIsReceiveOnly(seed.NanoAddress) && !addressExsistsInDB(block.Account)) {
                // Poll until block is confirmed
                for {
                   time.Sleep(5 * time.Second)
 
                   info, _ := getBlockInfo(receiveHash)
                   if (info.Confirmed) {
+                     if (verbosity >= 6) {
+                        fmt.Println(" Hash confirmed!")
+                     }
                      break
+                  } else if (verbosity >= 6) {
+                     fmt.Println("Waiting on hash...")
+                     if (verbosity >= 7) {
+                        fmt.Println(info)
+                     }
                   }
                }
 
+               if (verbosity >= 5) {
+                  fmt.Println("      Refunding")
+               }
                err := Refund(receiveHash)
                if (err != nil) {
                   Warning.Println("Refund failed on", seed.NanoAddress, "during routine pending check:", err.Error())

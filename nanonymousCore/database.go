@@ -596,13 +596,16 @@ func insertSeed(conn psqlDB, seed []byte) (int, error) {
    return id, nil
 }
 
-// findTotalBalace is a simple function that adds up all the nano there is
-// amongst all the wallets and returns the amount in Nano.
-func findTotalBalance() (float64, error) {
-   // TODO Add mixer to total balance
+// findTotalBalance is a simple function that adds up all the nano there is
+// amongst all the wallets and returns the amount in Nano, the amount of nano
+// there is in the managed wallets in Raw and the amount of nano there is in the
+// mixer in Raw.
+// TODO needs to not break if there are no mixer addresses
+func findTotalBalance() (*nt.Raw, *nt.Raw, *nt.Raw, error) {
+   zero := nt.NewRaw(0)
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return -1.0, fmt.Errorf("FindTotalBalance: %w", err)
+      return zero, zero, zero, fmt.Errorf("FindTotalBalance: %w", err)
    }
    defer conn.Close(context.Background())
 
@@ -613,32 +616,60 @@ func findTotalBalance() (float64, error) {
       "wallets;"
 
    var rawBalance = nt.NewRaw(0)
-   var nanoBalance float64
+   var nanoBalance *nt.Raw
    row, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
-      return -1.0, fmt.Errorf("QueryRow failed: %w", err)
+      return zero, zero, zero, fmt.Errorf("QueryRow failed: %w", err)
    }
 
    if (row.Next()) {
       err = row.Scan(rawBalance)
       if (err != nil) {
-         return -1.0, fmt.Errorf("findTotalBalance: %w", err)
+         return zero, zero, zero, fmt.Errorf("findTotalBalance: %w", err)
       }
 
-      nanoBalance = rawToNANO(rawBalance)
-
-      if (verbosity >= 5) {
-         fmt.Println("Total Balance is: Ӿ", nanoBalance)
-      }
+      nanoBalance = nt.NewFromRaw(rawBalance)
    }
 
-   return nanoBalance, nil
+   row.Close()
+
+   queryString =
+   "SELECT " +
+      "SUM(balance) " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "mixer = false;"
+
+   err = conn.QueryRow(context.Background(), queryString).Scan(rawBalance)
+   if (err != nil) {
+      return zero, zero, zero, fmt.Errorf("QueryRow failed: %w", err)
+   }
+
+   managed := nt.NewFromRaw(rawBalance)
+
+   queryString =
+   "SELECT " +
+      "SUM(balance) " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "mixer = TRUE;"
+
+   err = conn.QueryRow(context.Background(), queryString).Scan(rawBalance)
+   if (err != nil) {
+      return zero, zero, zero, fmt.Errorf("QueryRow failed: %w", err)
+   }
+
+   mixer := nt.NewFromRaw(rawBalance)
+
+   return nanoBalance, managed, mixer, nil
 }
 
 func getNextTransactionId() (int, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return -1, fmt.Errorf("FindTotalBalance: %w", err)
+      return -1, fmt.Errorf("getNextTransactionId: %w", err)
    }
    defer conn.Close(context.Background())
 
@@ -686,4 +717,35 @@ func recordProfit(gross *nt.Raw, tid int) error {
    }
 
    return nil
+}
+
+func getMixerRows() (pgx.Rows, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, fmt.Errorf("getMixerRows: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "parent_seed, " +
+      "index, " +
+      "balance " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "balance > 0 AND " +
+      "in_use = FALSE AND " +
+      "receive_only = FALSE AND " +
+      "mixer = TRUE " +
+   "ORDER BY " +
+      "balance, " +
+      "index;"
+
+   rows, err := conn.Query(context.Background(), queryString)
+   if (err != nil) {
+      return nil, fmt.Errorf("getMixerRows: %w", err)
+   }
+
+   return rows, err
 }

@@ -138,6 +138,12 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
+               case "count":
+                  Nano, managed, mixer, err := findTotalBalance()
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
+                  fmt.Println("Nano: Ӿ", Nano, "\nManaged: Ӿ", rawToNANO(managed), "\nMixer: Ӿ", rawToNANO(mixer))
                case "update":
                   err = CLIupdate(myKey, array, &prompt)
                   if (err != nil) {
@@ -745,12 +751,6 @@ func CLI() {
             fmt.Println(err)
          }
          fmt.Println("New address: ", blarg.NanoAddress)
-      case "5":
-         verbosity = 5
-         _, err := findTotalBalance()
-         if (err != nil) {
-            fmt.Println("err: ", err.Error())
-         }
       case "6":
          seed, _ := getSeedFromIndex(1, 7)
          err := receivedNano(seed.NanoAddress)
