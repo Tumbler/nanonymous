@@ -144,6 +144,11 @@ func CLI() {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
                   fmt.Println("Nano: Ӿ", rawToNANO(Nano), "\nManaged: Ӿ", rawToNANO(managed), "\nMixer: Ӿ", rawToNANO(mixer))
+               case "mix":
+                  err := sendToMixer(myKey , 1)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
                case "update":
                   err = CLIupdate(myKey, array, &prompt)
                   if (err != nil) {
@@ -841,16 +846,16 @@ func CLI() {
          amountRaw := nt.NewRawFromNano(amountNano)
          Send(sendKey, toPubKey, amountRaw, nil, nil, -1)
       case "K":
-         verbosity = 5
-
-         for i := 0; i <= 41; i++ {
-            fmt.Println("--------------", i, "-------------")
-            seedReceive, _ := getSeedFromIndex(1, i)
-            err := ReceiveAll(seedReceive.NanoAddress)
-            if (err != nil) {
-               fmt.Println("Error:", err.Error())
-            }
-         }
+         //verbosity = 5
+//
+         //for i := 0; i <= 41; i++ {
+            //fmt.Println("--------------", i, "-------------")
+            //seedReceive, _ := getSeedFromIndex(1, i)
+            //err := ReceiveAll(seedReceive.NanoAddress)
+            //if (err != nil) {
+               //fmt.Println("Error:", err.Error())
+            //}
+         //}
       case "L":
          conn, err := pgx.Connect(context.Background(), databaseUrl)
          if (err != nil) {

@@ -2,15 +2,15 @@ package main
 
 import (
    "fmt"
-   "math/rand"
+   "time"
 
    // Local packages
    keyMan "nanoKeyManager"
    nt "nanoTypes"
 )
 
-// TODO sometimes errors??
-func sendToMixer(key *keyMan.Key, depth int) error {
+// TODO sometimes errors?? Might have fixed with confirmation check.... monitoring
+func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
    var err error
 
    origSeed, origIndex, err := getWalletFromAddress(key.NanoAddress)
@@ -37,36 +37,63 @@ func sendToMixer(key *keyMan.Key, depth int) error {
       return fmt.Errorf("sendToMixer: Orig: %d, %d - %w", origSeed, origIndex, err)
    }
 
-   amount1 := nt.NewRaw(0).Div(bal, nt.NewRaw(int64(rand.Intn(98) + 1)))
+   percent := int64(random.Intn(98) + 1) // 1 - 99 %
+   onePercent := nt.NewRaw(0).Div(bal, nt.NewRaw(100))
+   amount1 := nt.NewRaw(0).Mul(onePercent, nt.NewRaw(percent))
    amount2 := nt.NewRaw(0).Sub(bal, amount1)
 
    fmt.Println("amount1:", amount1)
    fmt.Println("amount2:", amount2)
 
    tries := 0
-   _, err = sendNano(key, mix1.PublicKey, amount1)
+   var sendHash nt.BlockHash
+   var hashList []nt.BlockHash
+   sendHash, err = sendNano(key, mix1.PublicKey, amount1)
    for (err != nil) {
       if (tries < RetryNumber) {
-         _, err = sendNano(key, mix1.PublicKey, amount1)
+         sendHash, err = sendNano(key, mix1.PublicKey, amount1)
          tries++
          continue
       }
       return fmt.Errorf("sendToMixer: Send 1 error: Orig: %d, %d - %w", origSeed, origIndex, err)
    }
+   hashList = append(hashList, sendHash)
    tries = 0
    send1Seed, send1Index, _ := getWalletFromAddress(mix1.NanoAddress)
 
-   _, err = sendNano(key, mix2.PublicKey, amount2)
+   sendHash, err = sendNano(key, mix2.PublicKey, amount2)
    for (err != nil) {
       if (tries < RetryNumber) {
-         _, err = sendNano(key, mix2.PublicKey, amount2)
+         sendHash, err = sendNano(key, mix2.PublicKey, amount2)
          tries++
          continue
       }
       return fmt.Errorf("sendToMixer: Send 2 error: Orig: %d, %d, Send 1: %d, %d - %w", origSeed, origIndex, send1Seed, send1Index, err)
    }
+   hashList = append(hashList, sendHash)
    tries = 0
    send2Seed, send2Index, _ := getWalletFromAddress(mix1.NanoAddress)
+
+   // Make sure they're confirmed.
+   var confirms int
+   for (confirms < 2) {
+      for i := len(hashList)-1; i >= 0; i-- {
+         blockInfo, err := getBlockInfo(hashList[i])
+         if (err != nil) {
+            if (verbosity >= 5) {
+               fmt.Println(fmt.Errorf("sendToMixer warning: %w", err))
+            }
+         }
+         if (blockInfo.Confirmed) {
+            confirms++
+            hashList[i] = hashList[len(hashList)-1]
+            hashList = hashList[:len(hashList)-1]
+         }
+      }
+      if (confirms < 2) {
+         time.Sleep(5 * time.Second)
+      }
+   }
 
    _, _, _, err = Receive(mix1.NanoAddress)
    for (err != nil) {
@@ -89,12 +116,12 @@ func sendToMixer(key *keyMan.Key, depth int) error {
    }
    tries = 0
 
-   if (depth < 1) {
-      err = sendToMixer(mix1, depth+1)
+   if (shufflesLeft > 0) {
+      err = sendToMixer(mix1, shufflesLeft-1)
       if (err != nil) {
          return fmt.Errorf("sendToMixer: Orig: %d, %d, Send1: %d, %d, Send2: %d, %d - sendToMixer 2 error: %w", origSeed, origIndex, send1Seed, send1Index, send2Seed, send2Index, err)
       }
-      err = sendToMixer(mix2, depth+1)
+      err = sendToMixer(mix2, shufflesLeft-1)
       if (err != nil) {
          return fmt.Errorf("sendToMixer: Orig: %d, %d, Send1: %d, %d, Send2: %d, %d - sendToMixer 3 error: %w", origSeed, origIndex, send1Seed, send1Index, send2Seed, send2Index, err)
       }

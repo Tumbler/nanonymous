@@ -8,6 +8,7 @@ import (
    "strings"
    "regexp"
    "strconv"
+   "encoding/hex"
 
    // Local packages
    keyMan "nanoKeyManager"
@@ -41,7 +42,7 @@ type Transaction struct {
 
 type transactionComm struct {
    i int
-   hash nt.BlockHash
+   hashes []nt.BlockHash
 }
 
 var registeredClientComunicationPipes map[string]chan string
@@ -67,6 +68,7 @@ func transactionManager(t *Transaction) {
    // We have a lot of clean up to do
    defer func() {
       // Remove active transaction
+      // TODO I don't think this is working
       setClientAddress(t.paymentParentSeedId, t.paymentIndex, nil)
 
       // Cancel all the things
@@ -103,7 +105,7 @@ func transactionManager(t *Transaction) {
             if (verbosity >= 8) {
                fmt.Println("Sending dirty address to mixer")
             }
-            err := sendToMixer(t.sendingKeys[t.dirtyAddress], 0)
+            err := sendToMixer(t.sendingKeys[t.dirtyAddress], 1)
 
             if (err != nil) {
                // TODO debug
@@ -146,7 +148,7 @@ func transactionManager(t *Transaction) {
          return
    }
 
-   // First manage all iniital sends
+   // First manage all initial sends
    numOfSends := len(t.sendingKeys)
    for {
       // All sends finished
@@ -166,7 +168,7 @@ func transactionManager(t *Transaction) {
             numDone++
 
             if !(t.multiSend) {
-               t.finalHash = i.hash
+               t.finalHash = i.hashes[0]
             }
 
             // This is known as the "reverse-blacklist." It makes sure that we
@@ -272,7 +274,14 @@ func transactionManager(t *Transaction) {
                   }
 
                   // Recives have been published, now wait for them to confirm
+
                   trackConfirms := make(map[string]bool)
+                  for _, hash := range tComm.hashes {
+                     trackConfirms[hash.String()] = false
+                  }
+
+                  var timeLimit = time.Now().Add(5 * time.Minute)
+
                   var numConfirmed int
                   for numConfirmed < numOfSends {
                      if (inTesting) {
@@ -283,13 +292,36 @@ func transactionManager(t *Transaction) {
                         case hash := <-t.confirmationChannel:
                            // Make sure we didn't receive the same block twice
                            if (trackConfirms[hash] == false) {
+                              fmt.Println("hash:", hash)
                               trackConfirms[hash] = true
                               numConfirmed++
                            }
                            if (verbosity >= 5) {
                               fmt.Println("[R]Confirmed: ", numConfirmed)
                            }
-                        case <-time.After(5 * time.Minute):
+
+                           // Time limit gets reset if we're still getting confirmations
+                           timeLimit = time.Now().Add(5 * time.Minute)
+                        case <-time.After(10 * time.Second):
+                           fmt.Println("Polling...")
+                           // It's been some time, lets poll the hashes manually.
+                           for hash, seen := range trackConfirms {
+                              if (!seen) {
+                                 fmt.Println(hash)
+                                 encodedHash, _ := hex.DecodeString(hash)
+                                 blockInfo, err := getBlockInfo(encodedHash)
+                                 if (err == nil) {
+                                    if (blockInfo.Confirmed) {
+                                       numConfirmed++
+                                       trackConfirms[hash] = true
+                                    }
+                                 } else {
+                                    // TODO log??
+                                    fmt.Errorf("Transaction had trouble confirming: %w", err)
+                                 }
+                              }
+                           }
+                        case <-time.After(timeLimit.Sub(time.Now())):
                            Info.Println("Transaction timeout(3)")
                            t.abort = true
                            t.receiveWg.Done()
@@ -299,7 +331,7 @@ func transactionManager(t *Transaction) {
                   t.receiveWg.Done()
                } else if (operation == 3) {
                   // All finished
-                  t.finalHash = tComm.hash
+                  t.finalHash = tComm.hashes[0]
                   transcationSucessfull = true
                   if (verbosity >= 5) {
                      fmt.Println("Done with everything!")
@@ -594,7 +626,8 @@ func retryReceives(t *Transaction, prevError error) bool {
       clearPoW(t.transitionalKey.NanoAddress)
    }
 
-   err := ReceiveAll(t.transitionalKey.NanoAddress)
+   // TODO track hashes
+   _, err := ReceiveAll(t.transitionalKey.NanoAddress)
    if (err != nil) {
       Error.Println("ID", t.id, "Problem with multi receives orig:", prevError, "final:", err)
       return false

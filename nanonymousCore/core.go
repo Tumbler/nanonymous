@@ -41,6 +41,7 @@ import (
 // TODO CLI doesn't update current wallet when you receive nano on it
 // TODO bad work completely halts the -S option
 // TODO need a safe way to exit without killing any active transactions
+// TODO maybe for later but if there's too much funds tied up in current trascations, then wait for them to be available before starting a transaction
 
 //go:embed embed.txt
 var embeddedData string
@@ -985,7 +986,7 @@ func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan t
 
    if (commCh != nil) {
       tComm.i = i
-      tComm.hash = newHash
+      tComm.hashes = []nt.BlockHash{newHash}
       commCh <- tComm
    }
 
@@ -1009,12 +1010,13 @@ func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *nt.
    }
 
    // All transactions are still pending. Receive the funds.
-   err := ReceiveAll(transitionalKey.NanoAddress)
+   receiveHashes, err := ReceiveAll(transitionalKey.NanoAddress)
    if (err != nil) {
       err = fmt.Errorf("ReceiveAndSend: %w", err)
       errCh <- err
    } else {
       tComm.i = 2
+      tComm.hashes = receiveHashes
       commCh <- tComm
    }
 
@@ -1032,7 +1034,7 @@ func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *nt.
       errCh <- err
    } else {
       tComm.i = 3
-      tComm.hash = newHash
+      tComm.hashes = []nt.BlockHash{newHash}
       commCh <- tComm
    }
 }
@@ -1280,19 +1282,21 @@ func sendAllNano(fromKey *keyMan.Key, toPublicKey []byte) error {
 }
 
 // needs improvment but can probaby be in CLI TODO
-func ReceiveAll(account string) error {
+func ReceiveAll(account string) ([]nt.BlockHash, error) {
+   var hashes []nt.BlockHash
 
    for {
-      _, _, numLeft, err := Receive(account)
+      _, hash, numLeft, err := Receive(account)
       if (err != nil) {
-         return fmt.Errorf("ReceiveAll: %w", err)
+         return hashes, fmt.Errorf("ReceiveAll: %w", err)
       }
+      hashes = append(hashes, hash)
       if (numLeft <= 0) {
          break
       }
    }
 
-   return nil
+   return hashes, nil
 }
 
 func BlockUntilReceivable(account string, d time.Duration) error {
