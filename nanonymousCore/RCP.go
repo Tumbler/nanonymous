@@ -2,6 +2,7 @@ package main
 
 import (
    "fmt"
+   "net"
    "net/http"
    "net/smtp"
    "strings"
@@ -894,6 +895,18 @@ func rcpCallWithTimeout(request string, response any, url string, ms time.Durati
    }
 }
 
+// Use a custom client to exend time of TLS handshake timeout.
+var longTLStransport = &http.Transport{
+   Dial: (&net.Dialer{
+      Timeout: 60 * time.Second,
+      KeepAlive: 30 * time.Second,
+   }).Dial,
+   TLSHandshakeTimeout: 30 * time.Second,
+}
+var nanonymousHttpClient = &http.Client{
+   Transport: longTLStransport,
+}
+
 func rcpCall(request string, response any, url string, ch chan error) error {
    var err error
    var checkResponse bool
@@ -928,7 +941,7 @@ func rcpCall(request string, response any, url string, ch chan error) error {
    // If not json this will need to change.
    req.Header.Add("Content-Type", "application/json")
 
-   res, err := http.DefaultClient.Do(req)
+   res, err := nanonymousHttpClient.Do(req)
    if (err != nil) {
       return fmt.Errorf("DefaultClient: %w", err)
    }

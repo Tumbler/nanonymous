@@ -40,6 +40,7 @@ import (
 // TODO make sure complete transactions remove expected from list and no longer link account
 // TODO CLI doesn't update current wallet when you receive nano on it
 // TODO bad work completely halts the -S option
+// TODO need a safe way to exit without killing any active transactions
 
 //go:embed embed.txt
 var embeddedData string
@@ -888,7 +889,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
 
          if (mixerBalance.Add(mixerBalance, totalBalance).Cmp(t.amountToSend) >= 0) {
             // There's enough; add the keys to the transaction manager
-            keys, seeds, balances, err := getKeysFromMixer(t.amountToSend.Sub(t.amountToSend, totalBalance))
+            keys, seeds, balances, err := getKeysFromMixer(nt.NewRaw(0).Sub(t.amountToSend, totalBalance))
             if (err != nil) {
                return fmt.Errorf("findSendingWallets: %w", err)
             }
@@ -898,6 +899,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
             t.walletBalance = append(t.walletBalance, balances...)
 
          } else {
+            // Not enough even if we add the mixer.
             return fmt.Errorf("findSendingWallets: not enough funds")
          }
       }
@@ -933,8 +935,7 @@ func sendNanoToClient(t *Transaction) error {
          var arithmaticResult = nt.NewRaw(0)
          if (arithmaticResult.Add(totalSent, t.walletBalance[i]).Cmp(t.amountToSend) > 0) {
             currentSend = arithmaticResult.Sub(t.amountToSend, totalSent)
-            // TODO the last wallet is getting linked with others but not acquiring their blacksts
-            // TODO Flag dirty address to send it's contents into the mixer once the transaction is complete.
+
             t.dirtyAddress = i
             fmt.Println("Dirty address flagged")
          } else {

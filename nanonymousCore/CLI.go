@@ -143,7 +143,7 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
-                  fmt.Println("Nano: Ӿ", Nano, "\nManaged: Ӿ", rawToNANO(managed), "\nMixer: Ӿ", rawToNANO(mixer))
+                  fmt.Println("Nano: Ӿ", rawToNANO(Nano), "\nManaged: Ӿ", rawToNANO(managed), "\nMixer: Ӿ", rawToNANO(mixer))
                case "update":
                   err = CLIupdate(myKey, array, &prompt)
                   if (err != nil) {
@@ -745,12 +745,11 @@ func CLI() {
 
       case "4":
          verbosity = 5
-         adhocAddress := "nano_1hiqiw6j9wo33moia3scoajhheweysiq5w1xjqeqt8m6jx6so6gj39pae5ea"
-         blarg, _, err := getNewAddress(adhocAddress, false, false, 0)
-         if (err != nil) {
-            fmt.Println(err)
+         keys, _, balances, _ := getKeysFromMixer(nt.NewRawFromNano(1.5))
+
+         for i, key := range keys {
+            fmt.Print(key.NanoAddress, ": ", rawToNANO(balances[i]), ", ", key.Index, "\n")
          }
-         fmt.Println("New address: ", blarg.NanoAddress)
       case "6":
          seed, _ := getSeedFromIndex(1, 7)
          err := receivedNano(seed.NanoAddress)

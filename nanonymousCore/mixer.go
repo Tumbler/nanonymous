@@ -115,10 +115,10 @@ func getKeysFromMixer(amountNeeded *nt.Raw) ([]*keyMan.Key, []int, []*nt.Raw, er
    _, _, mixerBalance, err := findTotalBalance()
 
    // Mixer Balance < amount to send
-   if (mixerBalance.Cmp(amountNeeded) < 0 || err != nil) {
-      return []*keyMan.Key{}, []int{}, []*nt.Raw{}, fmt.Errorf("getFromMixer: not enough funds in mixer")
-   } else if (err != nil) {
+   if (err != nil) {
       return []*keyMan.Key{}, []int{}, []*nt.Raw{}, fmt.Errorf("getFromMixer: problem getting funds from mixer: %w", err)
+   }  else if (mixerBalance.Cmp(amountNeeded) < 0) {
+      return []*keyMan.Key{}, []int{}, []*nt.Raw{}, fmt.Errorf("getFromMixer: not enough funds in mixer")
    }
 
    rows, err := getMixerRows()
@@ -143,10 +143,10 @@ func getKeysFromMixer(amountNeeded *nt.Raw) ([]*keyMan.Key, []int, []*nt.Raw, er
       }
       keys = append(keys, key)
       seeds = append(seeds, seed)
-      balances = append(balances, balance)
+      balances = append(balances, nt.NewFromRaw(balance))
 
       totalBalance.Add(totalBalance, balance)
-      fmt.Println("Mixer Total Balance:", totalBalance, "/", amountNeeded)
+      fmt.Println("Mixer Total Balance:", rawToNANO(totalBalance), "/", rawToNANO(amountNeeded))
 
       if (totalBalance.Cmp(amountNeeded) >= 0) {
          break
