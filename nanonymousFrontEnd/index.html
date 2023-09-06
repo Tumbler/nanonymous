@@ -5,7 +5,8 @@
 <title>Nanonymous</title>
 <link rel="stylesheet" href="css/index.css">
 <link rel="stylesheet" href="css/common.css">
-<img src="images/1_nospace.svg" alt="Nanonymous" style="width=150px; height:150px; display:block; margin-left: auto; margin-right: auto; margin-top: 50px; margin-bottom: 100px; width: 50%;">
+<img src="images/1_nospace.svg" id="logo" alt="Nanonymous">
+<img src="images/beta.svg" id="beta"></img
 </head>
 <body>
    <div id=outerbody>
@@ -23,15 +24,10 @@
          </div>
          <div class="HeroContainer" style="order:1">
             <div id="TransactionButtondiv">
-               <div id="TransactionButtonSvg">
-                  <a href="transaction.html">
-                     <svg height="60" width="100%">
-                           <rect id="TransactionButton" rx="15%" ry="50%" width="100%" height="60" />
-                     </svg>
-                     <img id="buttonImage" src="images/nano-symbol-black-no-border.svg" alt="Nano.org">
-                     <span id="buttonText">Send Now</span>
-                  </a>
-               </div>
+               <a href="transaction.html" id="TransactionButton">
+                  <img id="buttonImage" src="images/nano-symbol-black-no-border.svg" alt="Nano.org">
+                  <span id="buttonText">Send Now</span>
+               </a>
             </div>
             <div id=Q4>
                <img id="sendImg" src="images/Send.png" alt="Send Your Nano Anonymousely">

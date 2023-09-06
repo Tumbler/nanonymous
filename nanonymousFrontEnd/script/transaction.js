@@ -1,5 +1,6 @@
 function showQR() {
    var finalAddress = document.getElementById("finalAddress").value;
+   document.getElementById("errorMessage").innerHTML = "";
    ajaxGetAddress(finalAddress);
 }
 
@@ -119,8 +120,9 @@ async function ajaxGetAddress(finalAddress) {
    // Wait for new address to come back from server and then display QR code.
    req.onload = function() {
       console.log(this.response);
-      if (this.response.includes("address=")) {
-         var address = this.response.match(/address=(nano_[a-z0-9]+)/i)[1];
+      var reply = this.response.match(/address=(nano_[a-z0-9]+)/i);
+      if (reply !== null && reply.length > 1) {
+         address = reply[1];
          document.getElementById("TransactionInfo").innerHTML = "Tap QR code to open wallet if on mobile"
 
          var qrCodeText = "nano:" + address + "?amount=" + raw;
@@ -138,8 +140,15 @@ async function ajaxGetAddress(finalAddress) {
          });
          document.getElementById("QRdiv").hidden = false;
          document.getElementById("button").hidden = true;
+         document.getElementById("button").style.display = "none";
          document.getElementById("scanQR").hidden = true;
-         setTimeout(window.scrollTo(0,1000),100);
+         setTimeout(window.scrollTo(0, document.body.scrollHeight),100);
+      } else {
+         document.getElementById("errorMessage").innerHTML = "Something went wrong. Please try a different address or try again later.";
+         document.getElementById("errorMessage").scrollIntoView();
+
+         // Don't connect to a transaction since one hasn't been started
+         return
       }
 
       // Wait until transaction is complete and then post the hash.
@@ -167,6 +176,8 @@ async function ajaxGetAddress(finalAddress) {
          if (line !== null && line.length > 1) {
             if (line[1] == "amountTooLow") {
                document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano. Your transaction has been refunded."
+               document.getElementById("errorMessage").scrollIntoView();
+            } else if (line[1] == "") {
             }
          }
       };
@@ -180,6 +191,7 @@ async function ajaxGetAddress(finalAddress) {
             var hash = this.response.match(/hash=([a-f0-9]+)/i)[1];
 
             document.getElementById("errorMessage").innerHTML = "";
+            document.getElementById("errorMessage").scrollIntoView();
 
             // Animate the address disappearing
             document.getElementById("payment-label").classList.add("animate-zipRight-out");
@@ -225,33 +237,38 @@ async function ajaxGetAddress(finalAddress) {
                resize: true,
                useWorker: true
             });
+
+            // Find the y-percent where the final hash is and put confetti there.
+            var y = document.getElementById("HashLink").getBoundingClientRect().y;
+            var percentY = y/window.innerHeight;
+            console.log(percentY);
             myConfetti({
                paricleCount: 80,
                spread: 140,
                startVelocity: 40,
                ticks: 175,
-               origin: { y:0.6 }
+               origin: { y: percentY }
             });
             setTimeout(() => {
                confetti.reset();
                document.body.removeChild(confettiCanvas);
             }, 5000);
-            }, 1500);
+            }, 1000);
             }, 100);
             }, 900);
             }, 100);
             }, 100);
             }, 100);
+         } else {
+            console.log(this.response);
+            document.getElementById("errorMessage").innerHTML = "Something went wrong. Please try a different address or try again later.";
+            document.getElementById("errorMessage").scrollIntoView();
          }
       };
       req2.send();
    };
    req.send();
 
-}
-
-function sleep(ms) {
-   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 function off() {
