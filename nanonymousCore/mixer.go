@@ -3,6 +3,7 @@ package main
 import (
    "fmt"
    "time"
+   "context"
 
    // Local packages
    keyMan "nanoKeyManager"
@@ -125,7 +126,7 @@ func getKeysFromMixer(amountNeeded *nt.Raw) ([]*keyMan.Key, []int, []*nt.Raw, er
       return []*keyMan.Key{}, []int{}, []*nt.Raw{}, fmt.Errorf("getFromMixer: not enough funds in mixer")
    }
 
-   rows, err := getMixerRows()
+   rows, conn, err := getMixerRows()
    if (err != nil) {
       return []*keyMan.Key{}, []int{}, []*nt.Raw{}, fmt.Errorf("getFromMixer: get rows: %w", err)
    }
@@ -156,6 +157,8 @@ func getKeysFromMixer(amountNeeded *nt.Raw) ([]*keyMan.Key, []int, []*nt.Raw, er
       }
    }
 
+   conn.Close(context.Background())
+
    return keys, seeds, balances, nil
 }
 
@@ -183,7 +186,7 @@ func extractFromMixer(amountToSend *nt.Raw, publicKey []byte) (nt.BlockHash, err
       return finalHash, fmt.Errorf("extractFromMixer: not enough funds in mixer")
    }
 
-   rows, err := getMixerRows()
+   rows, conn, err := getMixerRows()
    if (err != nil) {
       return finalHash, fmt.Errorf("extractFromMixer: get rows: %w", err)
    }
@@ -232,6 +235,8 @@ func extractFromMixer(amountToSend *nt.Raw, publicKey []byte) (nt.BlockHash, err
       }
 
    }
+
+   conn.Close(context.Background())
 
    // Make sure they're confirmed.
    waitForConfirmations(hashList)

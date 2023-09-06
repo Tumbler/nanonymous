@@ -1694,7 +1694,7 @@ func calculateFee(payment *nt.Raw) *nt.Raw {
 func returnAllReceiveable() error {
    // TODO Might need to make sure it's not an internal send before refunding. I think that might be causing headache....
 
-   rows, err := getSeedRowsFromDatabase()
+   rows, conn, err := getSeedRowsFromDatabase()
    if (err != nil) {
       Warning.Println("getSeedRowsFromDatabase failed on routine pending check:", err.Error())
       return fmt.Errorf("returnAllReceiveable: %w", err)
@@ -1773,6 +1773,8 @@ func returnAllReceiveable() error {
          }
       }
    }
+
+   conn.Close(context.Background())
 
    return nil
 }

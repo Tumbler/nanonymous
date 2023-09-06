@@ -648,37 +648,61 @@ func CLI() {
                      switch(array[1]) {
                         case "seeds":
                            // TODO copy without accessing DB???
-                           rows, err := getEncryptedSeedRowsFromDatabase()
-                           rowsCopy, err := getEncryptedSeedRowsFromDatabase()
+                           rows, conn, err := getEncryptedSeedRowsFromDatabase()
+                           rowsCopy, conn2, err := getEncryptedSeedRowsFromDatabase()
                            if (err != nil) {
                               fmt.Println(fmt.Errorf("CLI: %w", err))
+                              conn.Close(context.Background())
+                              conn2.Close(context.Background())
                               continue
                            }
                            printPsqlRows(rows, rowsCopy)
+                           rows.Close()
+                           rowsCopy.Close()
+                           conn.Close(context.Background())
+                           conn2.Close(context.Background())
                         case "wallets":
-                           rows, err := getAllWalletRowsFromDatabase()
-                           rowsCopy, err := getAllWalletRowsFromDatabase()
+                           rows, conn, err := getAllWalletRowsFromDatabase()
+                           rowsCopy, conn2, err := getAllWalletRowsFromDatabase()
                            if (err != nil) {
                               fmt.Println(fmt.Errorf("CLI: %w", err))
+                              conn.Close(context.Background())
+                              conn2.Close(context.Background())
                               continue
                            }
                            printPsqlRows(rows, rowsCopy)
+                           rows.Close()
+                           rowsCopy.Close()
+                           conn.Close(context.Background())
+                           conn2.Close(context.Background())
                         case "blacklist":
-                           rows, err := getBlacklistRowsFromDatabase()
-                           rowsCopy, err := getBlacklistRowsFromDatabase()
+                           rows, conn, err := getBlacklistRowsFromDatabase()
+                           rowsCopy, conn2, err := getBlacklistRowsFromDatabase()
                            if (err != nil) {
                               fmt.Println(fmt.Errorf("CLI: %w", err))
+                              conn.Close(context.Background())
+                              conn2.Close(context.Background())
                               continue
                            }
                            printPsqlRows(rows, rowsCopy)
+                           rows.Close()
+                           rowsCopy.Close()
+                           conn.Close(context.Background())
+                           conn2.Close(context.Background())
                         case "profitrecord":
-                           rows, err := getProfitRowsFromDatabase()
-                           rowsCopy, err := getProfitRowsFromDatabase()
+                           rows, conn, err := getProfitRowsFromDatabase()
+                           rowsCopy, conn2, err := getProfitRowsFromDatabase()
                            if (err != nil) {
                               fmt.Println(fmt.Errorf("CLI: %w", err))
+                              conn.Close(context.Background())
+                              conn2.Close(context.Background())
                               continue
                            }
                            printPsqlRows(rows, rowsCopy)
+                           rows.Close()
+                           rowsCopy.Close()
+                           conn.Close(context.Background())
+                           conn2.Close(context.Background())
                         default:
                            fmt.Println("Table not recognized")
                      }
@@ -949,6 +973,7 @@ func CLIsend(myKey *keyMan.Key, args []string, prompt *string) {
 func CLIlist(args []string) error {
    var err error
    var rows pgx.Rows
+   var conn *pgx.Conn
 
    var ignoreZeroBalance bool
    if !(contains(args, "-z")) {
@@ -957,10 +982,10 @@ func CLIlist(args []string) error {
 
    var ignoreReceiveOnly bool
    if (contains(args, "-a")) {
-      rows, err = getAllWalletRowsFromDatabase()
+      rows, conn, err = getAllWalletRowsFromDatabase()
       ignoreReceiveOnly = false
    } else {
-      rows, err = getWalletRowsFromDatabase()
+      rows, conn, err = getWalletRowsFromDatabase()
       ignoreReceiveOnly = true
    }
 
@@ -996,6 +1021,10 @@ func CLIlist(args []string) error {
       } else {
          fmt.Print(seed, ",", index, ":  Ӿ ", balanceInNano, text, "\n")
       }
+   }
+
+   if (conn != nil) {
+      conn.Close(context.Background())
    }
 
    return nil

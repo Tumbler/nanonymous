@@ -211,17 +211,18 @@ func getSeedFromDatabase(id int) ([]byte, error) {
    return seed, nil
 }
 
-func getSeedRowsFromDatabase() (pgx.Rows, error) {
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getSeedRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
    }
-   defer conn.Close(context.Background())
 
    queryString :=
    "SELECT " +
       "pgp_sym_decrypt_bytea(seed, $1)," +
-      "current_index " +
+      "current_index, " +
+      "id " +
    "FROM " +
       "seeds " +
    "WHERE " +
@@ -231,18 +232,18 @@ func getSeedRowsFromDatabase() (pgx.Rows, error) {
 
    rows, err := conn.Query(context.Background(), queryString, databasePassword, MAX_INDEX)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
    }
 
-   return rows, nil
+   return rows, conn, nil
 }
 
-func getEncryptedSeedRowsFromDatabase() (pgx.Rows, error) {
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getEncryptedSeedRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
    }
-   defer conn.Close(context.Background())
 
    queryString :=
    "SELECT " +
@@ -258,18 +259,18 @@ func getEncryptedSeedRowsFromDatabase() (pgx.Rows, error) {
 
    rows, err := conn.Query(context.Background(), queryString, MAX_INDEX)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
    }
 
-   return rows, nil
+   return rows, conn, nil
 }
 
-func getWalletRowsFromDatabase() (pgx.Rows, error) {
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getWalletRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
    }
-   defer conn.Close(context.Background())
 
    queryString :=
    "SELECT " +
@@ -289,18 +290,46 @@ func getWalletRowsFromDatabase() (pgx.Rows, error) {
 
    rows, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
    }
 
-   return rows, nil
+   return rows, conn, nil
 }
 
-func getBlacklistRowsFromDatabase() (pgx.Rows, error) {
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getManagedWalletsRowsFromDatabase(startingPoint int, seed int) (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
    }
-   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "index " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "receive_only = FALSE AND " +
+      "mixer = FALSE AND " +
+      "parent_seed = $1 AND " +
+      "index >= $2 " +
+   "ORDER BY " +
+      "index;"
+
+   rows, err := conn.Query(context.Background(), queryString, seed, startingPoint)
+   if (err != nil) {
+      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
+   }
+
+   return rows, conn, nil
+}
+
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getBlacklistRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
+   }
 
    queryString :=
    "SELECT " +
@@ -310,18 +339,18 @@ func getBlacklistRowsFromDatabase() (pgx.Rows, error) {
 
    rows, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
    }
 
-   return rows, nil
+   return rows, conn, nil
 }
 
-func getProfitRowsFromDatabase() (pgx.Rows, error) {
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getProfitRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
    }
-   defer conn.Close(context.Background())
 
    queryString :=
    "SELECT " +
@@ -337,18 +366,18 @@ func getProfitRowsFromDatabase() (pgx.Rows, error) {
 
    rows, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
    }
 
-   return rows, nil
+   return rows, conn, nil
 }
 
-func getAllWalletRowsFromDatabase() (pgx.Rows, error) {
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getAllWalletRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
    }
-   defer conn.Close(context.Background())
 
    queryString :=
    "SELECT " +
@@ -366,10 +395,10 @@ func getAllWalletRowsFromDatabase() (pgx.Rows, error) {
 
    rows, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
-      return nil, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
    }
 
-   return rows, nil
+   return rows, conn, nil
 }
 
 func getCurrentIndexFromDatabase(id int) (int, error) {
@@ -764,12 +793,12 @@ func recordProfit(gross *nt.Raw, tid int) error {
    return nil
 }
 
-func getMixerRows() (pgx.Rows, error) {
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getMixerRows() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, fmt.Errorf("getMixerRows: %w", err)
+      return nil, conn, fmt.Errorf("getMixerRows: %w", err)
    }
-   defer conn.Close(context.Background())
 
    queryString :=
    "SELECT " +
@@ -789,8 +818,8 @@ func getMixerRows() (pgx.Rows, error) {
 
    rows, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
-      return nil, fmt.Errorf("getMixerRows: %w", err)
+      return nil, conn, fmt.Errorf("getMixerRows: %w", err)
    }
 
-   return rows, err
+   return rows, conn, err
 }

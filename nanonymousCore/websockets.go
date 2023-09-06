@@ -5,6 +5,7 @@ import (
    "fmt"
    "time"
    "strings"
+   "context"
 
    "golang.org/x/net/websocket"
 
@@ -95,12 +96,14 @@ func startSubscription(ws *websocket.Conn) error {
    var addressString string
 
    // Go through newest seeds first and find 5000 to track
-   rows, err := getSeedRowsFromDatabase()
+   rows, seedConn, err := getSeedRowsFromDatabase()
    var seed []byte
+   var seedID int
    var maxIndex int
    // For all seeds find their accounts
+   seedLoop:
    for rows.Next() {
-      err = rows.Scan(&seed, &maxIndex)
+      err = rows.Scan(&seed, &maxIndex, &seedID)
       if (err != nil || len(seed) == 0) {
          break
       }
@@ -109,18 +112,22 @@ func startSubscription(ws *websocket.Conn) error {
       if (startingPoint < 0) {
          startingPoint = 0
       }
-      for i := startingPoint; i <= maxIndex; i++ {
+
+      innerRows, walletConn, err := getManagedWalletsRowsFromDatabase(startingPoint, seedID)
+      if (err != nil) {
+         return fmt.Errorf("startSubscription: %w", err)
+      }
+
+      for (innerRows.Next()) {
          var key keyMan.Key
          key.Seed = seed
-         key.Index = i
-         err := keyMan.SeedToKeys(&key)
+         err = innerRows.Scan(&key.Index)
          if (err != nil) {
             return fmt.Errorf("startSubscription: %w", err)
          }
-         // TODO make one DB call instead of O(n)
-         if (addressIsMixer(key.NanoAddress)) {
-            // Don't subscribe to mixer addresses
-            continue
+         err := keyMan.SeedToKeys(&key)
+         if (err != nil) {
+            return fmt.Errorf("startSubscription: %w", err)
          }
 
          addressString += `"`+ key.NanoAddress + `", `
@@ -128,10 +135,14 @@ func startSubscription(ws *websocket.Conn) error {
          numSubsribed++
       }
 
+      walletConn.Close(context.Background())
+
       if (numSubsribed >= ACCOUNTS_TRACKED) {
-         break
+         break seedLoop
       }
    }
+   rows.Close()
+   seedConn.Close(context.Background())
 
    addressString = strings.Trim(addressString, ", ")
 
@@ -195,7 +206,7 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
    // unsub from oldest account
    var delString string
    if (numSubsribed >= ACCOUNTS_TRACKED) {
-      rows, _ := getSeedRowsFromDatabase()
+      rows, conn, _ := getSeedRowsFromDatabase()
       var seed keyMan.Key
       var maxIndex int
       var countAccounts int
@@ -215,6 +226,7 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
          }
       }
       rows.Close()
+      conn.Close(context.Background())
 
       if (maxIndex - (ACCOUNTS_TRACKED - countAccounts) < 0) {
          seed.Index = 0
