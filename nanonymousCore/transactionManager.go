@@ -79,7 +79,10 @@ func transactionManager(t *Transaction) {
             //           refund the user!
             nanoAddress, _ := keyMan.PubKeyToAddress(t.paymentAddress)
             Error.Println("Refund failed!! Address:", nanoAddress, " error:", err.Error())
-            sendEmail("Refund failed!! Address: "+ nanoAddress +" error: "+ err.Error())
+            sendEmail("IMMEDIATE ATTENTION REQUIRED", "Refund failed!! Address: "+ nanoAddress +" error: "+ err.Error() +
+               "\n\nPayment Hash: "+ t.receiveHash.String() +
+               "\nID: "+ strconv.Itoa(t.paymentParentSeedId) +","+ strconv.Itoa(t.paymentIndex) +
+               "\nAmount: "+ strconv.FormatFloat(rawToNANO(nt.NewRaw(0).Add(t.amountToSend, t.fee)), 'f', -1, 64))
          }
          reverseTransitionalAddress(t)
          t.abort = true
@@ -108,10 +111,8 @@ func transactionManager(t *Transaction) {
             err := sendToMixer(t.sendingKeys[t.dirtyAddress], 1)
 
             if (err != nil) {
-               // TODO debug
-               fmt.Println("Mixer Error:", err.Error())
-               // log and TODO email
                Error.Println("Mixer Error:", err.Error())
+               sendEmail("WARNING", "Mixer Error: "+ err.Error())
             }
          }
       }

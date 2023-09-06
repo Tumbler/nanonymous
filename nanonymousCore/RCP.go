@@ -3,6 +3,7 @@ package main
 import (
    "fmt"
    "net"
+   "crypto/tls"
    "net/http"
    "net/smtp"
    "strings"
@@ -1004,24 +1005,63 @@ func getNanoUSDValue() (float64, error) {
    return response.Nano.Usd, nil
 }
 
-func sendEmail(contents string) error {
+// sendEmail isn't actually RCP, but I didn't have a better place to put it.
+// I feel it's operation is very self explanitory. Set to, from, and passwords
+// in embed.txt.
+func sendEmail(subject string, contents string) error {
    from := fromEmail
    password := emailPass
 
-   to := []string {
-      toEmail,
-   }
+   to := toEmail
 
    smtpHost := "smtp.gmail.com"
    smtpPort := "587"
 
-   message := []byte(contents)
+   message := "Subject: "+ subject +"\r\n" +
+   "To: "+ to + "\r\n" +
+   "Content-Type: text/plain; charset=UTF-8\r\n\r\n" +
+   contents
 
    auth := smtp.PlainAuth("", from, password, smtpHost)
 
-   err := smtp.SendMail(smtpHost+":"+smtpPort, auth, from, to, message)
+   conn, err := smtp.Dial(smtpHost + ":" + fmt.Sprint(smtpPort))
    if (err != nil) {
       return fmt.Errorf("sendEmail: %w", err)
+   }
+   defer conn.Close()
+
+   tlsConfig := &tls.Config {
+      ServerName: smtpHost,
+   }
+   err = conn.StartTLS(tlsConfig)
+   if (err != nil) {
+      return fmt.Errorf("sendEmail: Failed to start TLS: %w", err)
+   }
+
+   err = conn.Auth(auth);
+   if (err != nil) {
+      return fmt.Errorf("sendEmail: Authentication failed: %w", err)
+   }
+
+   err = conn.Mail(from)
+   if (err != nil) {
+      return fmt.Errorf("sendEmail: Set sender failure: %w", err)
+   }
+
+   err = conn.Rcpt(to)
+   if (err != nil) {
+      return fmt.Errorf("sendEmail: Recipient failure: %w", err)
+   }
+
+   data, err := conn.Data()
+   if (err != nil) {
+      return fmt.Errorf("sendEmail: Failed to open data connection: %w", err)
+   }
+   defer data.Close()
+
+   _, err = data.Write([]byte(message))
+   if (err != nil) {
+      return fmt.Errorf("sendEmail: Failed to write email data: %w", err)
    }
 
    return nil

@@ -129,13 +129,6 @@ func main() {
             panic(err)
          }
 
-         // TODO
-         //fmt.Println("email sent")
-         //err := sendEmail("Test to see if email is working 3")
-         if (err != nil) {
-            fmt.Println("Failed to send email:", err)
-         }
-
          CLI()
 
       } else {
@@ -221,7 +214,7 @@ func initNanoymousCore(mainInstance bool) error {
          case "fromEmail":
             fromEmail = strings.Trim(word[1], "\r\n")
          case "emailPass":
-            fmt.Println("email pass:", emailPass)
+            emailPass = strings.Trim(word[1], "\r\n")
          case "toEmail":
             toEmail = strings.Trim(word[1], "\r\n")
       }
@@ -688,7 +681,10 @@ func receivedNano(nanoAddress string) error {
       sendInfoToClient("info=amountTooLow", getClientAddress(parentSeedId, index))
       err := Refund(receiveHash)
       if (err != nil) {
-         // TODO Email myself??
+         sendEmail("IMMEDIATE ATTENTION REQUIRED", "Non-transaction refund failed! "+ err.Error() +
+               "\n\nPayment Hash: "+ receiveHash.String() +
+               "\nID: "+ strconv.Itoa(parentSeedId) +","+ strconv.Itoa(index) +
+               "\nAmount: "+ strconv.FormatFloat(rawToNANO(payment), 'f', -1, 64))
          Error.Println("non-transaction Refund failed!! %w", err)
          return fmt.Errorf("non-transaction Refund failed!! %w", err)
       }
