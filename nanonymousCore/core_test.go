@@ -2,7 +2,6 @@ package main
 
 import (
    "testing"
-   "fmt"
    "golang.org/x/crypto/blake2b"
    "encoding/hex"
    "context"
@@ -424,7 +423,6 @@ func Test_extractFromMixer(t *testing.T) {
 
    for _, test := range test1 {
       resetInUse()
-      fmt.Println("\n\n\nTesty test:")
 
       testingPayment = append(make([]*nt.Raw, 0), test.intermediaryTx...)
       testingPaymentIndex = 0
@@ -440,11 +438,6 @@ func Test_extractFromMixer(t *testing.T) {
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
-
-      fmt.Println(" 1")
-      // Wait for transaction to complete
-      wg.Wait()
-      fmt.Println(" 2")
 
       // Now check that the database is as we expect
       conn, err := pgx.Connect(context.Background(), databaseUrl)

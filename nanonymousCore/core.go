@@ -1256,8 +1256,6 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt
       balance, _ := getBalance(fromKey.NanoAddress)
       newBalance := nt.NewRaw(0).Sub(balance, amountToSend)
 
-      fmt.Println("Sending:", rawToNANO(amountToSend))
-
       // if (Balance < amountToSend)
       if (balance.Cmp(amountToSend) < 0) {
          return nil, fmt.Errorf("sendNano: not enough funds in account.\n have: %s\n need: %s", balance, amountToSend)
@@ -1434,7 +1432,6 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
       pendingInfo.Amount = testingPayment[testingPaymentIndex]
       testingPaymentIndex++
 
-      fmt.Println("Receiving:", rawToNANO(pendingInfo.Amount))
       newBalance := nt.NewRaw(0).Add(balance, pendingInfo.Amount)
 
       // Update database records
