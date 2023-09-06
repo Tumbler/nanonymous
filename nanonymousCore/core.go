@@ -42,6 +42,7 @@ import (
 // TODO bad work completely halts the -S option
 // TODO need a safe way to exit without killing any active transactions
 // TODO maybe for later but if there's too much funds tied up in current trascations, then wait for them to be available before starting a transaction
+// TODO make rawtoNANAO exact by using shift and EXP like we do in core_test.go
 
 //go:embed embed.txt
 var embeddedData string
@@ -66,7 +67,8 @@ var toEmail string
 var inTesting = false
 var testingPayment []*nt.Raw
 var testingPaymentIndex int
-var testingPendingHashesNum int
+var testingPendingHashesNum []int
+var testingReceiveAlls int
 
 const MAX_INDEX = 4294967295
 
@@ -247,7 +249,11 @@ func initNanoymousCore(mainInstance bool) error {
    }
 
    // Seed randomness
-   random = rand.New(rand.NewSource(time.Now().UnixNano()))
+   if !(inTesting) {
+      random = rand.New(rand.NewSource(time.Now().UnixNano()))
+   } else {
+      random = rand.New(rand.NewSource(41))
+   }
 
    // Some things to do for only the main instance
    if (mainInstance) {
@@ -1250,6 +1256,8 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt
       balance, _ := getBalance(fromKey.NanoAddress)
       newBalance := nt.NewRaw(0).Sub(balance, amountToSend)
 
+      fmt.Println("Sending:", rawToNANO(amountToSend))
+
       // if (Balance < amountToSend)
       if (balance.Cmp(amountToSend) < 0) {
          return nil, fmt.Errorf("sendNano: not enough funds in account.\n have: %s\n need: %s", balance, amountToSend)
@@ -1304,6 +1312,10 @@ func ReceiveAll(account string) ([]nt.BlockHash, error) {
 }
 
 func BlockUntilReceivable(account string, d time.Duration) error {
+
+   if (inTesting) {
+      return nil
+   }
 
    deadline := time.Now().Add(d)
 
@@ -1422,6 +1434,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
       pendingInfo.Amount = testingPayment[testingPaymentIndex]
       testingPaymentIndex++
 
+      fmt.Println("Receiving:", rawToNANO(pendingInfo.Amount))
       newBalance := nt.NewRaw(0).Add(balance, pendingInfo.Amount)
 
       // Update database records
@@ -1431,8 +1444,11 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
          return pendingInfo.Amount, newHash, 0, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
       }
 
-      testingPendingHashesNum--
-      numOfPendingHashes = testingPendingHashesNum
+      testingPendingHashesNum[testingReceiveAlls]--
+      numOfPendingHashes = testingPendingHashesNum[testingReceiveAlls]
+      if (testingPendingHashesNum[testingReceiveAlls] == 0) {
+         testingReceiveAlls++
+      }
    }
 
    return pendingInfo.Amount, newHash, numOfPendingHashes, err

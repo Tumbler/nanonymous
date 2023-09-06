@@ -2,6 +2,7 @@ package main
 
 import (
    "testing"
+   "fmt"
    "golang.org/x/crypto/blake2b"
    "encoding/hex"
    "context"
@@ -23,6 +24,7 @@ func Test_Password(t *testing.T) {
    // This is my hash, GET YOUR OWN!
    const P_HASH = "bd7ba7e0de3500733f4066499255ffb3fa155def272c87f259d10148ee5d2bf8613fe492d833795e3350166443cec75e6fb861029f03ff85f25aa0447b1d7b93"
 
+   inTesting = true
    err := initNanoymousCore(false)
    if (err != nil) {
       t.Errorf(err.Error())
@@ -108,18 +110,18 @@ func Test_getNewAddress(t *testing.T) {
       outputAddress string
    }{
       {"nano_3qis7ubfx8ebmybeoks4f3cied1pzfykgp8ejj8gxk3pkdpmjo74gmhzjeba",
-       "012c5241ea1d55a3a4d01e4689ffd86cb81ae995be222c1e412f41f6a5970988",
-       "nano_1osskweb73zsqnjj638st4cjmf9s56hdnb7bh941iwkb9qszamxg5seeadhw" },
+       "b5ee1b6e99f56bb7fc8149d8bb6fe3831756ab654e20067a491b58c29113f0fb",
+       "nano_3usi45tj6oybeapseej9sgjzdyewz4gybrtpa88a8ttynifpc1w3nakxr8k5" },
       {"nano_1b9opg96jquha58fueg8g8zjofauw5ua3pqfer6bdnjjj34x51s6j8dq83hh",
-       "64d89bab0dca839602b7194cdc8620fff3db11353c71f5fc3393f374ce6ab30b",
-       "nano_3whzcsaf9xq56dftxxnc1z554s7ii6gdp8r1jti5sdarh73qcfaj6xxpd5ui" },
+       "bdd31576235494cf8283b9104cbb83c5b501c78f8c92574d075025efb6345752",
+       "nano_3147zdiazd9kf6rnd4mdon19jemxbd89csatu8sxgnrtrdfuuxodm8hst4hw" },
       {"nano_34jz5qi36gkemhncpu3hbnzfjg1pam4b49fhg8oo9g96c795q9dz3e3n19bb",
-       "25b16d3f62c5f93d2a4ffff8da3cc7c28fe714d374329973b569c7e08e7475a5",
-       "nano_3gwfb61goagc5pftnghkpy85rf4qszkcp5e1pczo9qhqgxqwzoiby75ybwuj" },
+       "2519a0e35da4f996f4aa0caa7c669d5990bc32efe0973c7b5a664430a341130d",
+       "nano_3pa8fsb7ttmu4yw3jee69omcjhyampbz6xsnpxcxymrtfey8za5hhy1mmos1" },
    }
 
    for _, test := range test1 {
-      key, _, err := getNewAddress(test.inputAddress, false, 0)
+      key, _, err := getNewAddress(test.inputAddress, false, false, 0)
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
@@ -163,13 +165,19 @@ func Test_findTotalBalance(t *testing.T) {
    script.Run()
    inTesting = true
 
-   balance, err := findTotalBalance()
+   balance, managed, mixer, err := findTotalBalance()
    if (err != nil) {
       t.Errorf("Error during execution: %s", err.Error())
    }
 
-   if (balance != 44.8) {
-      t.Errorf("Bad balance, want: %.1f, got %.1f", 45.8, balance)
+   if (balance.Cmp(nt.NewRawFromNano(64.8)) != 0) {
+      t.Errorf("Bad balance, want: %.1f, got %.1f", 64.8, rawToNANO(balance))
+   }
+   if (managed.Cmp(nt.NewRawFromNano(44.8)) != 0) {
+      t.Errorf("Bad balance, want: %.1f, got %.1f", 44.8, rawToNANO(managed))
+   }
+   if (mixer.Cmp(nt.NewRawFromNano(20)) != 0) {
+      t.Errorf("Bad balance, want: %.1f, got %.1f", 20.0, rawToNANO(mixer))
    }
 }
 
@@ -190,7 +198,7 @@ func Test_receivedNano(t *testing.T) {
       index int
       nanoReceived *nt.Raw
       balances []*nt.Raw
-      numOfPendingTxs int
+      numOfPendingTxs []int
       intermediaryTx []*nt.Raw
    }{
       {"nano_3f4pznen4utfxmeu7jmucnhg6ut4rd9fk87s7xnnrkr4okph65158j4xciqf",
@@ -201,8 +209,11 @@ func Test_receivedNano(t *testing.T) {
  []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(3102), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(6),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(32),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(10),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(5),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(5),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(10),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))},
-       1,
+       []int{1},
        []*nt.Raw{},
       },
       {"nano_1ts8ejswbndstgp6r4wgi7yr593rg7ryab4wuzburmay3pxbrgu3i5f1fz3n",
@@ -213,8 +224,11 @@ func Test_receivedNano(t *testing.T) {
  []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(4002), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(6),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(32),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
-           nt.NewRaw(0).Mul(nt.NewRaw(1018), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil))},
-       1,
+           nt.NewRaw(0).Mul(nt.NewRaw(1018), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(5),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(5),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(10),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))},
+       []int{1},
        []*nt.Raw{},
       },
       {"nano_1ie4own1s5qmmyd33u9a64169ox54kdb3khs1yt84gfgd7n7dshgcjkegxei",
@@ -225,8 +239,11 @@ func Test_receivedNano(t *testing.T) {
  []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(3473),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(59),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(32),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
-           nt.NewRaw(0).Mul(nt.NewRaw(1018),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil))},
-       1,
+           nt.NewRaw(0).Mul(nt.NewRaw(1018),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(5),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(5),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(10),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))},
+       []int{1},
        []*nt.Raw{},
       },
       {"nano_1c73mmx64sxpudp1d46w56ct8kynnzt5bdufocfkspn8beknbb3mngj3a6br",
@@ -236,13 +253,70 @@ func Test_receivedNano(t *testing.T) {
        2,
        nt.NewRaw(0).Mul(nt.NewRaw(6), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
  []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(3473),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
-           nt.NewRaw(0).Mul(nt.NewRaw(93),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(92),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
-           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil))},
-       3,
-       []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(1018), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(4970), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil))},
+           nt.NewRaw(0).Mul(nt.NewRaw(5),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(5),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(10),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(21483),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(9207),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(224316), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(398784), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil))},
+       []int{3,7},
+       []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(1018),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(4970),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(3069),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(26), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(6231),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(26), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(21483),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(9207),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(224316), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(398784), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil))},
+      },
+      {"nano_3f4pznen4utfxmeu7jmucnhg6ut4rd9fk87s7xnnrkr4okph65158j4xciqf",
+       "nano_3gxo1dh5x6bai7dngpiy5sngnehx1qodr4acw8s1xowag6im7dba1iyswk58",
+       1,
+       2,
+       nt.NewRaw(0).Mul(nt.NewRaw(52), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+ []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(52),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(10),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(17766216), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(624284),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(3885804),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(1745796),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil))},
+       []int{9,7},
+       []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(2036),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(5),        nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(398784),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(224316),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(21483),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(9207),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(3473),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(92),       nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(240084),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(56316),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(17766216), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(624284),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(3885804),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(1745796),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil))},
       },
    }
 
@@ -258,6 +332,7 @@ func Test_receivedNano(t *testing.T) {
       testingPayment = append(make([]*nt.Raw, 0), test.nanoReceived)
       testingPayment = append(testingPayment, test.intermediaryTx...)
       testingPaymentIndex = 0
+      testingReceiveAlls = 0
       testingPendingHashesNum = test.numOfPendingTxs
       err = receivedNano(test.nanoAddress)
       if (err != nil) {
@@ -303,6 +378,109 @@ func Test_receivedNano(t *testing.T) {
       }
    }
 
+}
+
+func Test_extractFromMixer(t *testing.T) {
+   databaseUrl = "postgres://test:testing@localhost:5432/gotests"
+   databasePassword = "testing"
+
+   // Reset database to known state
+   script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
+   script.Run()
+   inTesting = true
+
+   test1 := []struct {
+      nanoToSend *nt.Raw
+      balances []*nt.Raw
+      numOfPendingTxs []int
+      intermediaryTx []*nt.Raw
+   }{
+      {nt.NewRaw(0).Mul(nt.NewRaw(64),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+ []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(41), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(6),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(32), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(10), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(115632), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(42768),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(197568), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(4032),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil))},
+       []int{2,6},
+       []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(5),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(14),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(1584),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(2016),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(115632), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(42768),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(197568), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
+                 nt.NewRaw(0).Mul(nt.NewRaw(4032),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil))},
+      },
+   }
+
+   for _, test := range test1 {
+      resetInUse()
+      fmt.Println("\n\n\nTesty test:")
+
+      testingPayment = append(make([]*nt.Raw, 0), test.intermediaryTx...)
+      testingPaymentIndex = 0
+      testingReceiveAlls = 0
+      testingPendingHashesNum = test.numOfPendingTxs
+
+      pubKey, err := keyMan.AddressToPubKey("nano_1tipnanogsu7q59pnie3qfc4w378wm43fg4ksqc8wmnnfnizrq1xrpt5geho")
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+
+      extractFromMixer(test.nanoToSend, pubKey)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+
+      fmt.Println(" 1")
+      // Wait for transaction to complete
+      wg.Wait()
+      fmt.Println(" 2")
+
+      // Now check that the database is as we expect
+      conn, err := pgx.Connect(context.Background(), databaseUrl)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+      queryString :=
+      "SELECT " +
+         "balance, " +
+         "parent_seed, " +
+         "index " +
+      "FROM " +
+         "wallets " +
+      "ORDER BY " +
+         "index;"
+
+      rows, err := conn.Query(context.Background(), queryString)
+
+      var balance = nt.NewRaw(0)
+      var seedId int
+      var index int
+      for i := 0; rows.Next(); i++ {
+         err = rows.Scan(balance, &seedId, &index)
+         if (err != nil) {
+            t.Errorf("Error during execution: %s", err.Error())
+         }
+         if (i >= len(test.balances)) {
+            t.Errorf("Too many wallets in database")
+            return
+         }
+
+         if (balance.Cmp(test.balances[i]) != 0) {
+            t.Errorf("Wrong balance at %d,%d\r\n want: %d\r\n got:  %d", seedId, index, test.balances[i], balance.Int)
+         }
+      }
+   }
 }
 
 func Test_RawToNano(t *testing.T) {

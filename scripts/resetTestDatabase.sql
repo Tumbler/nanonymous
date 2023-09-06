@@ -2,8 +2,9 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 14.3 (Ubuntu 14.3-1.pgdg21.10+1)
--- Dumped by pg_dump version 14.3 (Ubuntu 14.3-1.pgdg21.10+1)
+-- Dumped from database version 14.9 (Ubuntu 14.9-0ubuntu0.22.04.1)
+-- Dumped by pg_dump version 14.9 (Ubuntu 14.9-0ubuntu0.22.04.1)
+-- pg_dump -c gotests > resetTestDatabase.sql
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -112,8 +113,10 @@ CREATE TABLE public.wallets (
     index bigint NOT NULL,
     balance numeric(40,0) NOT NULL,
     hash bytea NOT NULL,
-    in_use boolean DEFAULT false,
-    receive_only boolean DEFAULT false
+    in_use boolean DEFAULT true,
+    receive_only boolean DEFAULT false,
+    mixer boolean DEFAULT false,
+    PRIMARY KEY (parent_seed, index)
 );
 
 
@@ -143,7 +146,7 @@ COPY public.blacklist (hash) FROM stdin;
 --
 
 COPY public.seeds (id, seed, current_index, active) FROM stdin;
-1	\\xc30d0407030281e95f9ff270668e76d25101204eb914cbc5f1596b685976759cd794af8e3b96702aa2d3c215267b31a91b719fee6a6f98cf5967e62bd3aeb77e5aea691e2918a8e70571c5f9ddbc46330b4bc75ef3b2343b2866c0fd0e32ae8d6527	3	t
+1	\\xc30d0407030281e95f9ff270668e76d25101204eb914cbc5f1596b685976759cd794af8e3b96702aa2d3c215267b31a91b719fee6a6f98cf5967e62bd3aeb77e5aea691e2918a8e70571c5f9ddbc46330b4bc75ef3b2343b2866c0fd0e32ae8d6527	6	t
 \.
 
 
@@ -160,11 +163,14 @@ COPY public.transaction (unique_id) FROM stdin;
 -- Data for Name: wallets; Type: TABLE DATA; Schema: public; Owner: test
 --
 
-COPY public.wallets (parent_seed, index, balance, hash, in_use, receive_only) FROM stdin;
-1	0	41000000000000000000000000000000	\\x89cce4e0bf55e2745dc49db8804d4a61510efeee87e229f24ff713b5b8a4cd97	f	f
-1	1	600000000000000000000000000000	\\xe6b8ca5007d0f5f8c44829f60efc3a8d40fed98ae585b72887256d60ee0cd84b	f	f
-1	2	3200000000000000000000000000000	\\x0aa19bbb5e6e281e89e6d7cb22f9bf5600d196f69a0ae3b47de9d75030d969c5	f	f
-1	3	0	\\x29abfdb3f6be7cfd895550c13dae13d0030841b20f3f3a58b121bc12fbb0af0f	f	f
+COPY public.wallets (parent_seed, index, balance, hash, in_use, receive_only, mixer) FROM stdin;
+1	0	41000000000000000000000000000000	\\x89cce4e0bf55e2745dc49db8804d4a61510efeee87e229f24ff713b5b8a4cd97	f	f	f
+1	1	600000000000000000000000000000	\\xe6b8ca5007d0f5f8c44829f60efc3a8d40fed98ae585b72887256d60ee0cd84b	f	f	f
+1	2	3200000000000000000000000000000	\\x0aa19bbb5e6e281e89e6d7cb22f9bf5600d196f69a0ae3b47de9d75030d969c5	f	f	f
+1	3	0	\\x29abfdb3f6be7cfd895550c13dae13d0030841b20f3f3a58b121bc12fbb0af0f	f	f	f
+1	4	5000000000000000000000000000000	\\xbedfec468394732754fba3d3e2372dd80bb3048a4e1069dc6de3b1b36fb8f8f8	f	f	t
+1	5	5000000000000000000000000000000	\\x41b3cd90a0286d00f657af8ba6efc405e69422174817acf2a009f016641bd2ed	f	f	t
+1	6	10000000000000000000000000000000	\\x5288413269e90c7a8c05897dfd02de46ee289a2ec68fe602cc7fc9cb77fecf9e	f	f	t
 \.
 
 

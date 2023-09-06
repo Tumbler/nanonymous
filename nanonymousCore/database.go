@@ -3,6 +3,7 @@ package main
 import (
    "fmt"
    "context"
+   "strings"
 
    // Local packages
    keyMan "nanoKeyManager"
@@ -653,7 +654,7 @@ func findTotalBalance() (*nt.Raw, *nt.Raw, *nt.Raw, error) {
    if (row.Next()) {
       err = row.Scan(rawBalance)
       if (err != nil) {
-         return zero, zero, zero, fmt.Errorf("findTotalBalance: %w", err)
+         return zero, zero, zero, fmt.Errorf("findTotalBalance: Query faild on total: %w", err)
       }
 
       nanoBalance = nt.NewFromRaw(rawBalance)
@@ -671,7 +672,12 @@ func findTotalBalance() (*nt.Raw, *nt.Raw, *nt.Raw, error) {
 
    err = conn.QueryRow(context.Background(), queryString).Scan(rawBalance)
    if (err != nil) {
-      return zero, zero, zero, fmt.Errorf("QueryRow failed: %w", err)
+      if (strings.Contains(err.Error(), "(<nil>)")) {
+         // Just Scan complaining about nil like little baby.
+         rawBalance = nt.NewRaw(0)
+      } else {
+         return zero, zero, zero, fmt.Errorf("findTotalBalance: QueryRow failed on managed: %w", err)
+      }
    }
 
    managed := nt.NewFromRaw(rawBalance)
@@ -686,7 +692,12 @@ func findTotalBalance() (*nt.Raw, *nt.Raw, *nt.Raw, error) {
 
    err = conn.QueryRow(context.Background(), queryString).Scan(rawBalance)
    if (err != nil) {
-      return zero, zero, zero, fmt.Errorf("QueryRow failed: %w", err)
+      if (strings.Contains(err.Error(), "(<nil>)")) {
+         // Just Scan complaining about nil like little baby.
+         rawBalance = nt.NewRaw(0)
+      } else {
+         return zero, zero, zero, fmt.Errorf("findTotalBalance: QueryRow failed on mixer: %w", err)
+      }
    }
 
    mixer := nt.NewFromRaw(rawBalance)

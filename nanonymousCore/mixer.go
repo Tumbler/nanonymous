@@ -18,8 +18,6 @@ func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
       return fmt.Errorf("sendToMixer: Failed to get wallet: %w", err)
    }
 
-   fmt.Println(key.NanoAddress)
-
    // Get new mixer addresses
    mix1, _, err := getNewAddress("", false, true, 0)
    if (err != nil) {
@@ -41,9 +39,6 @@ func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
    onePercent := nt.NewRaw(0).Div(bal, nt.NewRaw(100))
    amount1 := nt.NewRaw(0).Mul(onePercent, nt.NewRaw(percent))
    amount2 := nt.NewRaw(0).Sub(bal, amount1)
-
-   fmt.Println("amount1:", amount1)
-   fmt.Println("amount2:", amount2)
 
    tries := 0
    var sendHash nt.BlockHash
@@ -75,25 +70,7 @@ func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
    send2Seed, send2Index, _ := getWalletFromAddress(mix1.NanoAddress)
 
    // Make sure they're confirmed.
-   var confirms int
-   for (confirms < 2) {
-      for i := len(hashList)-1; i >= 0; i-- {
-         blockInfo, err := getBlockInfo(hashList[i])
-         if (err != nil) {
-            if (verbosity >= 5) {
-               fmt.Println(fmt.Errorf("sendToMixer warning: %w", err))
-            }
-         }
-         if (blockInfo.Confirmed) {
-            confirms++
-            hashList[i] = hashList[len(hashList)-1]
-            hashList = hashList[:len(hashList)-1]
-         }
-      }
-      if (confirms < 2) {
-         time.Sleep(5 * time.Second)
-      }
-   }
+   waitForConfirmations(hashList)
 
    _, _, _, err = Receive(mix1.NanoAddress)
    for (err != nil) {
@@ -243,7 +220,6 @@ func extractFromMixer(amountToSend *nt.Raw, publicKey []byte) (nt.BlockHash, err
       }
 
       hash, err := sendNano(key, transitionalAddress.PublicKey, currentSend)
-      fmt.Println("Send hash:", hash)
       if (err != nil) {
          return finalHash, fmt.Errorf("extractFromMixer: %w", err)
       }
@@ -261,7 +237,6 @@ func extractFromMixer(amountToSend *nt.Raw, publicKey []byte) (nt.BlockHash, err
    waitForConfirmations(hashList)
 
    hashList, err = ReceiveAll(transitionalAddress.NanoAddress)
-   fmt.Println("Recive hashes:", hashList)
    if (err != nil) {
       return finalHash, fmt.Errorf("extractFromMixer: %w", err)
    }
@@ -282,14 +257,20 @@ func extractFromMixer(amountToSend *nt.Raw, publicKey []byte) (nt.BlockHash, err
    return finalHash, nil
 }
 
+// waitForConfirmations is a simple polling solution to ensure that a list of
+// hashes get confirmed. CAUTION: There is no max wait time. TODO
 func waitForConfirmations(hashList []nt.BlockHash) {
+   if (inTesting) {
+      return
+   }
+
    for (len(hashList) > 0) {
       for i := len(hashList)-1; i >= 0; i-- {
          fmt.Println("hash:", hashList[i])
          blockInfo, err := getBlockInfo(hashList[i])
          if (err != nil) {
             if (verbosity >= 5) {
-               fmt.Println(fmt.Errorf("extractFromMixer warning: %w", err))
+               fmt.Println(fmt.Errorf("waitForConfirmations warning: %w", err))
             }
          }
          if (blockInfo.Confirmed) {

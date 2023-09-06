@@ -758,12 +758,13 @@ func CLI() {
          }
 
       case "6":
-         seed, _ := getSeedFromIndex(1, 7)
-         err := receivedNano(seed.NanoAddress)
-         if (err != nil) {
-            fmt.Println("err: ", err.Error())
-         }
 
+         _, blarg, _ := getNewAddress("", false, true, 0)
+         fmt.Println("index:", blarg)
+         _, blarg, _  = getNewAddress("", false, true, 0)
+         fmt.Println("index:", blarg)
+         _, blarg, _  = getNewAddress("", false, true, 0)
+         fmt.Println("index:", blarg)
       case "7":
          keyMan.WalletVerbose(true)
          verbosity = 5
