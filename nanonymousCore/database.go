@@ -568,6 +568,34 @@ func setAddressNotReceiveOnly(nanoAddress string) {
    conn.Exec(context.Background(), queryString, nanoAddressHash[:])
 }
 
+func addressIsMixer(nanoAddress string) bool {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return false
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "mixer " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "\"hash\" = $1;"
+
+   pubKey, _ := keyMan.AddressToPubKey(nanoAddress)
+   hash := blake2b.Sum256(pubKey)
+   var mixer bool
+   err = conn.QueryRow(context.Background(), queryString, hash[:]).Scan(&mixer)
+   if (err != nil) {
+      // TODO log err
+      fmt.Println("addressIsMixer: QueryRow failed: %w", err)
+      return false
+   }
+
+   return mixer
+}
+
 // insertSeed saves an encrytped version of the seed given into the database.
 func insertSeed(conn psqlDB, seed []byte) (int, error) {
    var id int
@@ -691,6 +719,12 @@ func getNextTransactionId() (int, error) {
 }
 
 func recordProfit(gross *nt.Raw, tid int) error {
+
+   // Don't bother recording if there was no fee.
+   if (gross.Cmp(nt.NewRaw(0)) == 0) {
+      return nil
+   }
+
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return fmt.Errorf("recordProfit: %w", err)

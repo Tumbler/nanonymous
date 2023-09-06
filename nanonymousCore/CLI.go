@@ -149,6 +149,8 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
+               case "extract":
+                  CLIextract(array)
                case "update":
                   err = CLIupdate(myKey, array, &prompt)
                   if (err != nil) {
@@ -1135,6 +1137,27 @@ func CLIpeek(args []string) error {
    return nil
 }
 
+func CLIextract(args []string) {
+   toPubKey, err := keyMan.AddressToPubKey(args[2])
+   if (err != nil) {
+      fmt.Println(args[2], "is not a valid address")
+      return
+   }
+
+   amountNano, err := strconv.ParseFloat(args[1], 64)
+   if (err != nil) {
+      fmt.Println(args[1], "is not a valid nano amount")
+      return
+   }
+
+   amountRaw := nt.NewRawFromNano(amountNano)
+
+   _, err = extractFromMixer(amountRaw, toPubKey)
+   if (err != nil) {
+      fmt.Println(fmt.Errorf("Problem with extraction: %w", err))
+   }
+}
+
 func contains(a []string, search string) bool {
    for _, s := range a {
       if s == search {
@@ -1202,6 +1225,12 @@ func CLIhelp(args []string) {
    switch(term) {
       case "send":
          CLIhelpsend()
+      case "extract":
+         CLIhelpextract()
+      case "mix":
+         CLIhelpmix()
+      case "count":
+         CLIhelpcount()
       case "ls":
          fallthrough
       case "list":
@@ -1238,6 +1267,9 @@ func CLIhelp(args []string) {
          CLIhelpreceiveOnly()
          CLIhelpselect()
          CLIhelpsend()
+         CLIhelpextract()
+         CLIhelpmix()
+         CLIhelpcount()
    }
 }
 
@@ -1283,6 +1315,23 @@ func CLIhelpsend() {
    fmt.Print("   - send {Nano} {address} | Sends \"Nano\" amount from the currently slected address\n",
              "                             to \"address\"",
    )
+}
+
+func CLIhelpextract() {
+   fmt.Println()
+   fmt.Print("   - extract {Nano} {address} | Sends \"Nano\" amount from the any number of mixer\n",
+             "                                addresses to \"address\"",
+   )
+}
+
+func CLIhelpmix() {
+   fmt.Println()
+   fmt.Print("   - mix | Splits up any funds in the current wallet and sends it to mixer addresses\n",)
+}
+
+func CLIhelpcount() {
+   fmt.Println()
+   fmt.Print("   - count | Displays all stored nano on all wallets\n",)
 }
 
 func CLIhelpselect() {
@@ -1471,6 +1520,9 @@ var walletCompleter = readline.NewPrefixCompleter(
    readline.PcItem("help"),
    readline.PcItem("exit"),
    readline.PcItem("verbosity"),
+   readline.PcItem("count"),
+   readline.PcItem("mix"),
+   readline.PcItem("extract"),
 )
 
 var RCPCompleter = readline.NewPrefixCompleter(

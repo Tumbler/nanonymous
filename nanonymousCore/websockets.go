@@ -117,6 +117,11 @@ func startSubscription(ws *websocket.Conn) error {
          if (err != nil) {
             return fmt.Errorf("startSubscription: %w", err)
          }
+         // TODO make one DB call instead of O(n)
+         if (addressIsMixer(key.NanoAddress)) {
+            // Don't subscribe to mixer addresses
+            continue
+         }
 
          addressString += `"`+ key.NanoAddress + `", `
 

@@ -895,6 +895,10 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
                return fmt.Errorf("findSendingWallets: %w", err)
             }
 
+            for _, key := range keys {
+               setAddressInUse(key.NanoAddress)
+            }
+
             t.sendingKeys = append(t.sendingKeys, keys...)
             t.walletSeed = append(t.walletSeed, seeds...)
             t.walletBalance = append(t.walletBalance, balances...)
@@ -936,9 +940,7 @@ func sendNanoToClient(t *Transaction) error {
          var arithmaticResult = nt.NewRaw(0)
          if (arithmaticResult.Add(totalSent, t.walletBalance[i]).Cmp(t.amountToSend) > 0) {
             currentSend = arithmaticResult.Sub(t.amountToSend, totalSent)
-
             t.dirtyAddress = i
-            fmt.Println("Dirty address flagged")
          } else {
             currentSend = t.walletBalance[i]
          }
@@ -1290,7 +1292,9 @@ func ReceiveAll(account string) ([]nt.BlockHash, error) {
       if (err != nil) {
          return hashes, fmt.Errorf("ReceiveAll: %w", err)
       }
-      hashes = append(hashes, hash)
+      if (len(hash) > 0) {
+         hashes = append(hashes, hash)
+      }
       if (numLeft <= 0) {
          break
       }

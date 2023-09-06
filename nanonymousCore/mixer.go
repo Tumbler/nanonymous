@@ -173,7 +173,6 @@ func getKeysFromMixer(amountNeeded *nt.Raw) ([]*keyMan.Key, []int, []*nt.Raw, er
       balances = append(balances, nt.NewFromRaw(balance))
 
       totalBalance.Add(totalBalance, balance)
-      fmt.Println("Mixer Total Balance:", rawToNANO(totalBalance), "/", rawToNANO(amountNeeded))
 
       if (totalBalance.Cmp(amountNeeded) >= 0) {
          break
@@ -181,4 +180,123 @@ func getKeysFromMixer(amountNeeded *nt.Raw) ([]*keyMan.Key, []int, []*nt.Raw, er
    }
 
    return keys, seeds, balances, nil
+}
+
+
+func extractFromMixer(amountToSend *nt.Raw, publicKey []byte) (nt.BlockHash, error) {
+
+   var addressList []string
+   // Make sure anything we touched is back to not in use
+   defer func() {
+      for _, address := range addressList {
+         setAddressNotInUse(address)
+      }
+   }()
+
+   var err error
+   var finalHash nt.BlockHash
+   var dirtyAddress *keyMan.Key
+
+   _, _, mixerBalance, err := findTotalBalance()
+
+   // Mixer Balance < amount to send
+   if (err != nil) {
+      return finalHash, fmt.Errorf("extractFromMixer: problem getting funds from mixer: %w", err)
+   }  else if (mixerBalance.Cmp(amountToSend) < 0) {
+      return finalHash, fmt.Errorf("extractFromMixer: not enough funds in mixer")
+   }
+
+   rows, err := getMixerRows()
+   if (err != nil) {
+      return finalHash, fmt.Errorf("extractFromMixer: get rows: %w", err)
+   }
+
+   transitionalAddress, _, err := getNewAddress("", false, true, 0)
+   if (err != nil) {
+      return finalHash, fmt.Errorf("extractFromMixer: Can't get transitionaladdress: %w", err)
+   }
+   addressList = append(addressList, transitionalAddress.NanoAddress)
+
+   var totalSent = nt.NewRaw(0)
+
+   var seed int
+   var index int
+   var balance = nt.NewRaw(0)
+   var hashList []nt.BlockHash
+   for (rows.Next()) {
+      rows.Scan(&seed, &index, balance)
+
+      key, err := getSeedFromIndex(seed, index)
+      if (err != nil) {
+         return finalHash, fmt.Errorf("extractFromMixer: %w", err)
+      }
+      setAddressInUse(key.NanoAddress)
+      addressList = append(addressList, key.NanoAddress)
+
+      var currentSend = nt.NewRaw(0)
+      if (nt.NewRaw(0).Add(totalSent, balance).Cmp(amountToSend) > 0) {
+         currentSend = nt.NewRaw(0).Sub(amountToSend, totalSent)
+
+         dirtyAddress, _ = getSeedFromIndex(seed, index)
+      } else {
+         currentSend = balance
+      }
+
+      hash, err := sendNano(key, transitionalAddress.PublicKey, currentSend)
+      fmt.Println("Send hash:", hash)
+      if (err != nil) {
+         return finalHash, fmt.Errorf("extractFromMixer: %w", err)
+      }
+      hashList = append(hashList, hash)
+
+      totalSent.Add(totalSent, currentSend)
+
+      if (totalSent.Cmp(amountToSend) >= 0) {
+         break
+      }
+
+   }
+
+   // Make sure they're confirmed.
+   waitForConfirmations(hashList)
+
+   hashList, err = ReceiveAll(transitionalAddress.NanoAddress)
+   fmt.Println("Recive hashes:", hashList)
+   if (err != nil) {
+      return finalHash, fmt.Errorf("extractFromMixer: %w", err)
+   }
+
+   // enable websockets??
+   // Make sure they're confirmed.
+   waitForConfirmations(hashList)
+
+   finalHash, err = sendNano(transitionalAddress, publicKey, amountToSend)
+   if (err != nil) {
+      return finalHash, fmt.Errorf("extractFromMixer: %w", err)
+   }
+
+   sendToMixer(dirtyAddress, 1)
+
+   return finalHash, nil
+}
+
+func waitForConfirmations(hashList []nt.BlockHash) {
+   for (len(hashList) > 0) {
+      for i := len(hashList)-1; i >= 0; i-- {
+         fmt.Println("hash:", hashList[i])
+         blockInfo, err := getBlockInfo(hashList[i])
+         if (err != nil) {
+            if (verbosity >= 5) {
+               fmt.Println(fmt.Errorf("extractFromMixer warning: %w", err))
+            }
+         }
+         if (blockInfo.Confirmed) {
+            hashList[i] = hashList[len(hashList)-1]
+            hashList = hashList[:len(hashList)-1]
+         }
+      }
+      if (len(hashList) > 0) {
+         time.Sleep(5 * time.Second)
+      }
+   }
 }

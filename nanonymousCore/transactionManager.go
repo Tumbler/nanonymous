@@ -303,21 +303,19 @@ func transactionManager(t *Transaction) {
                            // Time limit gets reset if we're still getting confirmations
                            timeLimit = time.Now().Add(5 * time.Minute)
                         case <-time.After(10 * time.Second):
-                           fmt.Println("Polling...")
-                           // It's been some time, lets poll the hashes manually.
+                           // It's been some time, let's poll the hashes manually.
                            for hash, seen := range trackConfirms {
                               if (!seen) {
-                                 fmt.Println(hash)
                                  encodedHash, _ := hex.DecodeString(hash)
                                  blockInfo, err := getBlockInfo(encodedHash)
                                  if (err == nil) {
                                     if (blockInfo.Confirmed) {
-                                       numConfirmed++
                                        trackConfirms[hash] = true
+                                       numConfirmed++
+                                       if (verbosity >= 5) {
+                                          fmt.Println("[R]Confirmed: ", numConfirmed)
+                                       }
                                     }
-                                 } else {
-                                    // TODO log??
-                                    fmt.Errorf("Transaction had trouble confirming: %w", err)
                                  }
                               }
                            }
@@ -354,9 +352,9 @@ func transactionManager(t *Transaction) {
                Info.Println("Transaction timeout(4)")
                if (verbosity >= 5) {
                   if (operation == 1) {
-                     fmt.Println("Transaction error: timout during receives")
+                     Info.Println("Transaction error: timout during receives")
                   } else {
-                     fmt.Println("Transaction error: timout during final send")
+                     Info.Println("Transaction error: timout during final send")
                   }
                }
                return
@@ -531,6 +529,7 @@ func reverseTransitionalAddress(t *Transaction) {
       }
    }
 
+   // TODO reverseing this is actually bad because now all reversed addresses are dirty. Probably better to just mix it.
    // -1 means full history
    history, _ := getAccountHistory(nanoAddress, -1)
 
@@ -627,11 +626,19 @@ func retryReceives(t *Transaction, prevError error) bool {
    }
 
    // TODO track hashes
-   _, err := ReceiveAll(t.transitionalKey.NanoAddress)
+   receiveHashes, err := ReceiveAll(t.transitionalKey.NanoAddress)
    if (err != nil) {
       Error.Println("ID", t.id, "Problem with multi receives orig:", prevError, "final:", err)
       return false
    }
+
+   // Need to give the transaction Manager a bump or it will hang.
+   go func() {
+      var tComm transactionComm
+      tComm.i = 2
+      tComm.hashes = receiveHashes
+      t.commChannel <- tComm
+   }()
 
    return true
 }
