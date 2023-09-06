@@ -275,7 +275,9 @@ func extractFromMixer(amountToSend *nt.Raw, publicKey []byte) (nt.BlockHash, err
       return finalHash, fmt.Errorf("extractFromMixer: %w", err)
    }
 
-   sendToMixer(dirtyAddress, 1)
+   if (dirtyAddress != nil) {
+      sendToMixer(dirtyAddress, 1)
+   }
 
    return finalHash, nil
 }

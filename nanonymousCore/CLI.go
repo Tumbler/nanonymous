@@ -752,11 +752,11 @@ func CLI() {
 
       case "4":
          verbosity = 5
-         keys, _, balances, _ := getKeysFromMixer(nt.NewRawFromNano(1.5))
-
-         for i, key := range keys {
-            fmt.Print(key.NanoAddress, ": ", rawToNANO(balances[i]), ", ", key.Index, "\n")
+         var dirtyAddress *keyMan.Key
+         if (dirtyAddress != nil) {
+            fmt.Println("len:", len(dirtyAddress.NanoAddress))
          }
+
       case "6":
          seed, _ := getSeedFromIndex(1, 7)
          err := receivedNano(seed.NanoAddress)
