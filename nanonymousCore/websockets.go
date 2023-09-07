@@ -5,6 +5,7 @@ import (
    "fmt"
    "time"
    "strings"
+   "strconv"
    "context"
 
    "golang.org/x/net/websocket"
@@ -159,7 +160,9 @@ func startSubscription(ws *websocket.Conn) error {
 
    if (verbosity >= 7) {
       fmt.Print(request)
+      fmt.Println("\nSubscribed to "+ strconv.Itoa(numSubsribed) +" accounts!")
    }
+
 
    _, err = ws.Write([]byte(request))
    if (err != nil) {

@@ -22,7 +22,7 @@ type Transaction struct {
    paymentIndex int
    receiveHash nt.BlockHash
    receiveWg sync.WaitGroup
-   clientAddress []byte
+   recipientAddress []byte
    fee *nt.Raw
    amountToSend *nt.Raw
    sendingKeys []*keyMan.Key
@@ -69,7 +69,7 @@ func transactionManager(t *Transaction) {
    defer func() {
       // Remove active transaction
       // TODO I don't think this is working
-      setClientAddress(t.paymentParentSeedId, t.paymentIndex, nil)
+      setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, nil)
 
       // Cancel all the things
       if !(transcationSucessfull) {
@@ -101,7 +101,7 @@ func transactionManager(t *Transaction) {
          // TODO debug statements
          //fmt.Println("finalHash", t.finalHash)
          //fmt.Println("multi?:", t.multiSend)
-         sendFinalHash(t.finalHash, t.clientAddress)
+         sendFinalHash(t.finalHash, t.recipientAddress)
 
          // Send any dirty addresses to the mixer.
          if (t.dirtyAddress != -1) {
@@ -257,7 +257,7 @@ func transactionManager(t *Transaction) {
 
 
    // Now if it's a multi send then we need monitor the last step of receiving
-   // and sending to the client
+   // and sending to the recipient
    if (t.multiSend) {
       operation = 1
 
@@ -293,7 +293,9 @@ func transactionManager(t *Transaction) {
                         case hash := <-t.confirmationChannel:
                            // Make sure we didn't receive the same block twice
                            if (trackConfirms[hash] == false) {
-                              fmt.Println("hash:", hash)
+                              if (verbosity >= 9) {
+                                 fmt.Println("hash:", hash)
+                              }
                               trackConfirms[hash] = true
                               numConfirmed++
                            }
@@ -383,7 +385,7 @@ func handleSingleSendError(t *Transaction, prevError error) bool {
    }
 
    for (retryCount < RetryNumber) {
-      _, err = Send(t.sendingKeys[0], t.clientAddress, t.amountToSend, nil, nil, -1)
+      _, err = Send(t.sendingKeys[0], t.recipientAddress, t.amountToSend, nil, nil, -1)
       if (err != nil) {
          if (verbosity >= 5) {
             fmt.Println("Error with resend: ", retryCount, err.Error())
@@ -576,7 +578,7 @@ func retryFinalSend(t *Transaction, prevError error) bool {
 
    var err error
    for (retryCount < RetryNumber) {
-      newHash, err := Send(t.transitionalKey, t.clientAddress, t.amountToSend, nil, nil, -1)
+      newHash, err := Send(t.transitionalKey, t.recipientAddress, t.amountToSend, nil, nil, -1)
       if (err != nil) {
          retryCount++
       } else {
@@ -660,7 +662,6 @@ func unregisterClientComunicationPipe(nanoAddress string) {
    delete(registeredClientComunicationPipes, nanoAddress)
 }
 
-// TODO confusion with the name client. DOes it refer to the sender or the receiver??
 func sendInfoToClient(info string, clientPubkey []byte) {
    clientAddress, _ := keyMan.PubKeyToAddress(clientPubkey)
    if (registeredClientComunicationPipes[clientAddress] != nil) {

@@ -279,7 +279,8 @@ func getWalletRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
       "balance, " +
       "pow, " +
       "in_use, " +
-      "receive_only " +
+      "receive_only, " +
+      "mixer " +
    "FROM " +
       "wallets " +
    "WHERE " +
@@ -309,7 +310,6 @@ func getManagedWalletsRowsFromDatabase(startingPoint int, seed int) (pgx.Rows, *
    "FROM " +
       "wallets " +
    "WHERE " +
-      "receive_only = FALSE AND " +
       "mixer = FALSE AND " +
       "parent_seed = $1 AND " +
       "index >= $2 " +
@@ -386,7 +386,8 @@ func getAllWalletRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
       "balance, " +
       "pow, " +
       "in_use, " +
-      "receive_only " +
+      "receive_only, " +
+      "mixer " +
    "FROM " +
       "wallets " +
    "ORDER BY " +

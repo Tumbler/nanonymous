@@ -40,9 +40,9 @@ import (
 // TODO make sure complete transactions remove expected from list and no longer link account
 // TODO CLI doesn't update current wallet when you receive nano on it
 // TODO bad work completely halts the -S option
-// TODO need a safe way to exit without killing any active transactions
 // TODO maybe for later but if there's too much funds tied up in current trascations, then wait for them to be available before starting a transaction
 // TODO make rawtoNANAO exact by using shift and EXP like we do in core_test.go
+// TODO make test recieves actually recieve the amount sent and not just hardcoded because that's not a good test
 
 //go:embed embed.txt
 var embeddedData string
@@ -87,10 +87,13 @@ var activeTransactionList = make(map[string][]byte)
 
 var random *rand.Rand
 
+const version = "1.0.0"
+
 // Random info about used ports:
 // 41721    Nanonymous request port
 // 17076    RCP (test net)
 // 17078    Web sockets (test net)
+// 7076     Work server
 
 // interface to allow pgx to pass around comms and txs interchangeably.
 type psqlDB interface {
@@ -124,13 +127,40 @@ func main() {
 
       } else if (strings.ToLower(args[0]) == "-c") {
          // Command line interface
-         err = initNanoymousCore(true)
+         // Default to no websocket subscriptions unless the -w option is also specified.
+         var fullInstance = false
+         if (len(args) > 1) {
+            if (strings.ToLower(args[1]) == "-w") {
+               fullInstance = true
+               resetInUse()
+            }
+         }
+         err = initNanoymousCore(fullInstance)
          if (err != nil) {
             panic(err)
          }
 
          CLI()
 
+      } else if (strings.ToLower(args[0]) == "-w") {
+         fmt.Println("-w option must be preceded by the -c option")
+         return
+      } else if (strings.ToLower(args[0]) == "-v" || strings.ToLower(args[0]) == "--version" ) {
+         fmt.Println("Version: "+ version)
+      } else if (strings.ToLower(args[0]) == "-h" || strings.ToLower(args[0]) == "--help" ) {
+         fmt.Println("Nanonymous Core version "+ version +
+                   "\n\n  no optoins: This is the default operation. Starts listening on port 41721"+
+                     "\n     for TLS connections. It will only respond to new address requests and" +
+                     "\n     transactions subscriptions requests." +
+                   "\n\n  -c [-w] Start the CLI. The CLI has manual wallet access, an RCP client, and"+
+                     "\n     a rudimentary database explorer. Specify the -w option if you want to"+
+                     "\n     subscribe to websockets. (Will interfere with main instance if it's"+
+                     "\n     running)"+
+                   "\n\n  -s Go through all known wallets and check for receivable funds." +
+                   "\n\n  -v Print version information." +
+                   "\n\n  -beta Run in beta mode. (No fees)"+
+                   "\n\n  # If the last argument is a number, the verbosity is changed to that number"+
+                     "\n     (1-10)")
       } else {
          // Default operation, but with changed verbosity or beta
          if (strings.ToLower(args[0]) == "-beta") {
@@ -251,8 +281,6 @@ func initNanoymousCore(mainInstance bool) error {
    // Some things to do for only the main instance
    if (mainInstance) {
 
-      resetInUse()
-
       activePoW = make(map[string]int)
       workChannel = make(map[string]chan string)
 
@@ -267,6 +295,7 @@ func initNanoymousCore(mainInstance bool) error {
    return nil
 }
 
+var safeExit bool
 // listen is the default operation of nanonymousCore. It listens on port 41721
 // for incoming requests from the front end and passes them off to the handler.
 func listen() error {
@@ -289,12 +318,16 @@ func listen() error {
    }
    defer listener.Close()
 
+   // This is an init thing, but we REALLY don't want to do it on another
+   // instance accidentally. So it's here behind the instance check.
+   resetInUse()
+
    // Listen for eternity to incoming address requests
    if (verbosity < 3) {
       fmt.Println("Listening....")
    }
 
-   for {
+   for (!safeExit) {
       if (verbosity >= 3) {
          fmt.Println("Listening....")
       }
@@ -319,7 +352,6 @@ func listen() error {
 //        transaction. On completion of the transaction nanonymous will return
 //        the final send's hash.
 func handleRequest(conn net.Conn) error {
-   // look into conn.LocalAddr() and conn.RemotAddr()
    buff := make([]byte, 1024)
    conn.SetDeadline(time.Now().Add(12 * time.Hour))
 
@@ -338,7 +370,7 @@ func handleRequest(conn net.Conn) error {
       var subArray = strings.Split(array[1], "=")
       if (len(subArray) >= 2 && subArray[0] == "address") {
          if (addressExsistsInDB(subArray[1]) && !addressIsReceiveOnly(subArray[1])) {
-            // Cannont send to a Nanonymous wallet as the client.
+            // Cannont send to a Nanonymous wallet as the recipient.
             conn.Write([]byte("Invalid Request!"))
          } else {
             newKey, _, err := getNewAddress(subArray[1], false, false, 0)
@@ -405,6 +437,18 @@ func handleRequest(conn net.Conn) error {
          conn.Write([]byte(response))
       } else {
          conn.Write([]byte("Invalid Request!"))
+      }
+   } else if (strings.Contains(text, "safeExit")) {
+      if (conn.LocalAddr().String() == "127.0.0.1:41721") {
+         // Only allow exit command to come from the server itself
+         safeExit = true
+      }
+      if (safeExit) {
+         httpHeader :=
+         "HTTP/1.1 200 OK\n"+
+         "Content-Type: text/plain\n"+
+         "Connection: Closed\n"
+         conn.Write([]byte(httpHeader +"\nAck"))
       }
    }
 
@@ -540,7 +584,7 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
       }
 
       // Track so that when we receive funds we know where to send it
-      err = setClientAddress(id, seed.Index, receivingAddressByte)
+      err = setRecipientAddress(id, seed.Index, receivingAddressByte)
       if (err != nil) {
          Warning.Println("getNewAddress: ", err.Error())
          //return nil, 0, fmt.Errorf("getNewAddress: %w", err)
@@ -645,7 +689,7 @@ func blacklistHash(sendingAddress []byte, receivingHash nt.BlockHash) error {
 //    (3) Calculates the fee
 //    (4) Finds the wallet(s) with enough funds to support the transaction
 //        (minus the blacklisted ones)
-//    (5) Sends the funds to the client
+//    (5) Sends the funds to the recipient
 func receivedNano(nanoAddress string) error {
    var err error
    conn, err := pgx.Connect(context.Background(), databaseUrl)
@@ -678,7 +722,7 @@ func receivedNano(nanoAddress string) error {
 
    if (minPayment.Cmp(payment) > 0) {
       // Less than the minimum. Refund it.
-      sendInfoToClient("info=amountTooLow", getClientAddress(parentSeedId, index))
+      sendInfoToClient("info=amountTooLow", getRecipientAddress(parentSeedId, index))
       err := Refund(receiveHash)
       if (err != nil) {
          sendEmail("IMMEDIATE ATTENTION REQUIRED", "Non-transaction refund failed! "+ err.Error() +
@@ -726,13 +770,13 @@ func receivedNano(nanoAddress string) error {
    // TODO This is just for debugging
    //fmt.Println("If you're not debegging than something is wrong!!!!")
    //seed, _ := getSeedFromIndex(1, 8)
-   //clientPub, _ := keyMan.AddressToPubKey(seed.NanoAddress)
-   //setClientAddress(t.paymentParentSeedId, t.paymentIndex, clientPub)
+   //recipientPub, _ := keyMan.AddressToPubKey(seed.NanoAddress)
+   //setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, recipientPub)
    // TODO end of debugging code
 
-   // Get client address for later use.
-   t.clientAddress = getClientAddress(t.paymentParentSeedId, t.paymentIndex)
-   if (t.clientAddress == nil) {
+   // Get recipient address for later use.
+   t.recipientAddress = getRecipientAddress(t.paymentParentSeedId, t.paymentIndex)
+   if (t.recipientAddress == nil) {
       err = fmt.Errorf("receivedNano: no active transaction available")
       return err
    }
@@ -751,7 +795,7 @@ func receivedNano(nanoAddress string) error {
       return err
    }
 
-   err = sendNanoToClient(&t)
+   err = sendNanoToRecipient(&t)
    if (err != nil) {
       err = fmt.Errorf("receivedNano: %w", err)
       return err
@@ -809,7 +853,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
 
       // Check the blacklist before accepting
       var tmpKey *keyMan.Key
-      foundEntry, tmpKey, err = checkBlackList(tmpSeed, tmpIndex, t.clientAddress)
+      foundEntry, tmpKey, err = checkBlackList(tmpSeed, tmpIndex, t.recipientAddress)
       if (err != nil) {
          return fmt.Errorf("findSendingWallets: %w", err)
       }
@@ -821,7 +865,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
          setAddressInUse(tmpKey.NanoAddress)
          foundAddress = true
          if (verbosity >= 5) {
-            fmt.Println("sending from:", tmpSeed, tmpIndex, "to client")
+            fmt.Println("sending from:", tmpSeed, tmpIndex, "to recipient")
          }
          break
       }
@@ -863,7 +907,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
 
          // Check the blacklist before adding to the list
          var tmpKey *keyMan.Key
-         foundEntry, tmpKey, err = checkBlackList(tmpSeed, tmpIndex, t.clientAddress)
+         foundEntry, tmpKey, err = checkBlackList(tmpSeed, tmpIndex, t.recipientAddress)
          if (err != nil) {
             return fmt.Errorf("findSendingWallets: %w", err)
          }
@@ -915,21 +959,21 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
    return nil
 }
 
-// sendNanoToClient is just a subfunction of receivedNano(). It's just here for
+// sendNanoToRecipient is just a subfunction of receivedNano(). It's just here for
 // readability.
-func sendNanoToClient(t *Transaction) error {
+func sendNanoToRecipient(t *Transaction) error {
    var err error
 
-   // Send nano to client
+   // Send nano to recipient
    if (len(t.sendingKeys) == 1) {
       t.individualSendAmount = append(t.individualSendAmount, t.amountToSend)
-      go Send(t.sendingKeys[0], t.clientAddress, t.amountToSend, t.commChannel, t.errChannel, 0)
+      go Send(t.sendingKeys[0], t.recipientAddress, t.amountToSend, t.commChannel, t.errChannel, 0)
       t.commChannel <- *new(transactionComm)
    } else if (len(t.sendingKeys) > 1) {
       // Need to do a multi-send; Get a new wallet to combine all funds into
       t.transitionalKey, t.transitionSeedId, err = getNewAddress("", false, false, 0)
       if (err != nil) {
-         return fmt.Errorf("sendNanoToClient: %w", err)
+         return fmt.Errorf("sendNanoToRecipient: %w", err)
       }
       t.multiSend = true
 
@@ -957,13 +1001,13 @@ func sendNanoToClient(t *Transaction) error {
          }
       }
 
-      // Now send to client
+      // Now send to recipient
       if (verbosity >= 5) {
-         fmt.Println("Sending", t.amountToSend, "from", t.transitionSeedId, t.transitionalKey.Index, "to client.")
+         fmt.Println("Sending", t.amountToSend, "from", t.transitionSeedId, t.transitionalKey.Index, "to recipient.")
       }
-      go ReceiveAndSend(t.transitionalKey, t.clientAddress, t.amountToSend, t.commChannel, t.errChannel, &t.receiveWg, &t.abort)
+      go ReceiveAndSend(t.transitionalKey, t.recipientAddress, t.amountToSend, t.commChannel, t.errChannel, &t.receiveWg, &t.abort)
    } else {
-      return fmt.Errorf("sendNanoToClient: not enough funds(2)")
+      return fmt.Errorf("sendNanoToRecipient: not enough funds(2)")
    }
 
    return nil
@@ -999,7 +1043,7 @@ func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan t
 
 // ReceiveAndSend is a function that is intended to be used with receivedNano().
 // It receives all funds to an internal wallet, and then, with the direction of
-// the transaction manager sends the funds to the client.
+// the transaction manager sends the funds to the recipient.
 func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan transactionComm, errCh chan error, transactionWg *sync.WaitGroup, abort *bool) {
    wg.Add(1)
    defer wg.Done()
@@ -1031,7 +1075,7 @@ func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *nt.
       return
    }
 
-   // Finally, send to client.
+   // Finally, send to recipient.
    newHash, err := Send(transitionalKey, toPublicKey, amount, nil, nil, -1)
    if (err != nil) {
       err = fmt.Errorf("ReceiveAndSend: %w", err)
@@ -1152,24 +1196,24 @@ func checkBlackList(parentSeedId int, index int, clientAddress []byte) (bool, *k
    }
 }
 
-// getClientAddress is an interface to work with the active transaction list.
-// Takes an internal wallet and returns the registered client address.
-func getClientAddress(parentSeedId int, index int) []byte {
+// getRecipientAddress is an interface to work with the active transaction list.
+// Takes an internal wallet and returns the registered recipient address.
+func getRecipientAddress(parentSeedId int, index int) []byte {
    key := strconv.Itoa(parentSeedId) + "-" + strconv.Itoa(index)
    return activeTransactionList[key]
 }
 
-// setClientAddress is an interface to work with the active transaction list.
-// Adds or removes an entry that maps one of our internal wallets to a client
+// setRecipientAddress is an interface to work with the active transaction list.
+// Adds or removes an entry that maps one of our internal wallets to a recipient
 // address.
-func setClientAddress(parentSeedId int, index int, clientAddress []byte) error {
+func setRecipientAddress(parentSeedId int, index int, recipientAddress []byte) error {
    key := strconv.Itoa(parentSeedId) + "-" + strconv.Itoa(index)
    if (activeTransactionList[key] != nil) {
-      return fmt.Errorf("setClientAddress: address already exists in active transaction list")
+      return fmt.Errorf("setRecipientAddress: address already exists in active transaction list")
    }
 
-   if (len(clientAddress) != 0 ) {
-      activeTransactionList[key] = clientAddress
+   if (len(recipientAddress) != 0 ) {
+      activeTransactionList[key] = recipientAddress
    } else {
       delete(activeTransactionList, key)
    }
@@ -1383,7 +1427,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
             return nil, nil, 0, fmt.Errorf("receive: %w", err)
          }
 
-         if (verbosity >= 5) {
+         if (verbosity >= 6) {
             fmt.Println("account:", block.Account)
             fmt.Println("representative:", block.Representative)
             fmt.Println("balance:", block.Balance)

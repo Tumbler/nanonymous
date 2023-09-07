@@ -271,7 +271,6 @@ func waitForConfirmations(hashList []nt.BlockHash) {
 
    for (len(hashList) > 0) {
       for i := len(hashList)-1; i >= 0; i-- {
-         fmt.Println("hash:", hashList[i])
          blockInfo, err := getBlockInfo(hashList[i])
          if (err != nil) {
             if (verbosity >= 5) {

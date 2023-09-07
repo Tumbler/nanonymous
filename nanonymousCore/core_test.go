@@ -326,7 +326,7 @@ func Test_receivedNano(t *testing.T) {
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
-      setClientAddress(test.seedId, test.index, clientPub)
+      setRecipientAddress(test.seedId, test.index, clientPub)
 
       testingPayment = append(make([]*nt.Raw, 0), test.nanoReceived)
       testingPayment = append(testingPayment, test.intermediaryTx...)

@@ -113,6 +113,12 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
+               case "refresh":
+                  rawBalance, _ := getBalance(myKey.NanoAddress)
+                  NanoBalance := rawToNANO(rawBalance)
+                  format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+
+                  prompt = format
                case "new":
                   err = CLInew(myKey, array, &prompt)
                   if (err != nil) {
@@ -980,13 +986,10 @@ func CLIlist(args []string) error {
       ignoreZeroBalance = true
    }
 
-   var ignoreReceiveOnly bool
    if (contains(args, "-a")) {
       rows, conn, err = getAllWalletRowsFromDatabase()
-      ignoreReceiveOnly = false
    } else {
       rows, conn, err = getWalletRowsFromDatabase()
-      ignoreReceiveOnly = true
    }
 
    if (err != nil) {
@@ -998,8 +1001,9 @@ func CLIlist(args []string) error {
       var index int
       var balance = nt.NewRaw(0)
       var receiveOnly bool
+      var mixer bool
 
-      err = rows.Scan(&seed, &index, balance, nil, nil, &receiveOnly)
+      err = rows.Scan(&seed, &index, balance, nil, nil, &receiveOnly, &mixer)
       if (err != nil) {
          fmt.Println("CLILIST:", err)
          return fmt.Errorf("CLIList: %w", err)
@@ -1015,12 +1019,11 @@ func CLIlist(args []string) error {
       if (receiveOnly) {
          text = ", receive_only"
       }
-
-      if (ignoreReceiveOnly) {
-         fmt.Print(seed, ",", index, ":  Ӿ ", balanceInNano, "\n")
-      } else {
-         fmt.Print(seed, ",", index, ":  Ӿ ", balanceInNano, text, "\n")
+      if (mixer) {
+         text += ", mixer"
       }
+
+      fmt.Print(seed, ",", index, ":  Ӿ ", balanceInNano, text, "\n")
    }
 
    if (conn != nil) {
@@ -1277,6 +1280,8 @@ func CLIhelp(args []string) {
          CLIhelpreceive()
       case "receiveonly":
          CLIhelpreceiveOnly()
+      case "refresh":
+         CLIhelprefresh()
       case "-h":
          fallthrough
       case "help":
@@ -1300,6 +1305,7 @@ func CLIhelp(args []string) {
          CLIhelpextract()
          CLIhelpmix()
          CLIhelpcount()
+         CLIhelprefresh()
    }
 }
 
@@ -1381,6 +1387,11 @@ func CLIhelpreceiveOnly() {
              "                        Flags: off    | When set it will set the indicated wallet to NOT\n",
              "                                        be receive only\n",
    )
+}
+
+func CLIhelprefresh() {
+   fmt.Println()
+   fmt.Print("   - refresh | Syncs the current wallet with the database\n")
 }
 
 func printPsqlRows(rows pgx.Rows, rowsCopy pgx.Rows) {
@@ -1553,6 +1564,7 @@ var walletCompleter = readline.NewPrefixCompleter(
    readline.PcItem("count"),
    readline.PcItem("mix"),
    readline.PcItem("extract"),
+   readline.PcItem("refresh"),
 )
 
 var RCPCompleter = readline.NewPrefixCompleter(
