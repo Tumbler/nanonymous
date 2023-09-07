@@ -1009,6 +1009,11 @@ func getNanoUSDValue() (float64, error) {
 // I feel it's operation is very self explanitory. Set to, from, and passwords
 // in embed.txt.
 func sendEmail(subject string, contents string) error {
+
+   if (inTesting) {
+      return nil
+   }
+
    from := fromEmail
    password := emailPass
 

@@ -68,8 +68,10 @@ func transactionManager(t *Transaction) {
    // We have a lot of clean up to do
    defer func() {
       // Remove active transaction
-      // TODO I don't think this is working
-      setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, nil)
+      err := setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, nil)
+      if (err != nil) {
+         Warning.Println("defer transactionManager: ", err.Error())
+      }
 
       // Cancel all the things
       if !(transcationSucessfull) {

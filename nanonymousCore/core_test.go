@@ -3,6 +3,7 @@ package main
 import (
    "testing"
    "golang.org/x/crypto/blake2b"
+   "fmt"
    "encoding/hex"
    "context"
    "os/exec"
@@ -192,13 +193,12 @@ func Test_receivedNano(t *testing.T) {
 
    test1 := []struct {
       nanoAddress string
-      clientAddress string
+      recipientAddress string
       seedId int
       index int
       nanoReceived *nt.Raw
       balances []*nt.Raw
       numOfPendingTxs []int
-      intermediaryTx []*nt.Raw
    }{
       {"nano_3f4pznen4utfxmeu7jmucnhg6ut4rd9fk87s7xnnrkr4okph65158j4xciqf",
        "nano_1bgho34hpofn4sxencbr8916sbbyyoosr5mmepewyguo8te15qkq8hefnrdn",
@@ -213,7 +213,6 @@ func Test_receivedNano(t *testing.T) {
            nt.NewRaw(0).Mul(nt.NewRaw(5),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(10),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))},
        []int{1},
-       []*nt.Raw{},
       },
       {"nano_1ts8ejswbndstgp6r4wgi7yr593rg7ryab4wuzburmay3pxbrgu3i5f1fz3n",
        "nano_14gfu8wkz48o3xf869ehp7rd9oah1993d1deguqknkksidp5s4b46czn86sw",
@@ -228,7 +227,6 @@ func Test_receivedNano(t *testing.T) {
            nt.NewRaw(0).Mul(nt.NewRaw(5),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(10),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))},
        []int{1},
-       []*nt.Raw{},
       },
       {"nano_1ie4own1s5qmmyd33u9a64169ox54kdb3khs1yt84gfgd7n7dshgcjkegxei",
        "nano_14gfu8wkz48o3xf869ehp7rd9oah1993d1deguqknkksidp5s4b46czn86sw",
@@ -243,7 +241,6 @@ func Test_receivedNano(t *testing.T) {
            nt.NewRaw(0).Mul(nt.NewRaw(5),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(10),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))},
        []int{1},
-       []*nt.Raw{},
       },
       {"nano_1c73mmx64sxpudp1d46w56ct8kynnzt5bdufocfkspn8beknbb3mngj3a6br",
        // This address is blacklisted from address 1,0. That's why it won't take from there
@@ -266,19 +263,11 @@ func Test_receivedNano(t *testing.T) {
            nt.NewRaw(0).Mul(nt.NewRaw(224316), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(398784), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil))},
        []int{3,7},
-       []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(1018),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(4970),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(3069),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(26), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(6231),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(26), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(21483),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(9207),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(224316), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(398784), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil))},
       },
       {"nano_3f4pznen4utfxmeu7jmucnhg6ut4rd9fk87s7xnnrkr4okph65158j4xciqf",
        "nano_3gxo1dh5x6bai7dngpiy5sngnehx1qodr4acw8s1xowag6im7dba1iyswk58",
        1,
-       2,
+       3,
        nt.NewRaw(0).Mul(nt.NewRaw(52), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
  []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
@@ -298,40 +287,27 @@ func Test_receivedNano(t *testing.T) {
            nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(0),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(17766216), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil)),
-           nt.NewRaw(0).Mul(nt.NewRaw(624284),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(6242184),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(3885804),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(1745796),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil))},
        []int{9,7},
-       []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(2036),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(5),        nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(398784),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(224316),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(21483),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(9207),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(3473),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(28), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(92),       nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(240084),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(56316),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(17766216), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(624284),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(24), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(3885804),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(1745796),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(23), nil))},
       },
    }
 
-   for _, test := range test1 {
+   for i, test := range test1 {
+      fmt.Println("\n\nTest ", i)
       resetInUse()
-      // Add address to client list
-      clientPub, err := keyMan.AddressToPubKey(test.clientAddress)
+      // Add address to recipient list
+      recipientPub, err := keyMan.AddressToPubKey(test.recipientAddress)
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
-      setRecipientAddress(test.seedId, test.index, clientPub)
+      setRecipientAddress(test.seedId, test.index, recipientPub)
 
       testingPayment = append(make([]*nt.Raw, 0), test.nanoReceived)
-      testingPayment = append(testingPayment, test.intermediaryTx...)
-      testingPaymentIndex = 0
+      testingPaymentExternal = true
       testingReceiveAlls = 0
+      testingSends = make(map[string][]*nt.Raw)
       testingPendingHashesNum = test.numOfPendingTxs
       err = receivedNano(test.nanoAddress)
       if (err != nil) {
@@ -389,12 +365,17 @@ func Test_extractFromMixer(t *testing.T) {
    inTesting = true
 
    test1 := []struct {
+      recipientAddress string
+      seedId int
+      index int
       nanoToSend *nt.Raw
       balances []*nt.Raw
       numOfPendingTxs []int
-      intermediaryTx []*nt.Raw
    }{
-      {nt.NewRaw(0).Mul(nt.NewRaw(64),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+      {"nano_1bgho34hpofn4sxencbr8916sbbyyoosr5mmepewyguo8te15qkq8hefnrdn",
+       1,
+       3,
+       nt.NewRaw(0).Mul(nt.NewRaw(64),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
  []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(41), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(6),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(32), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
@@ -405,27 +386,25 @@ func Test_extractFromMixer(t *testing.T) {
            nt.NewRaw(0).Mul(nt.NewRaw(0),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(0),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(0),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
-           nt.NewRaw(0).Mul(nt.NewRaw(115632), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(115632), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(42768),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
            nt.NewRaw(0).Mul(nt.NewRaw(197568), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
-           nt.NewRaw(0).Mul(nt.NewRaw(4032),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil))},
+           nt.NewRaw(0).Mul(nt.NewRaw(4032),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil))},
        []int{2,6},
-       []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(5),      nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(14),     nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(1584),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(2016),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(27), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(115632), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(42768),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(197568), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil)),
-                 nt.NewRaw(0).Mul(nt.NewRaw(4032),  nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(25), nil))},
       },
    }
 
    for _, test := range test1 {
       resetInUse()
 
-      testingPayment = append(make([]*nt.Raw, 0), test.intermediaryTx...)
-      testingPaymentIndex = 0
+      recipientPub, err := keyMan.AddressToPubKey(test.recipientAddress)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+      fmt.Println(" beedaopbaadbadpow!")
+      setRecipientAddress(test.seedId, test.index, recipientPub)
+
+      testingPaymentExternal = false
       testingReceiveAlls = 0
       testingPendingHashesNum = test.numOfPendingTxs
 
@@ -529,7 +508,7 @@ func Test_checkBlackList(t *testing.T) {
    test1 := []struct {
       seedId int
       index int
-      clientAddress string
+      recipientAddress string
    }{
       {1,
        0,
@@ -549,7 +528,7 @@ func Test_checkBlackList(t *testing.T) {
    test2 := []struct {
       seedId int
       index int
-      clientAddress string
+      recipientAddress string
    }{
       {1,
        0,
@@ -567,11 +546,11 @@ func Test_checkBlackList(t *testing.T) {
 
    for _, test := range test1 {
 
-      clientPub, err := keyMan.AddressToPubKey(test.clientAddress)
+      recipientPub, err := keyMan.AddressToPubKey(test.recipientAddress)
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
-      check, _, err := checkBlackList(test.seedId, test.index, clientPub)
+      check, _, err := checkBlackList(test.seedId, test.index, recipientPub)
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
@@ -582,11 +561,11 @@ func Test_checkBlackList(t *testing.T) {
 
    for _, test := range test2 {
 
-      clientPub, err := keyMan.AddressToPubKey(test.clientAddress)
+      recipientPub, err := keyMan.AddressToPubKey(test.recipientAddress)
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
-      check, _, err := checkBlackList(test.seedId, test.index, clientPub)
+      check, _, err := checkBlackList(test.seedId, test.index, recipientPub)
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }

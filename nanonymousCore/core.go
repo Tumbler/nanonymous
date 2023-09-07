@@ -29,20 +29,14 @@ import (
 )
 
 // TODO IP lock transactions 1 per 30 seconds??
-// TODO don't allow users to send to a nanonymous address as a client.
 // TODO blacklist pruning
-// TODO Test what happens if you open two different tabs
-// TODO Same client two senders edge case // Just need to link it to the accepting address instead of the final address.
+// TODO Same recipient two senders edge case // Just need to link it to the accepting address instead of the final address.
 // TODO Find out why website sometimes gets 000000000000000000000000000 for final hash.
 // TODO add panic recovery
-// TODO does a mian instance and a CLI instance running at the same time interfere with each other??
 // TODO test backup internet
-// TODO make sure complete transactions remove expected from list and no longer link account
-// TODO CLI doesn't update current wallet when you receive nano on it
 // TODO bad work completely halts the -S option
 // TODO maybe for later but if there's too much funds tied up in current trascations, then wait for them to be available before starting a transaction
 // TODO make rawtoNANAO exact by using shift and EXP like we do in core_test.go
-// TODO make test recieves actually recieve the amount sent and not just hardcoded because that's not a good test
 
 //go:embed embed.txt
 var embeddedData string
@@ -66,9 +60,10 @@ var toEmail string
 // Should only be set to true in test functions
 var inTesting = false
 var testingPayment []*nt.Raw
-var testingPaymentIndex int
+var testingPaymentExternal bool
 var testingPendingHashesNum []int
 var testingReceiveAlls int
+var testingSends = make(map[string][]*nt.Raw)
 
 const MAX_INDEX = 4294967295
 
@@ -1209,14 +1204,14 @@ func getRecipientAddress(parentSeedId int, index int) []byte {
 func setRecipientAddress(parentSeedId int, index int, recipientAddress []byte) error {
    key := strconv.Itoa(parentSeedId) + "-" + strconv.Itoa(index)
    if (activeTransactionList[key] != nil) {
-      return fmt.Errorf("setRecipientAddress: address already exists in active transaction list")
+      if (recipientAddress == nil) {
+         delete(activeTransactionList, key)
+      } else {
+         return fmt.Errorf("setRecipientAddress: address already exists in active transaction list")
+      }
    }
 
-   if (len(recipientAddress) != 0 ) {
-      activeTransactionList[key] = recipientAddress
-   } else {
-      delete(activeTransactionList, key)
-   }
+   activeTransactionList[key] = recipientAddress
 
    return nil
 }
@@ -1301,8 +1296,18 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt
          return nil, fmt.Errorf("sendNano: not enough funds in account.\n have: %s\n need: %s", balance, amountToSend)
       }
 
+      // Setup the funds be received later if needed (If it's an external
+      // address theres no harm in adding it).
+      sendAddress, err := keyMan.PubKeyToAddress(toPublicKey)
+      if (err != nil) {
+         Error.Println("Failed to get address", err.Error())
+         return nil, fmt.Errorf("sendNano: Failed to get address")
+      }
+      testingSends[sendAddress] = append(testingSends[sendAddress], amountToSend)
+      fmt.Println("Sending:\n  address:", sendAddress, "\n  amount:", rawToNANO(amountToSend))
+
       // Update database records
-      err := updateBalance(fromKey.NanoAddress, newBalance)
+      err = updateBalance(fromKey.NanoAddress, newBalance)
       if (err != nil) {
          Error.Println("Balance update failed from send:", err.Error())
          return nil, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
@@ -1462,15 +1467,26 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
          err = updateBalance(block.Account, block.Balance)
          if (err != nil) {
             Error.Println("Balance update failed from receive:", err.Error())
-            return pendingInfo.Amount, newHash, 0, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
+            return pendingInfo.Amount, newHash, 0, fmt.Errorf("receive: updatebalance error %w", databaseError)
          }
       }
    } else {
       // Doing testing; behave as close as possible without calling RCP
 
       balance, _ := getBalance(account)
-      pendingInfo.Amount = testingPayment[testingPaymentIndex]
-      testingPaymentIndex++
+
+      if (testingPaymentExternal) {
+         pendingInfo.Amount = testingPayment[0]
+         testingPaymentExternal = false
+      } else if (len(testingSends[account]) > 0) {
+         fmt.Println("sends:", testingSends[account])
+         pendingInfo.Amount = testingSends[account][len(testingSends[account])-1]
+         testingSends[account] = testingSends[account][:len(testingSends[account])-1]
+         fmt.Println("Receiveing:\n  address:", account, "\n  amount:", rawToNANO(pendingInfo.Amount))
+         fmt.Println("sends after:", testingSends[account])
+      } else {
+         return pendingInfo.Amount, newHash, 0, fmt.Errorf("receive: No funds receiveable on %s", account)
+      }
 
       newBalance := nt.NewRaw(0).Add(balance, pendingInfo.Amount)
 
@@ -1478,7 +1494,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
       err = updateBalance(account, newBalance)
       if (err != nil) {
          Error.Println("Balance update failed from receive:", err.Error())
-         return pendingInfo.Amount, newHash, 0, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
+         return pendingInfo.Amount, newHash, 0, fmt.Errorf("receive: updatebalance error %w", databaseError)
       }
 
       testingPendingHashesNum[testingReceiveAlls]--
