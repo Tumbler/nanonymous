@@ -3,7 +3,6 @@ package main
 import (
    "testing"
    "golang.org/x/crypto/blake2b"
-   "fmt"
    "encoding/hex"
    "context"
    "os/exec"
@@ -294,8 +293,7 @@ func Test_receivedNano(t *testing.T) {
       },
    }
 
-   for i, test := range test1 {
-      fmt.Println("\n\nTest ", i)
+   for _, test := range test1 {
       resetInUse()
       // Add address to recipient list
       recipientPub, err := keyMan.AddressToPubKey(test.recipientAddress)
@@ -401,7 +399,6 @@ func Test_extractFromMixer(t *testing.T) {
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
-      fmt.Println(" beedaopbaadbadpow!")
       setRecipientAddress(test.seedId, test.index, recipientPub)
 
       testingPaymentExternal = false

@@ -37,6 +37,7 @@ import (
 // TODO bad work completely halts the -S option
 // TODO maybe for later but if there's too much funds tied up in current trascations, then wait for them to be available before starting a transaction
 // TODO make rawtoNANAO exact by using shift and EXP like we do in core_test.go
+// TODO blacklistHash() fails silently, so it can lead to a dirty address that's not mixed.
 
 //go:embed embed.txt
 var embeddedData string
@@ -67,7 +68,7 @@ var testingSends = make(map[string][]*nt.Raw)
 
 const MAX_INDEX = 4294967295
 
-const transactionDeadline = time.Hour
+const TRANSACTION_DEADLINE = time.Hour
 
 // Fee in %
 const FEE_PERCENT = float64(0.2)
@@ -392,7 +393,9 @@ func handleRequest(conn net.Conn) error {
 
          var response string
 
-         deadline := time.Now().Add(transactionDeadline)
+         var missedPolls int
+
+         deadline := time.Now().Add(TRANSACTION_DEADLINE)
 
          commloop:
          for (time.Now().Before(deadline)) {
@@ -415,8 +418,12 @@ func handleRequest(conn net.Conn) error {
                case <-time.After(20 * time.Second):
                   _, err := conn.Write([]byte("keepAlive\n"))
                   if (err != nil) {
+                     missedPolls++
                      if (verbosity > 1) {
                         fmt.Println("Warning! keepAlive: (Client may have just closed the tab)", err)
+                     }
+
+                     if (missedPolls > 10) {
                         return fmt.Errorf("Warning! keepAlive: %w (Client may have just closed the tab)", err)
                      }
                   }
@@ -584,6 +591,9 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
          Warning.Println("getNewAddress: ", err.Error())
          //return nil, 0, fmt.Errorf("getNewAddress: %w", err)
       }
+
+      // Make sure we don't keep this forever
+      go timeoutTransaction(id, seed.Index)
    }
 
    if (verbosity >= 10) {
@@ -605,12 +615,29 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
             if (verbosity >= 5) {
                fmt.Println("Subscription add failed!")
             }
-            Warning.Println("Add subscription timout")
+            Warning.Println("Add subscription timeout")
       }
    }
 
 
    return &seed, id, nil
+}
+
+// timeoutTransaction simply deletes the link between address B and C after the
+// deadline since we don't want to keep that information indefinitely even in
+// memory. There is no problem with double deleting.
+func timeoutTransaction(id int, seedIndex int) {
+
+   if (inTesting) {
+      return
+   }
+
+   time.Sleep(TRANSACTION_DEADLINE)
+
+   err := setRecipientAddress(id, seedIndex, nil)
+   if (err != nil) {
+      Warning.Println("timeoutTransaction: Failed to delete transaction: %w", err)
+   }
 }
 
 // blacklist takes two public addresses, hashes them and stores them in the
@@ -653,6 +680,10 @@ func blacklist(conn psqlDB, sendingAddress []byte, receivingAddress []byte) erro
 // blacklistHash is just a wrapper to blacklist() that takes a receiving hash
 // instead of a receiving pub key.
 func blacklistHash(sendingAddress []byte, receivingHash nt.BlockHash) error {
+   if (inTesting) {
+      return nil
+   }
+
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return fmt.Errorf("blacklistHash: %w", err)
@@ -1211,7 +1242,9 @@ func setRecipientAddress(parentSeedId int, index int, recipientAddress []byte) e
       }
    }
 
-   activeTransactionList[key] = recipientAddress
+   if (recipientAddress != nil) {
+      activeTransactionList[key] = recipientAddress
+   }
 
    return nil
 }
@@ -1304,7 +1337,6 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt
          return nil, fmt.Errorf("sendNano: Failed to get address")
       }
       testingSends[sendAddress] = append(testingSends[sendAddress], amountToSend)
-      fmt.Println("Sending:\n  address:", sendAddress, "\n  amount:", rawToNANO(amountToSend))
 
       // Update database records
       err = updateBalance(fromKey.NanoAddress, newBalance)
@@ -1479,11 +1511,8 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
          pendingInfo.Amount = testingPayment[0]
          testingPaymentExternal = false
       } else if (len(testingSends[account]) > 0) {
-         fmt.Println("sends:", testingSends[account])
          pendingInfo.Amount = testingSends[account][len(testingSends[account])-1]
          testingSends[account] = testingSends[account][:len(testingSends[account])-1]
-         fmt.Println("Receiveing:\n  address:", account, "\n  amount:", rawToNANO(pendingInfo.Amount))
-         fmt.Println("sends after:", testingSends[account])
       } else {
          return pendingInfo.Amount, newHash, 0, fmt.Errorf("receive: No funds receiveable on %s", account)
       }
