@@ -853,7 +853,7 @@ func CLI() {
          seedReceive, _ = getSeedFromIndex(1, 12)
          SendEasy(seedSend.NanoAddress,
          seedReceive.NanoAddress,
-         nt.NewRawFromNano(0.50),
+         nt.NewRawFromNano("0.50"),
          false)
       case "J":
          // Send commnad
@@ -875,8 +875,7 @@ func CLI() {
          }
          fmt.Print("Amount in Nano: ")
          fmt.Scan(&usr)
-         amountNano, _ := strconv.ParseFloat(usr, 64)
-         amountRaw := nt.NewRawFromNano(amountNano)
+         amountRaw := nt.NewRawFromNano(usr)
          Send(sendKey, toPubKey, amountRaw, nil, nil, -1)
       case "K":
          //verbosity = 5
@@ -944,13 +943,7 @@ func CLIsend(myKey *keyMan.Key, args []string, prompt *string) {
       return
    }
 
-   amountNano, err := strconv.ParseFloat(args[1], 64)
-   if (err != nil) {
-      fmt.Println(args[1], "is not a valid nano amount")
-      return
-   }
-
-   amountRaw := nt.NewRawFromNano(amountNano)
+   amountRaw := nt.NewRawFromNano(args[1])
    _, err = Send(myKey, toPubKey, amountRaw, nil, nil, -1)
    if (err != nil) {
       if (strings.Contains(err.Error(), "work")) {
@@ -1177,13 +1170,7 @@ func CLIextract(args []string) {
       return
    }
 
-   amountNano, err := strconv.ParseFloat(args[1], 64)
-   if (err != nil) {
-      fmt.Println(args[1], "is not a valid nano amount")
-      return
-   }
-
-   amountRaw := nt.NewRawFromNano(amountNano)
+   amountRaw := nt.NewRawFromNano(args[1])
 
    _, err = extractFromMixer(amountRaw, toPubKey)
    if (err != nil) {

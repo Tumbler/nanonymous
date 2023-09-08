@@ -6,6 +6,7 @@ import (
    "database/sql/driver"
    "strings"
    "strconv"
+   "regexp"
 )
 
 
@@ -69,10 +70,28 @@ func NewFromRaw(raw *Raw) *Raw {
    return r
 }
 
-// WARNING: This function can have rounding errors if the Nano gets too small.
-func NewRawFromNano(nano float64) *Raw {
-   expanded := int64(nano * 1000000000000000)
-   raw := NewRaw(0).Mul(NewRaw(expanded), NewRaw(0).Exp(NewRaw(10), NewRaw(15), nil))
+var validDigits, _ = regexp.Compile(`\d*(\.\d+)?`)
+func NewRawFromNano(nano string) *Raw {
+   raw := NewRaw(0)
+   var numToShift = 30
+
+   digits := validDigits.FindStringSubmatch(nano)[0]
+   fmt.Println(digits)
+   parsed := strings.Split(digits, ".")
+   var combined string
+   if (len(parsed) > 1) {
+      combined = parsed[0]+parsed[1]
+      numToShift = 30 - len(parsed[1])
+   } else {
+      combined = parsed[0]
+   }
+
+   if (numToShift < 0) {
+      return raw
+   }
+   integerVal, _ := strconv.ParseInt(combined, 10, 64)
+
+   raw.Mul(NewRaw(integerVal), NewRaw(0).Exp(NewRaw(10), NewRaw(int64(numToShift)), nil))
    return raw
 }
 

@@ -35,7 +35,6 @@ import (
 // TODO add panic recovery
 // TODO test backup internet
 // TODO maybe for later but if there's too much funds tied up in current trascations, then wait for them to be available before starting a transaction
-// TODO make rawtoNANAO exact by using shift and EXP like we do in core_test.go
 // TODO blacklistHash() fails silently, so it can lead to a dirty address that's not mixed.
 // TODO tracked address not in DB
 
