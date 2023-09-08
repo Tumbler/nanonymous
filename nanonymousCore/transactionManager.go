@@ -653,7 +653,6 @@ func registerClientComunicationPipe(nanoAddress string, ch chan string) {
       return
    }
 
-   fmt.Println("registered address:", nanoAddress)
    registeredClientComunicationPipes[nanoAddress] = ch
 }
 
@@ -674,7 +673,6 @@ func sendInfoToClient(info string, clientPubkey []byte) {
 
 func sendFinalHash(hash nt.BlockHash, pubkey []byte) {
    nanoAddress, _ := keyMan.PubKeyToAddress(pubkey)
-   fmt.Println("Seding final hash to :", nanoAddress)
    if (registeredClientComunicationPipes[nanoAddress] != nil) {
       registeredClientComunicationPipes[nanoAddress] <- "hash="+ hash.String()
    }

@@ -30,13 +30,14 @@ import (
 
 // TODO IP lock transactions 1 per 30 seconds??
 // TODO blacklist pruning
+// TODO seed retirment
 // TODO Find out why website sometimes gets 000000000000000000000000000 for final hash.
 // TODO add panic recovery
 // TODO test backup internet
-// TODO bad work completely halts the -S option
 // TODO maybe for later but if there's too much funds tied up in current trascations, then wait for them to be available before starting a transaction
 // TODO make rawtoNANAO exact by using shift and EXP like we do in core_test.go
 // TODO blacklistHash() fails silently, so it can lead to a dirty address that's not mixed.
+// TODO tracked address not in DB
 
 //go:embed embed.txt
 var embeddedData string
@@ -1417,15 +1418,10 @@ func BlockUntilReceivable(account string, d time.Duration) error {
 // the amount received, the block hash of the created block, and the number of
 // remaining pending/receivable hashes.
 func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
-   var block keyMan.Block
-   var pendingInfo BlockInfo
+   var amountReceived *nt.Raw
    var newHash nt.BlockHash
    var numOfPendingHashes int
-
-   key, _, _, err := getSeedFromAddress(account)
-   if (err != nil) {
-      return nil, nil, 0, fmt.Errorf("receive: %w", err)
-   }
+   var err error
 
    if !(inTesting) {
       pendingHashes, _ := getReceivable(account, -1)
@@ -1433,73 +1429,9 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
 
       if (numOfPendingHashes > 0) {
          pendingHash := pendingHashes[0]
-         pendingInfo, _ = getBlockInfo(pendingHash)
-         accountInfo, err := getAccountInfo(account)
-         if (err != nil) {
-            // Filter out expected errors
-            if !(strings.Contains(err.Error(), "Account not found")) {
-               return nil, nil, 0, fmt.Errorf("Receive: %w", err)
-            }
-         }
-
-         // Fill block with relavent information
-         if (len(accountInfo.Frontier) == 0) {
-            // New account. Structure as an open.
-            block.Previous = make([]byte, 32)
-            block.Representative = getNewRepresentative()
-            block.Balance = pendingInfo.Amount
-         } else {
-            // Old account. Do a standard receive.
-            block.Previous = accountInfo.Frontier
-            block.Representative = accountInfo.Representative
-            block.Balance = nt.NewRaw(0).Add(accountInfo.Balance, pendingInfo.Amount)
-         }
-         block.Account = account
-         block.Link = pendingHash
-         block.Seed = key
-
-         sig, err := block.Sign()
-         if (err != nil) {
-            return nil, nil, 0, fmt.Errorf("receive: %w", err)
-         }
-
-         if (verbosity >= 6) {
-            fmt.Println("account:", block.Account)
-            fmt.Println("representative:", block.Representative)
-            fmt.Println("balance:", block.Balance)
-            fmt.Println("link:", strings.ToUpper(hex.EncodeToString(block.Link)))
-            h, _ := block.Hash()
-            fmt.Println("hash:", strings.ToUpper(hex.EncodeToString(h)))
-            fmt.Println("private:", strings.ToUpper(hex.EncodeToString(block.Seed.PrivateKey)))
-            fmt.Println("Sig:", strings.ToUpper(hex.EncodeToString(sig)))
-         }
-
-         PoW, err := getPoW(block.Account, true)
-         if (err != nil) {
-            return nil, nil, 0, fmt.Errorf("receive: %w", err)
-         }
-
-         // Send RCP request
-         newHash, err = publishReceive(block, sig, PoW)
-         if (err != nil){
-            return nil, nil, 0, fmt.Errorf("receive: %w", err)
-         }
-         if (len(newHash) != 32){
-            return nil, nil, 0, fmt.Errorf("receive: no block hash returned from node")
-         }
+         amountReceived, newHash, err = receiveHash(pendingHash)
 
          numOfPendingHashes--
-
-         // We'ved used any stored PoW, clear it out for next use
-         clearPoW(block.Account)
-         go preCalculateNextPoW(block.Account, false)
-
-         // Update database records
-         err = updateBalance(block.Account, block.Balance)
-         if (err != nil) {
-            Error.Println("Balance update failed from receive:", err.Error())
-            return pendingInfo.Amount, newHash, 0, fmt.Errorf("receive: updatebalance error %w", databaseError)
-         }
       }
    } else {
       // Doing testing; behave as close as possible without calling RCP
@@ -1507,22 +1439,22 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
       balance, _ := getBalance(account)
 
       if (testingPaymentExternal) {
-         pendingInfo.Amount = testingPayment[0]
+         amountReceived = testingPayment[0]
          testingPaymentExternal = false
       } else if (len(testingSends[account]) > 0) {
-         pendingInfo.Amount = testingSends[account][len(testingSends[account])-1]
+         amountReceived = testingSends[account][len(testingSends[account])-1]
          testingSends[account] = testingSends[account][:len(testingSends[account])-1]
       } else {
-         return pendingInfo.Amount, newHash, 0, fmt.Errorf("receive: No funds receiveable on %s", account)
+         return amountReceived, newHash, 0, fmt.Errorf("receive: No funds receiveable on %s", account)
       }
 
-      newBalance := nt.NewRaw(0).Add(balance, pendingInfo.Amount)
+      newBalance := nt.NewRaw(0).Add(balance, amountReceived)
 
       // Update database records
       err = updateBalance(account, newBalance)
       if (err != nil) {
          Error.Println("Balance update failed from receive:", err.Error())
-         return pendingInfo.Amount, newHash, 0, fmt.Errorf("receive: updatebalance error %w", databaseError)
+         return amountReceived, newHash, 0, fmt.Errorf("receive: updatebalance error %w", databaseError)
       }
 
       testingPendingHashesNum[testingReceiveAlls]--
@@ -1532,7 +1464,95 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
       }
    }
 
-   return pendingInfo.Amount, newHash, numOfPendingHashes, err
+   return amountReceived, newHash, numOfPendingHashes, err
+}
+
+func receiveHash(pendingHash nt.BlockHash) (*nt.Raw, nt.BlockHash, error) {
+   var block keyMan.Block
+   var pendingInfo BlockInfo
+   var newHash nt.BlockHash
+   var err error
+
+   pendingInfo, err = getBlockInfo(pendingHash)
+   if (err != nil) {
+      return nil, nil, fmt.Errorf("receive: %w", err)
+   }
+   if (pendingInfo.Subtype != "send") {
+      return nil, nil, fmt.Errorf("receive: Not a receivable block!")
+   }
+   account := pendingInfo.Contents.LinkAsAccount
+   accountInfo, err := getAccountInfo(account)
+
+   key, _, _, err := getSeedFromAddress(account)
+   if (err != nil) {
+      return nil, nil, fmt.Errorf("receive: %w", err)
+   }
+
+   if (err != nil) {
+      // Filter out expected errors
+      if !(strings.Contains(err.Error(), "Account not found")) {
+         return nil, nil, fmt.Errorf("Receive: %w", err)
+      }
+   }
+
+   // Fill block with relevant information
+   if (len(accountInfo.Frontier) == 0) {
+      // New account. Structure as an open.
+      block.Previous = make([]byte, 32)
+      block.Representative = getNewRepresentative()
+      block.Balance = pendingInfo.Amount
+   } else {
+      // Old account. Do a standard receive.
+      block.Previous = accountInfo.Frontier
+      block.Representative = accountInfo.Representative
+      block.Balance = nt.NewRaw(0).Add(accountInfo.Balance, pendingInfo.Amount)
+   }
+   block.Account = account
+   block.Link = pendingHash
+   block.Seed = key
+
+   sig, err := block.Sign()
+   if (err != nil) {
+      return nil, nil, fmt.Errorf("receive: %w", err)
+   }
+
+   if (verbosity >= 6) {
+      fmt.Println("account:", block.Account)
+      fmt.Println("representative:", block.Representative)
+      fmt.Println("balance:", block.Balance)
+      fmt.Println("link:", strings.ToUpper(hex.EncodeToString(block.Link)))
+      h, _ := block.Hash()
+      fmt.Println("hash:", strings.ToUpper(hex.EncodeToString(h)))
+      fmt.Println("private:", strings.ToUpper(hex.EncodeToString(block.Seed.PrivateKey)))
+      fmt.Println("Sig:", strings.ToUpper(hex.EncodeToString(sig)))
+   }
+
+   PoW, err := getPoW(block.Account, true)
+   if (err != nil) {
+      return nil, nil, fmt.Errorf("receive: %w", err)
+   }
+
+   // Send RCP request
+   newHash, err = publishReceive(block, sig, PoW)
+   if (err != nil){
+      return nil, nil, fmt.Errorf("receive: %w", err)
+   }
+   if (len(newHash) != 32){
+      return nil, nil, fmt.Errorf("receive: no block hash returned from node")
+   }
+
+   // We've used any stored PoW, clear it out for next use
+   clearPoW(block.Account)
+   go preCalculateNextPoW(block.Account, false)
+
+   // Update database records
+   err = updateBalance(block.Account, block.Balance)
+   if (err != nil) {
+      Error.Println("Balance update failed from receive:", err.Error())
+      return pendingInfo.Amount, newHash, fmt.Errorf("receive: updatebalance error %w", databaseError)
+   }
+
+   return pendingInfo.Amount, newHash, err
 }
 
 // TODO chekc that all of these are still good active nodes before going live
@@ -1769,14 +1789,13 @@ func calculateFee(payment *nt.Raw) *nt.Raw {
    return fee
 }
 
-// returnAllReceivable checks all wallets in all seeds and finds any receiveable
-// funds that are just lying around (Maybe someone accidentally re-sent funds to
-// an address that I'm no longer actively monitoring). If the wallet is not
-// marked as "in use" then it returns the funds to the original owner. This
-// function is designed to be called occasionally by a seperate process to clean
-// up any accidental sends from users.
+// returnAllReceivable checks all wallets in all active seeds and finds any
+// receiveable funds that are just lying around (Maybe someone accidentally
+// re-sent funds to an address that I'm no longer actively monitoring). If the
+// wallet is not marked as "in use" then it returns the funds to the original
+// owner. This function is designed to be called occasionally by a seperate
+// process to clean up any accidental sends from users.
 func returnAllReceiveable() error {
-   // TODO Might need to make sure it's not an internal send before refunding. I think that might be causing headache....
 
    rows, conn, err := getSeedRowsFromDatabase()
    if (err != nil) {
@@ -1784,81 +1803,95 @@ func returnAllReceiveable() error {
       return fmt.Errorf("returnAllReceiveable: %w", err)
    }
 
-   var seed keyMan.Key
-   // for all our seeds
-   for rows.Next() {
-      rows.Scan(&seed.Seed, &seed.Index)
+   var accounts []string
 
-      // From max index to 0 return all funds
-      for i := seed.Index; i >= 0; i-- {
+   defer conn.Close(context.Background())
+
+   var seed keyMan.Key
+   var seedID int
+   var searched int
+   // For all our active seeds (Last two are defined as the active seeds)
+   for rows.Next() {
+      if (searched >= 2) {
+         break
+      }
+
+      rows.Scan(&seed.Seed, &seed.Index, &seedID)
+
+      innerRows, conn2, err := getWalletRowsFromDatabaseFromSeed(seedID)
+      if (err != nil) {
+         Warning.Println("getWalletRowsFromDatabaseFromSeed failed on routine pending check:", err.Error())
+         return fmt.Errorf("returnAllReceiveable: %w", err)
+      }
+      defer conn2.Close(context.Background())
+
+      // Get all accounts
+      for (innerRows.Next()) {
+         var i int
+
+         err := innerRows.Scan(&i)
+         if (err != nil) {
+            Warning.Println("innerRows.Scan failed on routine pending check:", err.Error())
+            return fmt.Errorf("returnAllReceiveable: %w", err)
+         }
+
          seed.Index = i
          keyMan.SeedToKeys(&seed)
+
+         accounts = append(accounts, seed.NanoAddress)
 
          if (verbosity >= 5) {
             fmt.Println("  ", seed.NanoAddress)
             fmt.Println("  index", i)
          }
-         // Check to make sure it's not being used in a current transaction
-         inUse, err := isAddressInUse(seed.NanoAddress)
-         if (err != nil) {
-            Warning.Println("isAddresInUse failed on routine pending check:", err.Error())
-            continue
-         }
-         if (inUse) {
-            continue
-         }
+      }
 
-         hashes, err := getReceivable(seed.NanoAddress, -1)
-         if (err != nil) {
-            Warning.Println("getReceivable failed on routine pending check:", err.Error())
-            return fmt.Errorf("returnAllReceiveable: %w", err)
-         }
-         numberOfHashes := len(hashes)
+      searched++
+   }
 
-         for j := 0; j < numberOfHashes; j++ {
+   // For all our accounts get all receivable hashes
+   hashes, err := getAccountsPending(accounts)
+   if (err != nil) {
+      Warning.Println("getReceivable failed on routine pending check:", err.Error())
+      return fmt.Errorf("returnAllReceiveable: %w", err)
+   }
+   numberOfHashes := len(hashes)
+
+   if (verbosity >= 5) {
+      fmt.Println(numberOfHashes, "accounts with receivable hash(es) found!")
+   }
+
+   for address, receivableHashes := range hashes {
+      for _, receivableHash := range receivableHashes {
+         if (verbosity >= 5) {
+            fmt.Println("account: ", address)
+            fmt.Println("Receivable hash: ", receivableHash)
+         }
+         // Found funds. Receive them first and then refund them.
+         _, receiveHash, err := receiveHash(receivableHash)
+         if (err != nil) {
+            Error.Println("Receive Failed: ", err.Error())
             if (verbosity >= 5) {
-               fmt.Println("Receivable hash: ", hashes[j])
+               fmt.Println("Receive Failed: ", err.Error())
             }
-            // Found funds. Receive them first and then refund them.
-            _, receiveHash, _, _ := Receive(seed.NanoAddress)
+            continue
+         }
 
-            blockinfo, _ := getBlockInfo(hashes[j])
-            block := blockinfo.Contents
+         // Don't refund if wallet is receive only or it's an internal send
+         if (!addressIsReceiveOnly(address) && !addressExsistsInDB(address)) {
+            // Poll until block is confirmed
+            waitForConfirmations([]nt.BlockHash{receiveHash})
 
-            // TODO Test to make sure the internal send is being detected correctly
-            // Don't refund if wallet is receive only or it's an internal send
-            if (!addressIsReceiveOnly(seed.NanoAddress) && !addressExsistsInDB(block.Account)) {
-               // Poll until block is confirmed
-               for {
-                  time.Sleep(5 * time.Second)
-
-                  info, _ := getBlockInfo(receiveHash)
-                  if (info.Confirmed) {
-                     if (verbosity >= 6) {
-                        fmt.Println(" Hash confirmed!")
-                     }
-                     break
-                  } else if (verbosity >= 6) {
-                     fmt.Println("Waiting on hash...")
-                     if (verbosity >= 7) {
-                        fmt.Println(info)
-                     }
-                  }
-               }
-
-               if (verbosity >= 5) {
-                  fmt.Println("      Refunding")
-               }
-               err := Refund(receiveHash)
-               if (err != nil) {
-                  Warning.Println("Refund failed on", seed.NanoAddress, "during routine pending check:", err.Error())
-               }
+            if (verbosity >= 5) {
+               fmt.Println("      Refunding")
+            }
+            err := Refund(receiveHash)
+            if (err != nil) {
+               Warning.Println("Refund failed on", seed.NanoAddress, "during routine pending check:", err.Error())
             }
          }
       }
    }
-
-   conn.Close(context.Background())
 
    return nil
 }

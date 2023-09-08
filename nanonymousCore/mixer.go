@@ -280,6 +280,14 @@ func waitForConfirmations(hashList []nt.BlockHash) {
          if (blockInfo.Confirmed) {
             hashList[i] = hashList[len(hashList)-1]
             hashList = hashList[:len(hashList)-1]
+            if (verbosity >= 6) {
+               fmt.Println(" Hash confirmed!")
+            }
+         } else if (verbosity >= 6) {
+            fmt.Println("Waiting on hash...")
+            if (verbosity >= 7) {
+               fmt.Println(blockInfo)
+            }
          }
       }
       if (len(hashList) > 0) {

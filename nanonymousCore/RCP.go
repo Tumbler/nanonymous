@@ -222,6 +222,9 @@ func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (nt.B
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
+      if (strings.Contains(err.Error(), "work")) {
+         clearPoW(block.Account)
+      }
       return nil, fmt.Errorf("publishSend: %w", err)
    }
 
@@ -258,7 +261,10 @@ func publishReceive(block keyMan.Block, signature []byte, proofOfWork string) (n
 
    err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
-      return nil, fmt.Errorf("publishSend: %w", err)
+      if (strings.Contains(err.Error(), "work")) {
+         clearPoW(block.Account)
+      }
+      return nil, fmt.Errorf("publishReceive: %w", err)
    }
 
    return response.Hash, nil
@@ -386,7 +392,7 @@ func getAccountsPending(nanoAddresses []string) (map[string][]nt.BlockHash, erro
 
    request :=
    `{
-      "action": "accounts_pending",
+      "action": "accounts_receivable",
       "accounts": [`+ addressString +`],
       "count": "-1"
     }`

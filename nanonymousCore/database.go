@@ -232,7 +232,7 @@ func getSeedRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 
    rows, err := conn.Query(context.Background(), queryString, databasePassword, MAX_INDEX)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getSeedRowsFromDatabase: %w", err)
    }
 
    return rows, conn, nil
@@ -259,7 +259,7 @@ func getEncryptedSeedRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 
    rows, err := conn.Query(context.Background(), queryString, MAX_INDEX)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getEncryptedSeedRowsFromDatabase: %w", err)
    }
 
    return rows, conn, nil
@@ -290,6 +290,32 @@ func getWalletRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
       "index;"
 
    rows, err := conn.Query(context.Background(), queryString)
+   if (err != nil) {
+      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
+   }
+
+   return rows, conn, nil
+}
+
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getWalletRowsFromDatabaseFromSeed(seedID int) (pgx.Rows, *pgx.Conn, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "index " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "in_use = FALSE AND " +
+      "parent_seed = $1 " +
+   "ORDER BY " +
+      "index;"
+
+   rows, err := conn.Query(context.Background(), queryString, seedID)
    if (err != nil) {
       return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
    }
