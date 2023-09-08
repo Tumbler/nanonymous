@@ -121,14 +121,15 @@ async function ajaxGetAddress(finalAddress) {
    req.onload = function() {
       console.log(this.response);
       var reply = this.response.match(/address=(nano_[a-z0-9]+)/i);
+      let middleAddress = "";
       if (reply !== null && reply.length > 1) {
-         address = reply[1];
+         middleAddress = reply[1];
          document.getElementById("TransactionInfo").innerHTML = "Tap QR code to open wallet if on mobile"
 
-         var qrCodeText = "nano:" + address + "?amount=" + raw;
+         var qrCodeText = "nano:" + middleAddress + "?amount=" + raw;
 
          document.getElementById("QRLink").href = qrCodeText;
-         document.getElementById("qr-label").innerHTML = address;
+         document.getElementById("qr-label").innerHTML = middleAddress;
          if (qrCodeText.length < 85) {
             var qrSize = 250;
          } else {
@@ -153,7 +154,7 @@ async function ajaxGetAddress(finalAddress) {
 
       // Wait until transaction is complete and then post the hash.
       var req2 = new XMLHttpRequest();
-      req2.open("POST", "php/getFinalHash.php?address="+ finalAddress, true)
+      req2.open("POST", "php/getFinalHash.php?address="+ middleAddress, true)
       req2.timeout = 0; // No timeout
 
       req2.abort = function() {
