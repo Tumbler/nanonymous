@@ -30,7 +30,6 @@ import (
 
 // TODO IP lock transactions 1 per 30 seconds??
 // TODO blacklist pruning
-// TODO Same recipient two senders edge case // Just need to link it to the accepting address instead of the final address.
 // TODO Find out why website sometimes gets 000000000000000000000000000 for final hash.
 // TODO add panic recovery
 // TODO test backup internet
