@@ -169,13 +169,13 @@ func Test_findTotalBalance(t *testing.T) {
       t.Errorf("Error during execution: %s", err.Error())
    }
 
-   if (balance.Cmp(nt.NewRawFromNano(64.8)) != 0) {
+   if (balance.Cmp(nt.NewRawFromNano("64.8")) != 0) {
       t.Errorf("Bad balance, want: %.1f, got %.1f", 64.8, rawToNANO(balance))
    }
-   if (managed.Cmp(nt.NewRawFromNano(44.8)) != 0) {
+   if (managed.Cmp(nt.NewRawFromNano("44.8")) != 0) {
       t.Errorf("Bad balance, want: %.1f, got %.1f", 44.8, rawToNANO(managed))
    }
-   if (mixer.Cmp(nt.NewRawFromNano(20)) != 0) {
+   if (mixer.Cmp(nt.NewRawFromNano("20")) != 0) {
       t.Errorf("Bad balance, want: %.1f, got %.1f", 20.0, rawToNANO(mixer))
    }
 }

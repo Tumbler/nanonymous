@@ -914,14 +914,26 @@ var nanonymousHttpClient = &http.Client{
    Transport: longTLStransport,
 }
 
-func rcpCall(request string, response any, url string, ch chan error) error {
-   var err error
+func rcpCall(request string, response any, url string, ch chan error) (err error) {
+
+   defer func() {
+      recoverMessage := recover()
+      if (recoverMessage != nil) {
+         Error.Println("rcpCall panic: ", recoverMessage)
+         err = fmt.Errorf("rcpCall panic: %s", recoverMessage)
+      }
+   }()
+
    var checkResponse bool
    defer func() {
       if (ch != nil) {
          ch <- err
       }
    }()
+
+   if (inTesting) {
+      fmt.Println("WARNING: Calling RCP from testing function.")
+   }
 
    // Check to make sure response is in the correct format
    if (response != nil) {
@@ -979,7 +991,7 @@ func rcpCall(request string, response any, url string, ch chan error) error {
       }
    }
 
-   return nil
+   return err
 }
 
 // getNanoUSDValue uses the coingecko API to find the current price of nano in

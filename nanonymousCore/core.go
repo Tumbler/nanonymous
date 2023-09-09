@@ -31,12 +31,7 @@ import (
 // TODO IP lock transactions 1 per 30 seconds??
 // TODO blacklist pruning
 // TODO seed retirment
-// TODO Find out why website sometimes gets 000000000000000000000000000 for final hash.
-// TODO add panic recovery
 // TODO test backup internet
-// TODO maybe for later but if there's too much funds tied up in current trascations, then wait for them to be available before starting a transaction
-// TODO blacklistHash() fails silently, so it can lead to a dirty address that's not mixed.
-// TODO tracked address not in DB
 
 //go:embed embed.txt
 var embeddedData string
@@ -174,12 +169,13 @@ func main() {
 func defaultOperation() {
    err := initNanoymousCore(true)
    if (err != nil) {
+      Error.Println("defaultOperation: Failed initialization: ", err)
       panic(err)
    }
 
    err = listen()
    if (err != nil) {
-      fmt.Println(fmt.Errorf("main: %w", err))
+      Error.Println(fmt.Errorf("main: %w", err))
    }
 }
 
@@ -294,6 +290,15 @@ var safeExit bool
 // listen is the default operation of nanonymousCore. It listens on port 41721
 // for incoming requests from the front end and passes them off to the handler.
 func listen() error {
+
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("listen panic: ", err)
+         go listen()
+      }
+   }()
+
    const INSTANCE_PORT = 41721
 
    cer, err := tls.LoadX509KeyPair("tls/server.cert.pem", "tls/server.key.pem")
@@ -347,6 +352,14 @@ func listen() error {
 //        transaction. On completion of the transaction nanonymous will return
 //        the final send's hash.
 func handleRequest(conn net.Conn) error {
+
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("handleRequest panic: ", err)
+      }
+   }()
+
    buff := make([]byte, 1024)
    conn.SetDeadline(time.Now().Add(12 * time.Hour))
 
@@ -627,6 +640,13 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
 // memory. There is no problem with double deleting.
 func timeoutTransaction(id int, seedIndex int) {
 
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("timeoutTransaction panic: ", err)
+      }
+   }()
+
    if (inTesting) {
       return
    }
@@ -700,8 +720,14 @@ func blacklistHash(sendingAddress []byte, receivingHash nt.BlockHash) error {
    }
 
    receivePubKey, err := keyMan.AddressToPubKey(sInfo.Contents.Account)
+   if (err != nil) {
+      return fmt.Errorf("blacklistHash: %w", err)
+   }
 
-   blacklist(conn, sendingAddress, receivePubKey)
+   err = blacklist(conn, sendingAddress, receivePubKey)
+   if (err != nil) {
+      return fmt.Errorf("blacklistHash: %w", err)
+   }
 
 
    return nil
@@ -1039,6 +1065,17 @@ func sendNanoToRecipient(t *Transaction) error {
 }
 // Send is intended to be used with receivedNano() (although it doesn't have to be). It's a wrapper to sendNano that gives callbacks to the transaction manager when done.
 func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan transactionComm, errCh chan error, i int) (nt.BlockHash, error) {
+
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("Send panic: ", err)
+         if (errCh != nil) {
+            errCh <- fmt.Errorf("Send panic: %s)", err)
+         }
+      }
+   }()
+
    var tComm transactionComm
 
    newHash, err := sendNano(fromKey, toPublicKey, amount)
@@ -1070,6 +1107,17 @@ func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan t
 // It receives all funds to an internal wallet, and then, with the direction of
 // the transaction manager sends the funds to the recipient.
 func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan transactionComm, errCh chan error, transactionWg *sync.WaitGroup, abort *bool) {
+
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("ReceiveAndSend panic: ", err)
+         if (errCh != nil) {
+            errCh <- fmt.Errorf("ReceiveAndSend panic: %s)", err)
+         }
+      }
+   }()
+
    wg.Add(1)
    defer wg.Done()
 
@@ -1579,6 +1627,13 @@ func getNewRepresentative() string {
 // preCalculateNextPoW finds the proper hash, calcluates the PoW and saves it to
 // the database for future use.
 func preCalculateNextPoW(nanoAddress string, isReceiveBlock bool) {
+
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("preCalculateNextPoW panic: ", err)
+      }
+   }()
    wg.Add(1)
    defer wg.Done()
    if (inTesting) {

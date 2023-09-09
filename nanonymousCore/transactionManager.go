@@ -40,6 +40,33 @@ type Transaction struct {
    abort bool
 }
 
+func (t Transaction) String() string {
+   var ret string
+
+   pa, _ := keyMan.PubKeyToAddress(t.paymentAddress)
+   ra, _ := keyMan.PubKeyToAddress(t.recipientAddress)
+
+   ret =
+   "\n  id: "+ strconv.Itoa(t.id) +
+   "\n  paymentAddress: "+ pa +
+   "\n  paymentID: "+ strconv.Itoa(t.paymentParentSeedId) +","+ strconv.Itoa(t.paymentIndex) +
+   "\n  receiveHash: "+ t.receiveHash.String() +
+   "\n  recipientAddress: "+ ra +
+   "\n  fee: "+ t.fee.String() +
+   "\n  amountToSend: "+ t.amountToSend.String() +
+   "\n  sendingKeys: "+ fmt.Sprint(t.sendingKeys) +
+   "\n  walletSeed: "+ fmt.Sprint(t.walletSeed) +
+   "\n  walletBalance: "+ fmt.Sprint(t.walletBalance) +
+   "\n  individualSendAmount: "+ fmt.Sprint(t.individualSendAmount) +
+   "\n  transitionalKey: "+ fmt.Sprint(t.transitionalKey) +
+   "\n  finalHash: "+ t.finalHash.String() +
+   "\n  multiSend: "+ strconv.FormatBool(t.multiSend) +
+   "\n  dirtyAddress: "+ strconv.Itoa(t.dirtyAddress) +
+   "\n  abort: "+ strconv.FormatBool(t.abort)
+
+ return ret
+}
+
 type transactionComm struct {
    i int
    hashes []nt.BlockHash
@@ -67,6 +94,11 @@ func transactionManager(t *Transaction) {
 
    // We have a lot of clean up to do
    defer func() {
+      recoverMessage := recover()
+      if (recoverMessage != nil) {
+         Error.Println("transactionManager panic: ", recoverMessage)
+      }
+
       // Remove active transaction
       err := setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, nil)
       if (err != nil) {
@@ -100,9 +132,14 @@ func transactionManager(t *Transaction) {
       } else {
          recordProfit(t.fee, t.id)
          Info.Println("Transaction", t.id, "Complete")
-         // TODO debug statements
-         //fmt.Println("finalHash", t.finalHash)
-         //fmt.Println("multi?:", t.multiSend)
+
+         // There was a bug that I saw occasionally where it would send a blank
+         // hash to the client. I haven't been able to reproduce it recently,
+         // but if it happens, log it and try to track it down.
+         if (len(t.finalHash) < 32) {
+            Warning.Println("Final hash for transaction is blank:\n", t)
+            sendEmail("WARNING", "Final hash for transaction is blank:\n"+ t.String())
+         }
          sendFinalHash(t.finalHash, t.paymentAddress)
 
          // Send any dirty addresses to the mixer.
@@ -178,7 +215,29 @@ func transactionManager(t *Transaction) {
             // don't send funds from the address associated with address C to
             // address A. (see blacklist documentation)
             if (t.walletBalance[i.i].Cmp(t.individualSendAmount[i.i]) > 0) {
-               go blacklistHash(t.sendingKeys[i.i].PublicKey, t.receiveHash)
+               go func() {
+                  err := blacklistHash(t.sendingKeys[i.i].PublicKey, t.receiveHash)
+                  if (err != nil) {
+                     _, seedID, index, _ := getSeedFromAddress(t.sendingKeys[i.i].NanoAddress)
+                     Error.Println("BlacklistHash failed to blacklist ", seedID, ",", index, ":", err.Error())
+                     sendEmail("WARNING", "Blacklist failed."+
+                     "\n\nID: "+ strconv.Itoa(seedID) +","+strconv.Itoa(index) +
+                       "\nHash: "+ t.receiveHash.String())
+
+                     // Wait for address to not be in use by the transaction.
+                     for {
+                        in_use, _ := isAddressInUse(t.sendingKeys[i.i].NanoAddress)
+                        if (in_use) {
+                           time.Sleep(10 * time.Second)
+                        } else {
+                           break
+                        }
+                     }
+
+                     // Keep funds locked until manual intervention.
+                     setAddressInUse(t.sendingKeys[i.i].NanoAddress)
+                  }
+               }()
             }
          case err := <-t.errChannel:
             // There was an error. Deal with it.

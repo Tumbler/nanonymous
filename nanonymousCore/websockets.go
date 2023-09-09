@@ -32,25 +32,46 @@ type ConfirmationBlock struct {
 
 var addWebSocketSubscription chan string
 
-var registeredSendChannels map[string]chan string
-var registeredReceiveChannels map[string]chan string
+var registeredSendChannels = make(map[string]chan string)
+var registeredReceiveChannels = make(map[string]chan string)
 
 var numSubsribed int
 const ACCOUNTS_TRACKED = 5000
+
+var websocketRetries int
 
 func websocketListener(ch chan int) {
    if (verbosity >= 5) {
       fmt.Println("Started listening to websockets on:", websocketAddress)
    }
 
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("websocketListener: ", err)
+         if (websocketRetries < 3) {
+            websocketRetries++
+            go websocketListener(nil)
+         } else {
+            panic(fmt.Errorf("websocketListener panicking: %s", err))
+         }
+      }
+   }()
+
    ws, err := websocket.Dial(websocketAddress, "", "http://localhost/")
    if (err != nil) {
+      if (websocketRetries > 0) {
+         time.Sleep(5 * time.Second)
+      }
       panic(fmt.Errorf("websocketListener, Dial: %w", err))
    }
    defer ws.Close()
 
    err = startSubscription(ws)
    if (err != nil) {
+      if (websocketRetries > 0) {
+         time.Sleep(5 * time.Second)
+      }
       panic(fmt.Errorf("websocketListener: %w", err))
    }
    // Tell caller that we're done initializing
@@ -59,12 +80,19 @@ func websocketListener(ch chan int) {
    }
 
    addWebSocketSubscription = make(chan string)
-   registeredSendChannels = make(map[string]chan string)
-   registeredReceiveChannels = make(map[string]chan string)
 
    var notification ConfirmationBlock
    wsChan := make(chan error)
    go websocketReceive(ws, &notification, wsChan)
+
+   if (websocketRetries > 0) {
+      // Successfully reconnected
+      websocketRetries = 0
+
+      checkActiveTransactions()
+   }
+
+   go pollActiveTransactions()
 
    // Listen for eternity
    for {
@@ -75,8 +103,12 @@ func websocketListener(ch chan int) {
                if (verbosity >= 5) {
                   fmt.Println(" err: ", err.Error())
                }
-               // TODO try to recover?
-               panic(fmt.Errorf("Lost websockets: %w", err));
+
+               // Try to reconnect. If the reconnect fails it will panic.
+               Warning.Println("Lost websockets: %w", err)
+               websocketRetries++
+               go websocketListener(nil)
+               return
             } else {
                go handleNotification(notification)
             }
@@ -196,11 +228,25 @@ func startSubscription(ws *websocket.Conn) error {
 }
 
 func websocketReceive(ws *websocket.Conn, r any, ch chan error) {
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("websocketReceive panic: ", err)
+         ch <- fmt.Errorf("websocketReceive panic: %s", err)
+      }
+   }()
+
    err := websocket.JSON.Receive(ws, r)
    ch <- err
 }
 
 func addToSubscription(ws *websocket.Conn, nanoAddress string) {
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("addToSubscription panic: ", err)
+      }
+   }()
 
    if (verbosity >= 5) {
       fmt.Println("Adding to subscription: ", nanoAddress)
@@ -262,6 +308,13 @@ func handleNotification(cBlock ConfirmationBlock) {
    wg.Add(1)
    defer wg.Done()
 
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("handleNotification panic: ", err)
+      }
+   }()
+
    msg := cBlock.Message
    // Send to one of our tracked addresses
    if (msg.Block.Subtype == "send") {
@@ -321,8 +374,8 @@ func handleNotification(cBlock ConfirmationBlock) {
             }
          }
       } else {
-         // Tracking an address that we don't own?
-         Warning.Println("Tracked address not in DB")
+         // A send to an address we don't own. Probably just the final send.
+         // Ignore it.
       }
    } else if (msg.Block.Subtype == "receive") {
       if (verbosity >= 5) {
@@ -369,5 +422,90 @@ func unregisterConfirmationListener(nanoAddress string, operation string) {
       delete(registeredSendChannels, nanoAddress)
    } else {
       delete(registeredReceiveChannels, nanoAddress)
+   }
+}
+
+// checkActiveTransactions just goes through the active transactions and sees if
+// there are any receivable transactions available. If it finds any, it starts
+// a transaction. It is essentially just a polling backup for the websockets.
+func checkActiveTransactions() error {
+
+   var addresses []string
+   for addressID, _ := range activeTransactionList {
+      strings := strings.Split(addressID, "-")
+
+      var seedID int
+      var index int
+      var err error
+
+      if (len(strings) == 2) {
+         seedID, err = strconv.Atoi(strings[0])
+         if (err != nil) {
+            continue
+         }
+
+         index, err = strconv.Atoi(strings[1])
+         if (err != nil) {
+            continue
+         }
+      } else {
+         continue
+      }
+
+      key, err := getSeedFromIndex(seedID, index)
+      if (err != nil) {
+         continue
+      }
+
+      addresses = append(addresses, key.NanoAddress)
+   }
+
+   accountsPending, err := getAccountsPending(addresses)
+   if (err != nil) {
+      return fmt.Errorf("checkActiveTransactions: %w", err)
+   }
+
+   for address, _ := range accountsPending {
+      if (verbosity >= 5) {
+         fmt.Println("Starting Transaction from a poll!")
+      }
+      err := receivedNano(address)
+      if (err != nil) {
+         if (verbosity >= 5) {
+            fmt.Println("checkActiveTransactions: ", err)
+         }
+         Warning.Println("checkActiveTransactions: ", err)
+         return fmt.Errorf("checkActiveTransactions: %w", err)
+      }
+   }
+
+   return nil
+}
+
+var pollSemaphore bool
+func pollActiveTransactions() {
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("pollActiveTransactions panic:", err)
+         pollSemaphore = false
+
+         go pollActiveTransactions()
+      }
+   }()
+
+   if (pollSemaphore) {
+      return
+   }
+
+   pollSemaphore = true
+
+   for {
+      time.Sleep(5 * time.Minute)
+
+      err := checkActiveTransactions()
+      if (err != nil) {
+         Warning.Println("pollActiveTransactions: Failed during a poll:", err)
+      }
    }
 }

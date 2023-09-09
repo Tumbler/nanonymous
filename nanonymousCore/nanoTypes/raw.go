@@ -71,18 +71,18 @@ func NewFromRaw(raw *Raw) *Raw {
 }
 
 var validDigits, _ = regexp.Compile(`\d*(\.\d+)?`)
+// WARNING: If you need more than 17 digits of precision use NewFromRaw().
 func NewRawFromNano(nano string) *Raw {
    raw := NewRaw(0)
    var numToShift = 30
 
    digits := validDigits.FindStringSubmatch(nano)[0]
-   fmt.Println(digits)
    parsed := strings.Split(digits, ".")
    var combined string
    if (len(parsed) > 1) {
       combined = parsed[0]+parsed[1]
       numToShift = 30 - len(parsed[1])
-   } else {
+   } else if (len(parsed) > 0) {
       combined = parsed[0]
    }
 
