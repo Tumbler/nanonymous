@@ -130,6 +130,12 @@ func startSubscription(ws *websocket.Conn) error {
 
    // Go through newest seeds first and find 5000 to track
    rows, seedConn, err := getSeedRowsFromDatabase()
+   if (err != nil) {
+      return fmt.Errorf("startSubscription: %w", err)
+   }
+
+   defer seedConn.Close(context.Background())
+
    var seed []byte
    var seedID int
    var maxIndex int
@@ -151,6 +157,8 @@ func startSubscription(ws *websocket.Conn) error {
          return fmt.Errorf("startSubscription: %w", err)
       }
 
+      defer walletConn.Close(context.Background())
+
       for (innerRows.Next()) {
          var key keyMan.Key
          key.Seed = seed
@@ -168,14 +176,11 @@ func startSubscription(ws *websocket.Conn) error {
          numSubsribed++
       }
 
-      walletConn.Close(context.Background())
-
       if (numSubsribed >= ACCOUNTS_TRACKED) {
          break seedLoop
       }
    }
    rows.Close()
-   seedConn.Close(context.Background())
 
    addressString = strings.Trim(addressString, ", ")
 
@@ -252,10 +257,18 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
       fmt.Println("Adding to subscription: ", nanoAddress)
    }
 
+   // TODO test this with more than 5000 active accounts to make sure it works
    // unsub from oldest account
    var delString string
    if (numSubsribed >= ACCOUNTS_TRACKED) {
-      rows, conn, _ := getSeedRowsFromDatabase()
+      rows, conn, err := getSeedRowsFromDatabase()
+      if (err != nil) {
+         Warning.Println("addToSubscription failed: unsub1: ", err)
+         return
+      }
+
+      defer conn.Close(context.Background())
+
       var seed keyMan.Key
       var maxIndex int
       var countAccounts int
@@ -263,7 +276,7 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
       for rows.Next() {
          err := rows.Scan(&seed.Seed, &maxIndex)
          if (err != nil) {
-            Warning.Println("addToSubscription failed:", err)
+            Warning.Println("addToSubscription failed: unsub2: ", err)
             return
          }
 
@@ -275,7 +288,6 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
          }
       }
       rows.Close()
-      conn.Close(context.Background())
 
       if (maxIndex - (ACCOUNTS_TRACKED - countAccounts) < 0) {
          seed.Index = 0
@@ -299,6 +311,10 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
          delString +`
       }
    }`
+
+   if (verbosity >= 10) {
+      fmt.Println("request: ", request)
+   }
 
    ws.Write([]byte(request))
    numSubsribed++

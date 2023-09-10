@@ -968,7 +968,6 @@ func CLIsend(myKey *keyMan.Key, args []string, prompt *string) {
    *prompt = format
 }
 
-// TODO This function randomly doesn't show all the rows. I don't know why.
 func CLIlist(args []string) error {
    var err error
    var rows pgx.Rows
@@ -988,6 +987,8 @@ func CLIlist(args []string) error {
    if (err != nil) {
       return fmt.Errorf("CLIlist: %w", err)
    }
+
+   defer conn.Close(context.Background())
 
    for (rows.Next()) {
       var seed int
@@ -1017,10 +1018,6 @@ func CLIlist(args []string) error {
       }
 
       fmt.Print(seed, ",", index, ":  Ӿ ", balanceInNano, text, "\n")
-   }
-
-   if (conn != nil) {
-      conn.Close(context.Background())
    }
 
    return nil
