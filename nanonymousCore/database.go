@@ -850,3 +850,28 @@ func getMixerRows() (pgx.Rows, *pgx.Conn, error) {
 
    return rows, conn, err
 }
+
+func getReadyMixerFunds() (*nt.Raw, error) {
+   zero := nt.NewRaw(0)
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return zero, fmt.Errorf("getReadyMixerFunds: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "SUM(balance) " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "in_use = FALSE AND " +
+      "mixer = TRUE;"
+
+   var rawBalance = nt.NewRaw(0)
+   err = conn.QueryRow(context.Background(), queryString).Scan(rawBalance)
+   if (err != nil) {
+      return zero, fmt.Errorf("getReadyMixerFunds: %w", err)
+   }
+
+   return rawBalance, err
+}

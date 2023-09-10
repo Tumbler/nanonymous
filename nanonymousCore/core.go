@@ -980,7 +980,7 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
       rows.Close()
       if (!enough) {
          // Not enough in managed wallets. Check the mixer.
-         _, _, mixerBalance, err := findTotalBalance()
+         mixerBalance, err := getReadyMixerFunds()
          if (err != nil) {
             return fmt.Errorf("findSendingWallets: %w", err)
          }
@@ -1476,7 +1476,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
 
       if (numOfPendingHashes > 0) {
          pendingHash := pendingHashes[0]
-         amountReceived, newHash, err = receiveHash(pendingHash)
+         amountReceived, newHash, err = receiveHash(pendingHash, numOfPendingHashes)
 
          numOfPendingHashes--
       }
@@ -1514,7 +1514,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
    return amountReceived, newHash, numOfPendingHashes, err
 }
 
-func receiveHash(pendingHash nt.BlockHash) (*nt.Raw, nt.BlockHash, error) {
+func receiveHash(pendingHash nt.BlockHash, numReceivable int) (*nt.Raw, nt.BlockHash, error) {
    var block keyMan.Block
    var pendingInfo BlockInfo
    var newHash nt.BlockHash
@@ -1590,7 +1590,7 @@ func receiveHash(pendingHash nt.BlockHash) (*nt.Raw, nt.BlockHash, error) {
 
    // We've used any stored PoW, clear it out for next use
    clearPoW(block.Account)
-   go preCalculateNextPoW(block.Account, false)
+   go preCalculateNextPoW(block.Account, numReceivable > 1)
 
    // Update database records
    err = updateBalance(block.Account, block.Balance)
@@ -1922,7 +1922,7 @@ func returnAllReceiveable() error {
             fmt.Println("Receivable hash: ", receivableHash)
          }
          // Found funds. Receive them first and then refund them.
-         _, receiveHash, err := receiveHash(receivableHash)
+         _, receiveHash, err := receiveHash(receivableHash, 1)
          if (err != nil) {
             Error.Println("Receive Failed: ", err.Error())
             if (verbosity >= 5) {

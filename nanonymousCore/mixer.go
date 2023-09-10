@@ -117,7 +117,7 @@ func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
 func getKeysFromMixer(amountNeeded *nt.Raw) ([]*keyMan.Key, []int, []*nt.Raw, error) {
    var err error
 
-   _, _, mixerBalance, err := findTotalBalance()
+   mixerBalance, err := getReadyMixerFunds()
 
    // Mixer Balance < amount to send
    if (err != nil) {
