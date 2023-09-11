@@ -29,8 +29,6 @@ import (
 )
 
 // TODO IP lock transactions 1 per 30 seconds??
-// TODO blacklist pruning
-// TODO seed retirment
 // TODO test backup internet
 
 //go:embed embed.txt
@@ -108,12 +106,22 @@ func main() {
       verbosity, _ = strconv.Atoi(args[len(args)-1])
       if (strings.ToLower(args[0]) == "-s") {
          // Scan for receivables that haven't been taken care of
+         // Only scans last two seeds unless -a option is specified
+         var fullSearch = false
+         if (len(args) > 1) {
+            if (strings.ToLower(args[1]) == "-a") {
+               fullSearch = true
+            }
+         }
          err = initNanoymousCore(false)
          if (err != nil) {
             panic(err)
          }
 
-         returnAllReceiveable()
+         err := returnAllReceiveable(fullSearch)
+         if (err != nil) {
+            panic(err)
+         }
 
       } else if (strings.ToLower(args[0]) == "-c") {
          // Command line interface
@@ -122,10 +130,15 @@ func main() {
          if (len(args) > 1) {
             if (strings.ToLower(args[1]) == "-w") {
                fullInstance = true
-               resetInUse()
             }
          }
          err = initNanoymousCore(fullInstance)
+         if (fullInstance) {
+            err = resetInUse()
+            if (err != nil) {
+               Warning.Println("Problem with reset: ", err)
+            }
+         }
          if (err != nil) {
             panic(err)
          }
@@ -135,6 +148,18 @@ func main() {
       } else if (strings.ToLower(args[0]) == "-w") {
          fmt.Println("-w option must be preceded by the -c option")
          return
+      } else if (strings.ToLower(args[0]) == "-r") {
+         // Retire most recent seed
+
+         err = initNanoymousCore(false)
+         if (err != nil) {
+            panic(err)
+         }
+
+         err := retireCurrentSeed()
+         if (err != nil) {
+            panic(err)
+         }
       } else if (strings.ToLower(args[0]) == "-v" || strings.ToLower(args[0]) == "--version" ) {
          fmt.Println("Version: "+ version)
       } else if (strings.ToLower(args[0]) == "-h" || strings.ToLower(args[0]) == "--help" ) {
@@ -147,6 +172,7 @@ func main() {
                      "\n     subscribe to websockets. (Will interfere with main instance if it's"+
                      "\n     running)"+
                    "\n\n  -s Go through all known wallets and check for receivable funds." +
+                   "\n\n  -r Retire current seed." +
                    "\n\n  -v Print version information." +
                    "\n\n  -beta Run in beta mode. (No fees)"+
                    "\n\n  # If the last argument is a number, the verbosity is changed to that number"+
@@ -671,17 +697,20 @@ func timeoutTransaction(id int, seedIndex int) {
 // unintentional associations.
 func blacklist(conn psqlDB, sendingAddress []byte, receivingAddress []byte) error {
 
+   nanoAddress, _ := keyMan.PubKeyToAddress(sendingAddress)
+   seedID, _, _ := getWalletFromAddress(nanoAddress)
+
    concat := append(sendingAddress, receivingAddress[:]...)
 
    hash := blake2b.Sum256(concat)
 
    queryString :=
    "INSERT INTO " +
-      "blacklist (hash)" +
+      "blacklist (hash, seed_id) " +
    "VALUES "+
-      "($1);"
+      "($1, $2);"
 
-   rowsAffected, err := conn.Exec(context.Background(), queryString, hash[:])
+   rowsAffected, err := conn.Exec(context.Background(), queryString, hash[:], seedID)
    if (err != nil || rowsAffected.RowsAffected() < 1) {
       // We don't care if it's a duplicate entry
       if !(strings.Contains(err.Error(), pgxErr.UniqueViolation)) {
@@ -1602,21 +1631,20 @@ func receiveHash(pendingHash nt.BlockHash, numReceivable int) (*nt.Raw, nt.Block
    return pendingInfo.Amount, newHash, err
 }
 
-// TODO chekc that all of these are still good active nodes before going live
 // getNewRepresentative returns a random representative from a list of accounts
-// that were recommended by mynano.ninja.
+// that are up to date and found on https://nanolooker.com/node-monitors.
 func getNewRepresentative() string {
 
    hardcodedList := []string {
       "nano_1my1snode8rwccjxkckjirj65zdxo6g5nhh16fh6sn7hwewxooyyesdsmii3", // My1s
       "nano_3msc38fyn67pgio16dj586pdrceahtn75qgnx7fy19wscixrc8dbb3abhbw6", // grOvity
-      "nano_3pnanopr3d5g7o45zh3nmdkqpaqxhhp3mw14nzr41smjz8xsrfyhtf9xac77", // PlayNANO
+      "nano_3g6ue89jij6bxaz3hodne1c7gzgw77xawpdz4p38siu145u3u17c46or4jeu", // Madora
       "nano_1wenanoqm7xbypou7x3nue1isaeddamjdnc3z99tekjbfezdbq8fmb659o7t", // WeNano
-      "nano_3afmp9hx6pp6fdcjq96f9qnoeh1kiqpqyzp7c18byaipf48t3cpzmfnhc1b7", // Fast&Feeless
+      "nano_1iuz18n4g4wfp9gf7p1s8qkygxw7wx9qfjq6a9aq68uyrdnningdcjontgar", // NanoTicker
       "nano_396sch48s3jmzq1bk31pxxpz64rn7joj38emj4ueypkb9p9mzrym34obze6c", // SupeNode
       "nano_3kqdiqmqiojr1aqqj51aq8bzz5jtwnkmhb38qwf3ppngo8uhhzkdkn7up7rp", // ARaiNode
-      "nano_18shbirtzhmkf7166h39nowj9c9zrpufeg75bkbyoobqwf1iu3srfm9eo3pz", // DE
-      "nano_3uaydiszyup5zwdt93dahp7mri1cwa5ncg9t4657yyn3o4i1pe8sfjbimbas", // NANO Voting
+      "nano_1ec5optppmndqsb3rxu1qa4hpo39957s7mfqycpbd547jga4768o6xz8gfie", // Nano Bank
+      "nano_318uu1tsbios3kp4dts5b6zy1y49uyb88jajfjyxwmozht8unaxeb43keork", // Scandi Node
       "nano_3n7ky76t4g57o9skjawm8pprooz1bminkbeegsyt694xn6d31c6s744fjzzz", // humble finland
    }
 
@@ -1849,7 +1877,7 @@ func calculateFee(payment *nt.Raw) *nt.Raw {
 // wallet is not marked as "in use" then it returns the funds to the original
 // owner. This function is designed to be called occasionally by a seperate
 // process to clean up any accidental sends from users.
-func returnAllReceiveable() error {
+func returnAllReceiveable(allMeansAll bool) error {
 
    rows, conn, err := getSeedRowsFromDatabase()
    if (err != nil) {
@@ -1866,7 +1894,7 @@ func returnAllReceiveable() error {
    var searched int
    // For all our active seeds (Last two are defined as the active seeds)
    for rows.Next() {
-      if (searched >= 2) {
+      if (searched >= 2 && !allMeansAll) {
          break
       }
 
@@ -1911,6 +1939,9 @@ func returnAllReceiveable() error {
    }
    numberOfHashes := len(hashes)
 
+   if (numberOfHashes > 0) {
+      Info.Println("Recievable hashes found during routine check: ", numberOfHashes)
+   }
    if (verbosity >= 5) {
       fmt.Println(numberOfHashes, "accounts with receivable hash(es) found!")
    }

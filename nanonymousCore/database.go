@@ -242,14 +242,15 @@ func getSeedRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 func getEncryptedSeedRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getEncryptedSeedRowsFromDatabase: %w", err)
    }
 
    queryString :=
    "SELECT " +
       "id, " +
       "seed, " +
-      "current_index " +
+      "current_index, " +
+      "active " +
    "FROM " +
       "seeds " +
    "WHERE " +
@@ -269,7 +270,7 @@ func getEncryptedSeedRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 func getWalletRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getWalletRowsFromDatabase: %w", err)
    }
 
    queryString :=
@@ -291,7 +292,7 @@ func getWalletRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 
    rows, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getWalletRowsFromDatabase: %w", err)
    }
 
    return rows, conn, nil
@@ -301,7 +302,7 @@ func getWalletRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 func getWalletRowsFromDatabaseFromSeed(seedID int) (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getWalletRowsFromDatabaseFromSeed: %w", err)
    }
 
    queryString :=
@@ -317,7 +318,35 @@ func getWalletRowsFromDatabaseFromSeed(seedID int) (pgx.Rows, *pgx.Conn, error) 
 
    rows, err := conn.Query(context.Background(), queryString, seedID)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getWalletRowsFromDatabaseFromSeed: %w", err)
+   }
+
+   return rows, conn, nil
+}
+
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getWalletRowsForRetirement(seedID int) (pgx.Rows, *pgx.Conn, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, conn, fmt.Errorf("getWalletRowsForRetirement: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "index " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "balance > 0 AND " +
+      "in_use = FALSE AND " +
+      "mixer = FALSE AND " +
+      "parent_seed = $1 " +
+   "ORDER BY " +
+      "index;"
+
+   rows, err := conn.Query(context.Background(), queryString, seedID)
+   if (err != nil) {
+      return nil, conn, fmt.Errorf("getWalletRowsForRetirement: %w", err)
    }
 
    return rows, conn, nil
@@ -327,7 +356,7 @@ func getWalletRowsFromDatabaseFromSeed(seedID int) (pgx.Rows, *pgx.Conn, error) 
 func getManagedWalletsRowsFromDatabase(startingPoint int, seed int) (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getManagedWalletsRowsFromDatabase: %w", err)
    }
 
    queryString :=
@@ -344,7 +373,7 @@ func getManagedWalletsRowsFromDatabase(startingPoint int, seed int) (pgx.Rows, *
 
    rows, err := conn.Query(context.Background(), queryString, seed, startingPoint)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getManagedWalletsRowsFromDatabase: %w", err)
    }
 
    return rows, conn, nil
@@ -354,7 +383,7 @@ func getManagedWalletsRowsFromDatabase(startingPoint int, seed int) (pgx.Rows, *
 func getBlacklistRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getBlacklistRowsFromDatabase: %w", err)
    }
 
    queryString :=
@@ -365,7 +394,7 @@ func getBlacklistRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 
    rows, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getBlacklistRowsFromDatabase: %w", err)
    }
 
    return rows, conn, nil
@@ -375,7 +404,7 @@ func getBlacklistRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 func getProfitRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getProfitRowsFromDatabase: %w", err)
    }
 
    queryString :=
@@ -392,7 +421,7 @@ func getProfitRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 
    rows, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getProfitRowsFromDatabase: %w", err)
    }
 
    return rows, conn, nil
@@ -402,7 +431,7 @@ func getProfitRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 func getAllWalletRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getAllWalletRowsFromDatabase: %w", err)
    }
 
    queryString :=
@@ -422,7 +451,7 @@ func getAllWalletRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 
    rows, err := conn.Query(context.Background(), queryString)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedRowsFrom: %w", err)
+      return nil, conn, fmt.Errorf("getAllWalletRowsFromDatabase: %w", err)
    }
 
    return rows, conn, nil
@@ -489,10 +518,10 @@ func setAddressNotInUse(nanoAddress string) {
    conn.Exec(context.Background(), queryString, nanoAddressHash[:])
 }
 
-func resetInUse() {
+func resetInUse() error {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return
+      return fmt.Errorf("resetInUse: %w", err)
    }
    defer conn.Close(context.Background())
 
@@ -503,6 +532,8 @@ func resetInUse() {
       "\"in_use\" = FALSE;"
 
    conn.Exec(context.Background(), queryString)
+
+   return nil
 }
 
 func isAddressInUse(nanoAddress string) (bool, error) {
@@ -874,4 +905,100 @@ func getReadyMixerFunds() (*nt.Raw, error) {
    }
 
    return rawBalance, err
+}
+
+func setSeedInactive() (int, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return 0, fmt.Errorf("getReadyMixerFunds: %w", err)
+   }
+
+   queryString :=
+   "UPDATE " +
+      "seeds " +
+   "SET " +
+      "active = FALSE " +
+   "WHERE " +
+      "active = TRUE AND " +
+      "id = (SELECT MAX(id) FROM seeds WHERE active = TRUE) " +
+   "RETURNING " +
+      "id;"
+
+   var id int
+   err = conn.QueryRow(context.Background(), queryString).Scan(&id)
+   if (err != nil) {
+      return 0, fmt.Errorf("setSeedInactive: %w", err)
+   }
+
+   return id, nil
+}
+
+// This is defined as 1 - the highest seed.
+func getOldestActiveSeedIndex() (int, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return 0, fmt.Errorf("getOldestActiveSeedIndex: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "MAX(id) " +
+   "FROM " +
+      "seeds;"
+
+   var seedID int
+   err = conn.QueryRow(context.Background(), queryString).Scan(&seedID)
+   if (err != nil) {
+      return 0, fmt.Errorf("getOldestActiveSeedIndex: %w", err)
+   }
+
+   return seedID - 1, nil
+}
+
+func isSeedActive(seedID int) (bool, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return true, fmt.Errorf("isSeedActive: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "active " +
+   "FROM " +
+      "seeds " +
+   "WHERE " +
+      "id = $1;"
+
+   var active bool
+   err = conn.QueryRow(context.Background(), queryString, seedID).Scan(&active)
+   if (err != nil) {
+      return true, fmt.Errorf("isSeedActive: %w", err)
+   }
+
+   return active, nil
+}
+
+// This is a scary fundtion. Probably don't call this. Use pruneBlacklist()
+// instead.
+func deleteBlacklist(seedID int) error {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return fmt.Errorf("deleteBlacklist: %w", err)
+   }
+
+   queryString :=
+   "DELETE FROM " +
+      "blacklist " +
+   "WHERE " +
+      "seed_id = $1;"
+
+   rowsAffected, err := conn.Exec(context.Background(), queryString, seedID)
+   if (err != nil) {
+      return fmt.Errorf("deleteBlacklist: %w", err)
+   }
+   if (rowsAffected.RowsAffected() < 1) {
+      Warning.Println("deleteBlacklist: no rows affected in update")
+   }
+
+   return nil
 }

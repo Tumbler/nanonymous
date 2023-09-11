@@ -962,7 +962,7 @@ func rcpCall(request string, response any, url string, ch chan error) (err error
 
    res, err := nanonymousHttpClient.Do(req)
    if (err != nil) {
-      return fmt.Errorf("DefaultClient: %w", err)
+      return fmt.Errorf("HTTPClient: %w", err)
    }
    defer res.Body.Close()
 

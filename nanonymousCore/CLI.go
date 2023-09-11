@@ -61,7 +61,7 @@ func CLI() {
          //"1. Generate Seed\n",
          //"2. Get Account info\n",
          //"3. Insert into database\n",
-         //"4. Send pretend request for new address\n",
+         //"4. 
          //"5. Find total balance\n",
          //"6. Pretend nano receive\n",
          //"7. Get Wallet Info\n",
@@ -144,6 +144,11 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
+               case "find":
+                  err = CLIfind(myKey, array)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
                case "count":
                   Nano, managed, mixer, err := findTotalBalance()
                   if (err != nil) {
@@ -178,7 +183,7 @@ func CLI() {
                   break walletMenu
                case "":
                default:
-                  println(array[0], `not recognized as a command. Try "help" or "-h"`)
+                  println(array[0], `is not recognized as a command. Try "help" or "-h"`)
             }
          }
       case "2":
@@ -782,10 +787,12 @@ func CLI() {
 
       case "4":
          verbosity = 5
-         var dirtyAddress *keyMan.Key
-         if (dirtyAddress != nil) {
-            fmt.Println("len:", len(dirtyAddress.NanoAddress))
+         val, err := getNanoUSDValue()
+         recordProfit(nt.NewRaw(41), 41)
+         if (err != nil) {
+            fmt.Println(err)
          }
+         fmt.Println("Nano value is:", val)
 
       case "6":
 
@@ -926,7 +933,7 @@ func CLI() {
       case "P":
          verbosity = 10
 
-         err := returnAllReceiveable()
+         err := returnAllReceiveable(true)
          if (err != nil) {
             fmt.Println(fmt.Errorf("main: %w", err))
          }
@@ -1222,6 +1229,22 @@ func CLIclearPoW(myKey *keyMan.Key, args []string) error {
    return nil
 }
 
+func CLIfind(myKey *keyMan.Key, args []string) error {
+   _, err := keyMan.AddressToPubKey(args[1])
+   if (err != nil) {
+      return fmt.Errorf("CLIfind: %s is not a valid address", args[1])
+   }
+
+   seedID, index, err := getWalletFromAddress(args[1])
+   if (err != nil) {
+      return fmt.Errorf("CLIfind: %w", err)
+   }
+
+   fmt.Print("That address is ", seedID, ",", index, "\n")
+
+   return nil
+}
+
 func CLIupdate(myKey *keyMan.Key, args []string, prompt *string) error {
    checkBalance(myKey.NanoAddress)
 
@@ -1258,6 +1281,10 @@ func CLIhelp(args []string) {
          CLIhelpselect()
       case "new":
          CLIhelpnew()
+      case "clearpow":
+         CLIhelpclearPoW()
+      case "find":
+         CLIhelpfind()
       case "peek":
          CLIhelppeek()
       case "receive":
@@ -1290,6 +1317,8 @@ func CLIhelp(args []string) {
          CLIhelpmix()
          CLIhelpcount()
          CLIhelprefresh()
+         CLIhelpclearPoW()
+         CLIhelpfind()
    }
 }
 
@@ -1347,6 +1376,17 @@ func CLIhelpextract() {
 func CLIhelpmix() {
    fmt.Println()
    fmt.Print("   - mix | Splits up any funds in the current wallet and sends it to mixer addresses\n",)
+}
+
+func CLIhelpclearPoW() {
+   fmt.Println()
+   fmt.Print("   - clearpow | Clears the database of any pow that's stored for the current selected\n",
+             "                address\n",)
+}
+
+func CLIhelpfind() {
+   fmt.Println()
+   fmt.Print("   - find {address} | Finds the index (seedID, index) for the given \"address\"\n")
 }
 
 func CLIhelpcount() {
@@ -1414,8 +1454,8 @@ func printPsqlRows(rows pgx.Rows, rowsCopy pgx.Rows) {
                   lengths[i] = len(strconv.Itoa(int(value.(int32))))
                }
             case FLOAT:
-               if (lengths[i] < len(fmt.Sprintf("%.2f", (value.(float64))))) {
-                  lengths[i] = len(fmt.Sprintf("%.2f", (value.(float64))))
+               if (lengths[i] < len(fmt.Sprintf("%.4f", (value.(float64))))) {
+                  lengths[i] = len(fmt.Sprintf("%.4f", (value.(float64))))
                }
             case NUMERIC:
                numberString := value.(pgtype.Numeric).Int.String() + strings.Repeat("0", int(value.(pgtype.Numeric).Exp))
@@ -1479,7 +1519,7 @@ func printPsqlRows(rows pgx.Rows, rowsCopy pgx.Rows) {
             case INT:
                fmt.Print(" ", spacing(strconv.Itoa(int(value.(int32))), lengths[i]), " ")
             case FLOAT:
-               fmt.Print(" ", spacing(fmt.Sprintf("%.2f", (value.(float64))), lengths[i]), " ")
+               fmt.Print(" ", spacing(fmt.Sprintf("%.4f", (value.(float64))), lengths[i]), " ")
             case NUMERIC:
                // Convert Numeric to string
                numberString := value.(pgtype.Numeric).Int.String() + strings.Repeat("0", int(value.(pgtype.Numeric).Exp))
@@ -1542,6 +1582,7 @@ var walletCompleter = readline.NewPrefixCompleter(
    ),
    readline.PcItem("update"),
    readline.PcItem("clearpow"),
+   readline.PcItem("find"),
    readline.PcItem("help"),
    readline.PcItem("exit"),
    readline.PcItem("verbosity"),

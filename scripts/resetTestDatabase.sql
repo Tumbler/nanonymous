@@ -51,7 +51,8 @@ SET default_table_access_method = heap;
 --
 
 CREATE TABLE public.blacklist (
-    hash bytea NOT NULL
+    hash bytea PRIMARY KEY,
+    seed_id integer NOT NULL DEFAULT 0
 );
 
 
