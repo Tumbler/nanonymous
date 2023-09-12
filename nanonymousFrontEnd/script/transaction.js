@@ -121,6 +121,7 @@ async function ajaxGetAddress(finalAddress) {
    req.onload = function() {
       console.log(this.response);
       var reply = this.response.match(/address=(nano_[a-z0-9]+)/i);
+      var info = this.response.match(/info=(.*)\n$/i);
       let middleAddress = "";
       if (reply !== null && reply.length > 1) {
          middleAddress = reply[1];
@@ -144,6 +145,9 @@ async function ajaxGetAddress(finalAddress) {
          document.getElementById("button").style.display = "none";
          document.getElementById("scanQR").hidden = true;
          setTimeout(window.scrollTo(0, document.body.scrollHeight),100);
+      } else if (info !== null && info.length > 1) {
+         document.getElementById("errorMessage").innerHTML = info[1];
+         document.getElementById("errorMessage").scrollIntoView();
       } else {
          document.getElementById("errorMessage").innerHTML = "Something went wrong. Please try a different address or try again later.";
          document.getElementById("errorMessage").scrollIntoView();

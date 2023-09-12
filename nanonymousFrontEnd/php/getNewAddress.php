@@ -2,15 +2,17 @@
 session_start();
 
 if (isset($_SESSION[$_SERVER['REMOTE_ADDR']])) {
-   $timeElapsed = time() - (int)$_SESSION[$SERVER['REMOTE_ADDR']];
+   $timeElapsed = time() - (int)$_SESSION[$_SERVER['REMOTE_ADDR']];
    if ($timeElapsed < 30) {
-      echo "info: Please wait 30 seconds before requesting another address"
+      //echo "info: Please wait 30 seconds before requesting another address";
+      die("info=Please wait 30 seconds before requesting another address.\n");
    } else {
-      $_SESSION[$SERVER['REMOTE_ADDR']] = time()
+      $_SESSION[$_SERVER['REMOTE_ADDR']] = time();
    }
 } else {
-   $_SESSION[$SERVER['REMOTE_ADDR']] = time()
+   $_SESSION[$_SERVER['REMOTE_ADDR']] = time();
 }
+
 
 $finalAddress=$_GET['address'];
 $context = stream_context_create(
