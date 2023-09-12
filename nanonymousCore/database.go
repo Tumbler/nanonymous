@@ -388,7 +388,8 @@ func getBlacklistRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
 
    queryString :=
    "SELECT " +
-      "hash " +
+      "hash, " +
+      "seed_id " +
    "FROM " +
       "blacklist;"
 
@@ -608,8 +609,7 @@ func addressIsReceiveOnly(nanoAddress string) bool {
    var receiveOnly bool
    err = conn.QueryRow(context.Background(), queryString, hash[:]).Scan(&receiveOnly)
    if (err != nil) {
-      // TODO log err
-      fmt.Println("addressIsReceiveOnly: QueryRow failed: %w", err)
+      Warning.Println("addressIsReceiveOnly: QueryRow failed: ", err)
       return false
    }
 
@@ -676,8 +676,7 @@ func addressIsMixer(nanoAddress string) bool {
    var mixer bool
    err = conn.QueryRow(context.Background(), queryString, hash[:]).Scan(&mixer)
    if (err != nil) {
-      // TODO log err
-      fmt.Println("addressIsMixer: QueryRow failed: %w", err)
+      Warning.Println("addressIsMixer: QueryRow failed: ", err)
       return false
    }
 
@@ -716,7 +715,6 @@ func insertSeed(conn psqlDB, seed []byte) (int, error) {
 // amongst all the wallets and returns the amount in Nano, the amount of nano
 // there is in the managed wallets in Raw and the amount of nano there is in the
 // mixer in Raw.
-// TODO needs to not break if there are no mixer addresses
 func findTotalBalance() (*nt.Raw, *nt.Raw, *nt.Raw, error) {
    zero := nt.NewRaw(0)
    conn, err := pgx.Connect(context.Background(), databaseUrl)

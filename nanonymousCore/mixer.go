@@ -2,7 +2,6 @@ package main
 
 import (
    "fmt"
-   "time"
    "context"
 
    // Local packages
@@ -10,7 +9,9 @@ import (
    nt "nanoTypes"
 )
 
-// TODO sometimes errors?? Might have fixed with confirmation check.... monitoring
+// sendToMixer takes an address and shuffles it all into the mixer. shufflesLeft
+// is how many times to shuffle before being considered clean. (Should be 1 in
+// almost all cases)
 func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
    var err error
 
@@ -28,6 +29,9 @@ func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
    if (err != nil) {
       return fmt.Errorf("sendToMixer: Orig: %d, %d, Failed to get new address2: %w:", origSeed, origIndex, err)
    }
+
+   addWebSocketSubscription <- mix1.NanoAddress
+   addWebSocketSubscription <- mix2.NanoAddress
 
    // Randomize amounts
 
@@ -105,6 +109,8 @@ func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
       }
    }
 
+   removeWebSocketSubscription <- mix1.NanoAddress
+   removeWebSocketSubscription <- mix2.NanoAddress
    setAddressNotInUse(mix1.NanoAddress)
    setAddressNotInUse(mix2.NanoAddress)
 
@@ -259,38 +265,4 @@ func extractFromMixer(amountToSend *nt.Raw, publicKey []byte) (nt.BlockHash, err
    }
 
    return finalHash, nil
-}
-
-// waitForConfirmations is a simple polling solution to ensure that a list of
-// hashes get confirmed. CAUTION: There is no max wait time. TODO
-func waitForConfirmations(hashList []nt.BlockHash) {
-   if (inTesting) {
-      return
-   }
-
-   for (len(hashList) > 0) {
-      for i := len(hashList)-1; i >= 0; i-- {
-         blockInfo, err := getBlockInfo(hashList[i])
-         if (err != nil) {
-            if (verbosity >= 5) {
-               fmt.Println(fmt.Errorf("waitForConfirmations warning: %w", err))
-            }
-         }
-         if (blockInfo.Confirmed) {
-            hashList[i] = hashList[len(hashList)-1]
-            hashList = hashList[:len(hashList)-1]
-            if (verbosity >= 6) {
-               fmt.Println(" Hash confirmed!")
-            }
-         } else if (verbosity >= 6) {
-            fmt.Println("Waiting on hash...")
-            if (verbosity >= 7) {
-               fmt.Println(blockInfo)
-            }
-         }
-      }
-      if (len(hashList) > 0) {
-         time.Sleep(5 * time.Second)
-      }
-   }
 }

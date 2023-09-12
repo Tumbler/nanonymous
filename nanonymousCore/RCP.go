@@ -223,6 +223,7 @@ func publishSend(block keyMan.Block, signature []byte, proofOfWork string) (nt.B
    err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       if (strings.Contains(err.Error(), "work")) {
+         // If there was some problem with PoW then regenerate it.
          clearPoW(block.Account)
       }
       return nil, fmt.Errorf("publishSend: %w", err)
@@ -262,6 +263,7 @@ func publishReceive(block keyMan.Block, signature []byte, proofOfWork string) (n
    err := rcpCallWithTimeout(request, &response, url, 5000)
    if (err != nil) {
       if (strings.Contains(err.Error(), "work")) {
+         // If there was some problem with PoW then regenerate it.
          clearPoW(block.Account)
       }
       return nil, fmt.Errorf("publishReceive: %w", err)

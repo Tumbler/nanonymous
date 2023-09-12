@@ -30,6 +30,7 @@ import (
 
 // TODO IP lock transactions 1 per 30 seconds??
 // TODO test backup internet
+// TODO embed files are apparently stored in plain text even in the binary....... so that's not a great way store a password.
 
 //go:embed embed.txt
 var embeddedData string
@@ -304,7 +305,12 @@ func initNanoymousCore(mainInstance bool) error {
       registeredClientComunicationPipes = make(map[string]chan string)
 
       ch := make(chan int)
-      go websocketListener(ch)
+      go websocketListener(ch, true)
+      // Wait until websockets are initialized
+      <-ch
+   } else {
+      ch := make(chan int)
+      go websocketListener(ch, false)
       // Wait until websockets are initialized
       <-ch
    }
@@ -478,12 +484,26 @@ func handleRequest(conn net.Conn) error {
       } else {
          conn.Write([]byte("Invalid Request!"))
       }
-   } else if (strings.Contains(text, "safeExit")) {
-      if (conn.LocalAddr().String() == "127.0.0.1:41721") {
+   } else if (conn.LocalAddr().String() == "127.0.0.1:41721") {
+      // Local commands for controlling the core
+      if (strings.Contains(text, "safeExit")) {
          // Only allow exit command to come from the server itself
          safeExit = true
-      }
-      if (safeExit) {
+
+         httpHeader :=
+         "HTTP/1.1 200 OK\n"+
+         "Content-Type: text/plain\n"+
+         "Connection: Closed\n"
+         conn.Write([]byte(httpHeader +"\nAck"))
+      } else if (strings.Contains(text, "retireSeed")) {
+         err := retireCurrentSeed()
+         if (err != nil) {
+            Warning.Println("handleRequest: ", err)
+            if (verbosity >= 5) {
+               fmt.Println("handleRequest: ", err)
+            }
+         }
+
          httpHeader :=
          "HTTP/1.1 200 OK\n"+
          "Content-Type: text/plain\n"+
@@ -549,9 +569,9 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
    }
 
    // Get a current seed. If it fails, generate a new one.
-   var id int
+   var seedID int
    if (rows.Next()) {
-      err = rows.Scan(&id, &seed.Seed, &seed.Index)
+      err = rows.Scan(&seedID, &seed.Seed, &seed.Index)
       if (err != nil) {
          return nil, 0, fmt.Errorf("getNewAddress: %w ", err)
       } else {
@@ -566,14 +586,14 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
       }
    }
 
-   if (id == 0) {
+   if (seedID == 0) {
       // No valid seeds in database. Generate a new one.
       err = keyMan.GenerateSeed(&seed)
       if (err != nil) {
          return nil, 0, fmt.Errorf("getNewAddress: %w ", err)
       }
 
-      id, err = insertSeed(tx, seed.Seed)
+      seedID, err = insertSeed(tx, seed.Seed)
       if (err != nil) {
          return nil, 0, fmt.Errorf("getNewAddress: %w ", err)
       }
@@ -587,7 +607,7 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
       "($1, $2, 0, $3, $4, $5)"
 
    hash := blake2b.Sum256(seed.PublicKey)
-   rowsAffected, err := tx.Exec(context.Background(), queryString, id, seed.Index, hash[:], receiveOnly, mixer)
+   rowsAffected, err := tx.Exec(context.Background(), queryString, seedID, seed.Index, hash[:], receiveOnly, mixer)
    if (err != nil) {
       return nil, 0, fmt.Errorf("getNewAddress: %w", err)
    }
@@ -603,7 +623,7 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
    "WHERE " +
       "\"id\" = $2;"
 
-   rowsAffected, err = tx.Exec(context.Background(), queryString, seed.Index, id)
+   rowsAffected, err = tx.Exec(context.Background(), queryString, seed.Index, seedID)
    if (err != nil) {
       return nil, 0, fmt.Errorf("getNewAddress: %w", err)
    }
@@ -618,20 +638,20 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
          return nil, 0, fmt.Errorf("getNewAddress: %w", err)
       }
 
-      err = blacklist(tx, seed.PublicKey, receivingAddressByte)
+      err = blacklist(tx, seed.PublicKey, receivingAddressByte, seedID)
       if (err != nil) {
          return nil, 0, fmt.Errorf("getNewAddress: Blacklist falied: %w", err)
       }
 
       // Track so that when we receive funds we know where to send it
-      err = setRecipientAddress(id, seed.Index, receivingAddressByte)
+      err = setRecipientAddress(seedID, seed.Index, receivingAddressByte)
       if (err != nil) {
          Warning.Println("getNewAddress: ", err.Error())
          //return nil, 0, fmt.Errorf("getNewAddress: %w", err)
       }
 
       // Make sure we don't keep this forever
-      go timeoutTransaction(id, seed.Index)
+      go timeoutTransaction(seedID, seed.Index)
    }
 
    if (verbosity >= 10) {
@@ -658,7 +678,7 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
    }
 
 
-   return &seed, id, nil
+   return &seed, seedID, nil
 }
 
 // timeoutTransaction simply deletes the link between address B and C after the
@@ -695,10 +715,7 @@ func timeoutTransaction(id int, seedIndex int) {
 // transaction, nanonymous regenerates the blacklist hash and checks the
 // blacklist. If it doesn't exist, then we can be sure that there will be no
 // unintentional associations.
-func blacklist(conn psqlDB, sendingAddress []byte, receivingAddress []byte) error {
-
-   nanoAddress, _ := keyMan.PubKeyToAddress(sendingAddress)
-   seedID, _, _ := getWalletFromAddress(nanoAddress)
+func blacklist(conn psqlDB, sendingAddress []byte, receivingAddress []byte, seedID int) error {
 
    concat := append(sendingAddress, receivingAddress[:]...)
 
@@ -753,7 +770,10 @@ func blacklistHash(sendingAddress []byte, receivingHash nt.BlockHash) error {
       return fmt.Errorf("blacklistHash: %w", err)
    }
 
-   err = blacklist(conn, sendingAddress, receivePubKey)
+   nanoAddress, _ := keyMan.PubKeyToAddress(sendingAddress)
+   seedID, _, _ := getWalletFromAddress(nanoAddress)
+
+   err = blacklist(conn, sendingAddress, receivePubKey, seedID)
    if (err != nil) {
       return fmt.Errorf("blacklistHash: %w", err)
    }
@@ -846,13 +866,6 @@ func receivedNano(nanoAddress string) error {
       return err
    }
    setAddressInUse(nanoAddress)
-
-   // TODO This is just for debugging
-   //fmt.Println("If you're not debegging than something is wrong!!!!")
-   //seed, _ := getSeedFromIndex(1, 8)
-   //recipientPub, _ := keyMan.AddressToPubKey(seed.NanoAddress)
-   //setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, recipientPub)
-   // TODO end of debugging code
 
    // Get recipient address for later use.
    t.recipientAddress = getRecipientAddress(t.paymentParentSeedId, t.paymentIndex)
@@ -1442,7 +1455,6 @@ func sendAllNano(fromKey *keyMan.Key, toPublicKey []byte) error {
    return nil
 }
 
-// needs improvment but can probaby be in CLI TODO
 func ReceiveAll(account string) ([]nt.BlockHash, error) {
    var hashes []nt.BlockHash
 
@@ -1699,8 +1711,6 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
    if (inTesting) {
       return ""
    }
-   // TODO should receiveblocks request work from the node instead?
-   // TODO do we need to make this work for multiple recalls? At the moment the channels would block
 
    // Check if PoW is already being calculated
    if (activePoW[nanoAddress] == 0) {
@@ -1757,6 +1767,19 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
             case workChannel[nanoAddress] <- work:
                // Sent to whoever is going to use it, so no need to write to DB
                work = ""
+               // If anyone else happens to be wanting this work, let em know they're too late.
+               go func() {
+                  // Don't block the rest of the operation while we take care of any stragglers.
+                  toLateLoop:
+                  for {
+                     select {
+                        case workChannel[nanoAddress] <- "":
+                        case <-time.After(250 * time.Millisecond):
+                           // No one's here move along.
+                           break toLateLoop
+                        }
+                  }
+               }()
             case <-time.After(5 * time.Minute):
          }
       }
@@ -1768,8 +1791,10 @@ func calculateNextPoW(nanoAddress string, isReceiveBlock bool) string {
 
    } else {
       // PoW is already being computed by someone else. Wait for them to report it
-      activePoW[nanoAddress] = 2
-      workChannel[nanoAddress] = make(chan string)
+      if (activePoW[nanoAddress] != 2) {
+         activePoW[nanoAddress] = 2
+         workChannel[nanoAddress] = make(chan string)
+      }
 
       select {
          case work := <-workChannel[nanoAddress]:
@@ -1824,7 +1849,9 @@ func getPoW(nanoAddress string, isReceiveBlock bool) (string, error) {
    return PoW, nil
 }
 
-// TODO
+// checkBalance finds the actual balance of an account from the node and updates
+// the database if it doesn't match. Will also receive funds if it finds
+// receivable funds just sitting on the account.
 func checkBalance(nanoAddress string) error {
 
    balance, receiveable, _ := getAccountBalance(nanoAddress)
@@ -1979,4 +2006,97 @@ func returnAllReceiveable(allMeansAll bool) error {
    }
 
    return nil
+}
+
+// waitForConfirmations will block until the specified hashes are confirmed or
+// until 5 minutes, whichever comes first. Returns an error if the timeout
+// triggered. It subscribes to the websocket listeners and will confirm them
+// there, but if they don't it also polls every 5 seconds. Therefore, this
+// function can be used without websocket subscriptions without any fear.
+func waitForConfirmations(hashList []nt.BlockHash) error{
+   if (inTesting) {
+      return nil
+   }
+
+   var listener = make(chan string)
+
+   // Go through all hashes and register them if someone else hasn't already.
+   for i := len(hashList)-1; i >= 0; i-- {
+      hash := hashList[i]
+      blockInfo, err := getBlockInfo(hash)
+      if (err != nil) {
+         if (verbosity >= 5) {
+            fmt.Println("waitForConfirmations: Can't get block:", err)
+         }
+         continue
+      }
+      if (blockInfo.Confirmed) {
+         // That was fast. No need to watch.
+         hashList = removeHash(hashList, i)
+      } else {
+         if (blockInfo.Subtype == "send") {
+            if (registeredSendChannels[blockInfo.Contents.LinkAsAccount] == nil) {
+               registerConfirmationListener(blockInfo.Contents.LinkAsAccount, listener, "send")
+               defer unregisterConfirmationListener(blockInfo.Contents.LinkAsAccount, "send")
+            }
+         } else {
+            if (registeredReceiveChannels[blockInfo.Contents.Account] == nil) {
+               registerConfirmationListener(blockInfo.Contents.Account, listener, "receive")
+               defer unregisterConfirmationListener(blockInfo.Contents.Account, "receive")
+            }
+         }
+      }
+   }
+
+   deadline := time.Now().Add(5 * time.Minute)
+
+   // Remove them as they come in on the websocket or poll for them in case we
+   // weren't subscribed.
+   for (len(hashList) > 0) {
+      select {
+         case hash := <- listener:
+            for i, h := range hashList {
+               if (hash == h.String()) {
+                  if (verbosity >= 5) {
+                     fmt.Println("Found hash... removing")
+                  }
+                  hashList = removeHash(hashList, i)
+                  break
+               }
+            }
+         // Also poll just to make sure we haven't missed anything.
+         case <-time.After(5 * time.Second):
+            for i := len(hashList)-1; i >= 0; i-- {
+               blockInfo, err := getBlockInfo(hashList[i])
+               if (err != nil) {
+                  if (verbosity >= 5) {
+                     fmt.Println(fmt.Errorf("waitForConfirmations warning: %w", err))
+                  }
+               }
+               if (blockInfo.Confirmed) {
+                  hashList = removeHash(hashList, i)
+                  if (verbosity >= 6) {
+                     fmt.Println(" Hash confirmed!")
+                  }
+               } else if (verbosity >= 6) {
+                  fmt.Println("Waiting on hash...")
+                  if (verbosity >= 7) {
+                     fmt.Println(blockInfo)
+                  }
+               }
+            }
+         case <-time.After(deadline.Sub(time.Now())):
+            return fmt.Errorf("waitForConfirmations: Wait timed out: ", deadline)
+      }
+   }
+
+   return nil
+}
+
+func removeHash(hashList []nt.BlockHash, i int) []nt.BlockHash {
+   if (i >= len(hashList)) {
+      return hashList
+   }
+   hashList[i] = hashList[len(hashList)-1]
+   return hashList[:len(hashList)-1]
 }

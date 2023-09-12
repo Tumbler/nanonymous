@@ -134,6 +134,11 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
+               case "receiveall":
+                  err = CLIreceiveall(myKey, array, &prompt)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
                case "receiveonly":
                   err = CLIreceiveOnly(array)
                   if (err != nil) {
@@ -658,7 +663,6 @@ func CLI() {
                   if (len(array) >= 2) {
                      switch(array[1]) {
                         case "seeds":
-                           // TODO copy without accessing DB???
                            rows, conn, err := getEncryptedSeedRowsFromDatabase()
                            rowsCopy, conn2, err := getEncryptedSeedRowsFromDatabase()
                            if (err != nil) {
@@ -787,12 +791,11 @@ func CLI() {
 
       case "4":
          verbosity = 5
-         val, err := getNanoUSDValue()
-         recordProfit(nt.NewRaw(41), 41)
-         if (err != nil) {
-            fmt.Println(err)
+
+         for i:=0; i< 5000; i++ {
+            getNewAddress("", false, false, 0)
          }
-         fmt.Println("Nano value is:", val)
+         fmt.Println("Done")
 
       case "6":
 
@@ -904,7 +907,7 @@ func CLI() {
 
          seedSend, _ := getSeedFromIndex(1, 0)
          seedReceive, _ := getSeedFromIndex(1, 8)
-         blacklist(conn, seedSend.PublicKey, seedReceive.PublicKey)
+         blacklist(conn, seedSend.PublicKey, seedReceive.PublicKey, 0)
 
       case "N":
          verbosity = 5
@@ -944,13 +947,26 @@ func CLI() {
 }
 
 func CLIsend(myKey *keyMan.Key, args []string, prompt *string) {
+   if (len(args) < 3) {
+      fmt.Println()
+      fmt.Println("Not enough arguments!")
+      CLIhelpsend()
+      fmt.Println()
+      return
+   }
+
    toPubKey, err := keyMan.AddressToPubKey(args[2])
    if (err != nil) {
       fmt.Println(args[2], "is not a valid address")
       return
    }
 
-   amountRaw := nt.NewRawFromNano(args[1])
+   var amountRaw *nt.Raw
+   if (args[1] == "all") {
+      amountRaw, _ = getBalance(myKey.NanoAddress)
+   } else {
+      amountRaw = nt.NewRawFromNano(args[1])
+   }
    _, err = Send(myKey, toPubKey, amountRaw, nil, nil, -1)
    if (err != nil) {
       if (strings.Contains(err.Error(), "work")) {
@@ -1031,6 +1047,13 @@ func CLIlist(args []string) error {
 }
 
 func CLIselect(myKey *keyMan.Key, args []string, prompt *string) error {
+   if (len(args) < 3) {
+      fmt.Println()
+      fmt.Println("Not enough arguments!")
+      CLIhelpselect()
+      fmt.Println()
+      return nil
+   }
 
    seed, err := strconv.Atoi(args[1])
    if (err != nil) {
@@ -1072,6 +1095,23 @@ func CLIreceive(myKey *keyMan.Key, args []string, prompt *string) error {
    fmt.Println("   block:", block)
    fmt.Println("   receives remaining:", numLeft)
    fmt.Println()
+
+   rawBalance, _ := getBalance(myKey.NanoAddress)
+   NanoBalance := rawToNANO(rawBalance)
+   format := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
+
+   *prompt = format
+
+   return nil
+}
+
+func CLIreceiveall(myKey *keyMan.Key, args []string, prompt *string) error {
+
+   hashes, err := ReceiveAll(myKey.NanoAddress)
+   if (err != nil) {
+      return fmt.Errorf("CLIreceiveall: %w", err)
+   }
+   fmt.Print  ("   Received ", len(hashes), " hashes!\n")
 
    rawBalance, _ := getBalance(myKey.NanoAddress)
    NanoBalance := rawToNANO(rawBalance)
@@ -1142,8 +1182,14 @@ func CLInew(myKey *keyMan.Key, args []string, prompt *string) error {
    return nil
 }
 
-// TODO make program not crash if you don't have enough arguments
 func CLIpeek(args []string) error {
+   if (len(args) < 3) {
+      fmt.Println()
+      fmt.Println("Not enough arguments!")
+      CLIhelppeek()
+      fmt.Println()
+      return nil
+   }
 
    seed, err := strconv.Atoi(args[1])
    if (err != nil) {
@@ -1168,6 +1214,14 @@ func CLIpeek(args []string) error {
 }
 
 func CLIextract(args []string) {
+   if (len(args) < 3) {
+      fmt.Println()
+      fmt.Println("Not enough arguments!")
+      CLIhelpextract()
+      fmt.Println()
+      return
+   }
+
    toPubKey, err := keyMan.AddressToPubKey(args[2])
    if (err != nil) {
       fmt.Println(args[2], "is not a valid address")
@@ -1192,6 +1246,13 @@ func contains(a []string, search string) bool {
 }
 
 func CLIreceiveOnly(args []string) error {
+   if (len(args) < 3) {
+      fmt.Println()
+      fmt.Println("Not enough arguments!")
+      CLIhelpreceiveOnly()
+      fmt.Println()
+      return nil
+   }
 
    seed, err := strconv.Atoi(args[1])
    if (err != nil) {
@@ -1230,6 +1291,13 @@ func CLIclearPoW(myKey *keyMan.Key, args []string) error {
 }
 
 func CLIfind(myKey *keyMan.Key, args []string) error {
+   if (len(args) < 2) {
+      fmt.Println()
+      fmt.Println("Not enough arguments!")
+      CLIhelpfind()
+      fmt.Println()
+      return nil
+   }
    _, err := keyMan.AddressToPubKey(args[1])
    if (err != nil) {
       return fmt.Errorf("CLIfind: %s is not a valid address", args[1])
@@ -1289,6 +1357,8 @@ func CLIhelp(args []string) {
          CLIhelppeek()
       case "receive":
          CLIhelpreceive()
+      case "receiveall":
+         CLIhelpreceiveall()
       case "receiveonly":
          CLIhelpreceiveOnly()
       case "refresh":
@@ -1310,6 +1380,7 @@ func CLIhelp(args []string) {
          CLIhelpnew()
          CLIhelppeek()
          CLIhelpreceive()
+         CLIhelpreceiveall()
          CLIhelpreceiveOnly()
          CLIhelpselect()
          CLIhelpsend()
@@ -1402,6 +1473,11 @@ func CLIhelpselect() {
 func CLIhelpreceive() {
    fmt.Println()
    fmt.Print("   - receive | Finds the next receivable hash for the active address and receives it\n",)
+}
+
+func CLIhelpreceiveall() {
+   fmt.Println()
+   fmt.Print("   - receiveall | Finds all receivable funds for the active address and receives them\n",)
 }
 
 func CLIhelpreceiveOnly() {
@@ -1577,6 +1653,7 @@ var walletCompleter = readline.NewPrefixCompleter(
    readline.PcItem("set"),
    readline.PcItem("peek"),
    readline.PcItem("receive"),
+   readline.PcItem("receiveall"),
    readline.PcItem("receiveonly",
       readline.PcItem("off"),
    ),

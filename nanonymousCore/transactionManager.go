@@ -562,47 +562,19 @@ func reverseTransitionalAddress(t *Transaction) {
       return
    }
 
-   // TODO how to make this more robust???
    // Give some time for any transactions that might be in progres (might not
    // even be pending yet) to finish before trying to find them all.
    time.Sleep(10 * time.Second)
 
-   // Get ready to track how many receives we get
-   ch := make(chan string)
-   registerConfirmationListener(nanoAddress, ch, "receive")
-   defer unregisterConfirmationListener(nanoAddress, "receive")
-   hashes, _ := getReceivable(nanoAddress, -1)
-   numToReceive := len(hashes)
-
-   ReceiveAll(nanoAddress)
-
-   // Wait for all to be confirmed
-   trackConfirms := make(map[string]bool)
-   var numConfirmed int
-   confirmLoop:
-   for (numConfirmed < numToReceive) {
-      select {
-         case hash := <-ch:
-            if (trackConfirms[hash] == false) {
-               trackConfirms[hash] = true
-               numConfirmed++
-            }
-         case <-time.After(5 * time.Minute):
-            Error.Println("reverseTransitional timeout")
-            break confirmLoop
-      }
+   hashList, _ := ReceiveAll(nanoAddress)
+   err := waitForConfirmations(hashList)
+   if (err != nil) {
+      Error.Println("reverseTransitional: ", err)
    }
 
-   // TODO reverseing this is actually bad because now all reversed addresses are dirty. Probably better to just mix it.
-   // -1 means full history
-   history, _ := getAccountHistory(nanoAddress, -1)
-
-   for _, block := range history.History {
-      if (block.Type == "receive" && addressExsistsInDB(block.Account)) {
-         pubKey, _ := keyMan.AddressToPubKey(block.Account)
-         sendNano(t.transitionalKey, pubKey, block.Amount)
-      }
-   }
+   // We're stuck with a bunch of funds that have been combined. We have no way
+   // to forward blacklist entries, so the best thing to do is just mix it all.
+   sendToMixer(t.transitionalKey, 1)
 
    setAddressNotInUse(nanoAddress)
 }
@@ -631,12 +603,6 @@ func retryMultiSend(t *Transaction, i int, prevError error) bool {
 func retryFinalSend(t *Transaction, prevError error) bool {
    retryCount := 0
 
-   // If there was some problem with PoW then regenerate it.
-   if (prevError != nil && strings.Contains(prevError.Error(), "work")){
-      clearPoW(t.transitionalKey.NanoAddress)
-   }
-   // TODO put other common fixes to problems here as you find them
-
    var err error
    for (retryCount < RetryNumber) {
       newHash, err := Send(t.transitionalKey, t.recipientAddress, t.amountToSend, nil, nil, -1)
@@ -660,11 +626,6 @@ func retryOrigReceive(nanoAddress string, prevError error) (*nt.Raw, nt.BlockHas
    var receiveHash nt.BlockHash
 
    for (retryCount < RetryNumber) {
-      // If there was some problem with PoW then regenerate it.
-      if (strings.Contains(err.Error(), "work")){
-         clearPoW(nanoAddress)
-      }
-
       payment, receiveHash, _, err = Receive(nanoAddress)
       if (err != nil) {
          if (verbosity >= 5) {
@@ -684,12 +645,6 @@ func retryOrigReceive(nanoAddress string, prevError error) (*nt.Raw, nt.BlockHas
 
 func retryReceives(t *Transaction, prevError error) bool {
 
-   // If there was some problem with PoW then regenerate it.
-   if (prevError != nil && strings.Contains(prevError.Error(), "work")){
-      clearPoW(t.transitionalKey.NanoAddress)
-   }
-
-   // TODO track hashes
    receiveHashes, err := ReceiveAll(t.transitionalKey.NanoAddress)
    if (err != nil) {
       Error.Println("ID", t.id, "Problem with multi receives orig:", prevError, "final:", err)

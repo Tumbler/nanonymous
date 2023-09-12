@@ -31,6 +31,7 @@ type ConfirmationBlock struct {
 }
 
 var addWebSocketSubscription chan string
+var removeWebSocketSubscription chan string
 
 var registeredSendChannels = make(map[string]chan string)
 var registeredReceiveChannels = make(map[string]chan string)
@@ -40,7 +41,7 @@ const ACCOUNTS_TRACKED = 5000
 
 var websocketRetries int
 
-func websocketListener(ch chan int) {
+func websocketListener(ch chan int, fullSubscribe bool) {
    if (verbosity >= 5) {
       fmt.Println("Started listening to websockets on:", websocketAddress)
    }
@@ -51,7 +52,7 @@ func websocketListener(ch chan int) {
          Error.Println("websocketListener: ", err)
          if (websocketRetries < 3) {
             websocketRetries++
-            go websocketListener(nil)
+            go websocketListener(nil, fullSubscribe)
          } else {
             panic(fmt.Errorf("websocketListener panicking: %s", err))
          }
@@ -67,12 +68,14 @@ func websocketListener(ch chan int) {
    }
    defer ws.Close()
 
-   err = startSubscription(ws)
-   if (err != nil) {
-      if (websocketRetries > 0) {
-         time.Sleep(5 * time.Second)
+   if (fullSubscribe) {
+      err = startSubscription(ws)
+      if (err != nil) {
+         if (websocketRetries > 0) {
+            time.Sleep(5 * time.Second)
+         }
+         panic(fmt.Errorf("websocketListener: %w", err))
       }
-      panic(fmt.Errorf("websocketListener: %w", err))
    }
    // Tell caller that we're done initializing
    if (ch != nil) {
@@ -80,6 +83,7 @@ func websocketListener(ch chan int) {
    }
 
    addWebSocketSubscription = make(chan string)
+   removeWebSocketSubscription = make(chan string)
 
    var notification ConfirmationBlock
    wsChan := make(chan error)
@@ -107,7 +111,7 @@ func websocketListener(ch chan int) {
                // Try to reconnect. If the reconnect fails it will panic.
                Warning.Println("Lost websockets: %w", err)
                websocketRetries++
-               go websocketListener(nil)
+               go websocketListener(nil, fullSubscribe)
                return
             } else {
                go handleNotification(notification)
@@ -118,6 +122,8 @@ func websocketListener(ch chan int) {
 
          case nanoAddress := <-addWebSocketSubscription:
             go addToSubscription(ws, nanoAddress)
+         case nanoAddress := <-removeWebSocketSubscription:
+            go removeFromSubscriptions(ws, nanoAddress)
       }
    }
 
@@ -257,7 +263,6 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
       fmt.Println("Adding to subscription: ", nanoAddress)
    }
 
-   // TODO test this with more than 5000 active accounts to make sure it works
    // unsub from oldest account
    var delString string
    if (numSubsribed >= ACCOUNTS_TRACKED) {
@@ -274,7 +279,7 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
       var countAccounts int
       // For all seeds find their accounts
       for rows.Next() {
-         err := rows.Scan(&seed.Seed, &maxIndex)
+         err := rows.Scan(&seed.Seed, &maxIndex, nil)
          if (err != nil) {
             Warning.Println("addToSubscription failed: unsub2: ", err)
             return
@@ -318,6 +323,36 @@ func addToSubscription(ws *websocket.Conn, nanoAddress string) {
 
    ws.Write([]byte(request))
    numSubsribed++
+}
+
+func removeFromSubscriptions(ws *websocket.Conn, nanoAddress string) {
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("removeFromSubscriptions panic: ", err)
+      }
+   }()
+
+   if (verbosity >= 5) {
+      fmt.Println("Removing from subscriptions: ", nanoAddress)
+   }
+
+   request :=
+   `{
+      "action": "update",
+      "topic": "confirmation",
+      "options": {
+         "confirmation_type": "active_quorum",
+         "accounts_del" : ["`+ nanoAddress +`"]
+      }
+   }`
+
+   if (verbosity >= 10) {
+      fmt.Println("request: ", request)
+   }
+
+   ws.Write([]byte(request))
+   numSubsribed--
 }
 
 func handleNotification(cBlock ConfirmationBlock) {
@@ -446,6 +481,10 @@ func unregisterConfirmationListener(nanoAddress string, operation string) {
 // a transaction. It is essentially just a polling backup for the websockets.
 func checkActiveTransactions() error {
 
+   if (verbosity >= 6) {
+      fmt.Println("Polling active transactions...")
+   }
+
    var addresses []string
    for addressID, _ := range activeTransactionList {
       strings := strings.Split(addressID, "-")
@@ -476,9 +515,13 @@ func checkActiveTransactions() error {
       addresses = append(addresses, key.NanoAddress)
    }
 
-   accountsPending, err := getAccountsPending(addresses)
-   if (err != nil) {
-      return fmt.Errorf("checkActiveTransactions: %w", err)
+   var accountsPending map[string][]nt.BlockHash
+   var err error
+   if (len(addresses) > 0) {
+      accountsPending, err = getAccountsPending(addresses)
+      if (err != nil) {
+         return fmt.Errorf("checkActiveTransactions: %w", err)
+      }
    }
 
    for address, _ := range accountsPending {
