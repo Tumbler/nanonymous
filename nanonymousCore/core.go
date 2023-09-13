@@ -28,12 +28,8 @@ import (
    "golang.org/x/crypto/blake2b"
 )
 
-// TODO IP lock transactions 1 per 30 seconds??
-// TODO test backup internet
-// TODO embed files are apparently stored in plain text even in the binary....... so that's not a great way store a password.
-
-//go:embed embed.txt
-var embeddedData string
+//go:generate go run github.com/c-sto/encembed -i embed.txt -decvarname embeddedByte
+var embeddedData = string(embeddedByte)
 // "db = [url]" in embed.txt to set this value
 var databaseUrl string
 // "pass = [pass]" in embed.txt to set this value
@@ -2086,7 +2082,7 @@ func waitForConfirmations(hashList []nt.BlockHash) error{
                }
             }
          case <-time.After(deadline.Sub(time.Now())):
-            return fmt.Errorf("waitForConfirmations: Wait timed out: ", deadline)
+            return fmt.Errorf("waitForConfirmations: Wait timed out: %s", deadline)
       }
    }
 
