@@ -407,7 +407,7 @@ function on() {
 function copyAddress() {
    var label = document.getElementById("qr-label");
    var tooltip = document.getElementById("tooltip");
-   var text = label.innerHTML;
+   var text = label.textContent;
 
    navigator.clipboard.writeText(text);
 
