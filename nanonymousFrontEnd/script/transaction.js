@@ -97,10 +97,8 @@ function CalculateTax(amount) {
 
 function CalculateInverseTax(amount) {
    var origWithDust = amount / (1 - nanonymousFee);
-   var origNoDust = Math.floor(origWithDust * 1000) / 1000;
-   var amountNoDust = Math.floor(amount * 1000) / 1000;
+   var fee = Math.floor((origWithDust - amount) * 1000) / 1000;
 
-   var fee = thousandsRound(origNoDust - amountNoDust);
    var trueOrig = amount + fee;
 
    var precision = afterDecimal(amount);
