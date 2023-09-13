@@ -30,8 +30,10 @@ func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
       return fmt.Errorf("sendToMixer: Orig: %d, %d, Failed to get new address2: %w:", origSeed, origIndex, err)
    }
 
-   addWebSocketSubscription <- mix1.NanoAddress
-   addWebSocketSubscription <- mix2.NanoAddress
+   if (!inTesting) {
+      addWebSocketSubscription <- mix1.NanoAddress
+      addWebSocketSubscription <- mix2.NanoAddress
+   }
 
    // Randomize amounts
 
@@ -109,8 +111,10 @@ func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
       }
    }
 
-   removeWebSocketSubscription <- mix1.NanoAddress
-   removeWebSocketSubscription <- mix2.NanoAddress
+   if (!inTesting) {
+      removeWebSocketSubscription <- mix1.NanoAddress
+      removeWebSocketSubscription <- mix2.NanoAddress
+   }
    setAddressNotInUse(mix1.NanoAddress)
    setAddressNotInUse(mix2.NanoAddress)
 

@@ -42,6 +42,13 @@ const ACCOUNTS_TRACKED = 5000
 var websocketRetries int
 
 func websocketListener(ch chan int, fullSubscribe bool) {
+   if (inTesting) {
+      if (ch != nil) {
+         ch <- 1
+      }
+      return
+   }
+
    if (verbosity >= 5) {
       fmt.Println("Started listening to websockets on:", websocketAddress)
    }

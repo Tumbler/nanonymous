@@ -107,6 +107,7 @@ func transactionManager(t *Transaction) {
 
       // Cancel all the things
       if !(transcationSucessfull) {
+         sendInfoToClient("info=There was an internal error. Your transaction has been refunded.", t.paymentAddress)
          err := Refund(t.receiveHash)
          if (err != nil) {
             // VERY BAD! Just accepted money, failed to deliver it, and didn't
@@ -366,7 +367,7 @@ func transactionManager(t *Transaction) {
 
                            // Time limit gets reset if we're still getting confirmations
                            timeLimit = time.Now().Add(5 * time.Minute)
-                        case <-time.After(10 * time.Second):
+                        case <-time.After(5 * time.Second):
                            // It's been some time, let's poll the hashes manually.
                            for hash, seen := range trackConfirms {
                               if (!seen) {
@@ -679,6 +680,10 @@ func unregisterClientComunicationPipe(nanoAddress string) {
 }
 
 func sendInfoToClient(info string, clientPubkey []byte) {
+   if (inTesting) {
+      return
+   }
+
    clientAddress, _ := keyMan.PubKeyToAddress(clientPubkey)
    if (registeredClientComunicationPipes[clientAddress] != nil) {
       registeredClientComunicationPipes[clientAddress] <- info
@@ -686,6 +691,10 @@ func sendInfoToClient(info string, clientPubkey []byte) {
 }
 
 func sendFinalHash(hash nt.BlockHash, pubkey []byte) {
+   if (inTesting) {
+      return
+   }
+
    nanoAddress, _ := keyMan.PubKeyToAddress(pubkey)
    if (registeredClientComunicationPipes[nanoAddress] != nil) {
       registeredClientComunicationPipes[nanoAddress] <- "hash="+ hash.String()

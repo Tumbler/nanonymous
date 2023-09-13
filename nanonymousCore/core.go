@@ -15,7 +15,6 @@ import (
    "log"
    "os"
    "crypto/tls"
-   _"embed"
 
    // Local packages
    keyMan "nanoKeyManager"
@@ -463,7 +462,7 @@ func handleRequest(conn net.Conn) error {
                         fmt.Println("Warning! keepAlive: (Client may have just closed the tab)", err)
                      }
 
-                     if (missedPolls > 10) {
+                     if (missedPolls > 10 || strings.Contains(err.Error(), "broken pipe")) {
                         return fmt.Errorf("Warning! keepAlive: %w (Client may have just closed the tab)", err)
                      }
                   }
@@ -479,6 +478,12 @@ func handleRequest(conn net.Conn) error {
          conn.Write([]byte(response))
       } else {
          conn.Write([]byte("Invalid Request!"))
+      }
+   } else if (len(array) >= 1 && array[0] == "feeCheck") {
+      if (betaMode) {
+         conn.Write([]byte("fee=0.0"))
+      } else {
+         conn.Write([]byte("fee="+ strconv.FormatFloat(FEE_PERCENT, 'f', 2, 64)))
       }
    } else if (conn.LocalAddr().String() == "127.0.0.1:41721") {
       // Local commands for controlling the core
@@ -818,7 +823,8 @@ func receivedNano(nanoAddress string) error {
 
    if (minPayment.Cmp(payment) > 0) {
       // Less than the minimum. Refund it.
-      sendInfoToClient("info=amountTooLow", getRecipientAddress(parentSeedId, index))
+      pubKey, _ := keyMan.AddressToPubKey(nanoAddress)
+      sendInfoToClient("info=The minimum transaction supported is 1 Nano. Your transaction has been refunded.", pubKey)
       err := Refund(receiveHash)
       if (err != nil) {
          sendEmail("IMMEDIATE ATTENTION REQUIRED", "Non-transaction refund failed! "+ err.Error() +
@@ -882,6 +888,10 @@ func receivedNano(nanoAddress string) error {
    if (err != nil) {
       err = fmt.Errorf("receivedNano: %w", err)
       return err
+   }
+
+   if (t.multiSend) {
+      sendInfoToClient("update=Funds received! Generating final send...", t.paymentAddress)
    }
 
    err = sendNanoToRecipient(&t)
@@ -1045,6 +1055,10 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) error {
       }
    }
 
+   if (len(t.sendingKeys) > 1) {
+      t.multiSend = true
+   }
+
    return nil
 }
 
@@ -1064,7 +1078,6 @@ func sendNanoToRecipient(t *Transaction) error {
       if (err != nil) {
          return fmt.Errorf("sendNanoToRecipient: %w", err)
       }
-      t.multiSend = true
 
       // Go through list of wallets and send to interim address
       var totalSent = nt.NewRaw(0)
