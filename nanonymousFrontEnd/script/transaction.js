@@ -1,3 +1,5 @@
+let nanonymousFee = 0.01
+
 function showQR() {
    var finalAddress = document.getElementById("finalAddress").value;
    document.getElementById("errorMessage").innerHTML = "";
@@ -10,7 +12,7 @@ function autoFill(caller) {
          var price = document.getElementById("nanoPrice").innerHTML;
          var input = document.getElementById("USDamount").value;
          var nano = thousandsRound(input / price);
-         var afterTax = thousandsRound(CalculateTax(nano))
+         var afterTax = thousandsRound(CalculateInverseTax(nano))
          document.getElementById("nanoAmount").value = nano;
          document.getElementById("afterTaxAmount").value = afterTax;
          break;
@@ -18,14 +20,14 @@ function autoFill(caller) {
          var price = document.getElementById("nanoPrice").innerHTML;
          var input = document.getElementById("nanoAmount").value;
          var usd = Math.round(input * price * 100) / 100;
-         var afterTax = CalculateTax(parseFloat(input))
+         var afterTax = CalculateInverseTax(parseFloat(input))
          document.getElementById("USDamount").value = usd;
          document.getElementById("afterTaxAmount").value = afterTax;
          break;
       case 3:
          var price = document.getElementById("nanoPrice").innerHTML;
          var input = document.getElementById("afterTaxAmount").value;
-         var nano = CalculateInverseTax(parseFloat(input))
+         var nano = CalculateTax(parseFloat(input))
          var usd = Math.round(nano * price * 100) / 100;
          document.getElementById("USDamount").value = usd;
          document.getElementById("nanoAmount").value = nano;
@@ -43,35 +45,75 @@ function SetCurrentPrice(data) {
    document.getElementById("nanoPrice").innerHTML = price;
 }
 
+function GetCurrentFee() {
+
+   var req = new XMLHttpRequest();
+   req.open("POST", "php/getFee.php")
+
+   req.onload = function() {
+      console.log(this.response);
+      var reply = this.response.match(/fee=([0-9]+\.[0-9]+)/i);
+      if (reply !== null && reply.length > 1) {
+         nanonymousFeePercent = parseFloat(reply[1]);
+         nanonymousFee = nanonymousFeePercent / 100
+         if (nanonymousFeePercent == 0) {
+            document.getElementById("nanonymousFee").innerHTML = "Free!";
+            document.getElementById("afterFeeRow").hidden = true;
+         } else {
+            document.getElementById("nanonymousFee").innerHTML = nanonymousFeePercent.toString().concat("% (less than a percent)");
+         }
+      } else {
+         document.getElementById("errorMessage").innerHTML = "Can't contact our servers right now. Please try again later.";
+         document.getElementById("errorMessage").scrollIntoView();
+         document.getElementById("addressInputContainer").hidden = true;
+         document.getElementById("button").hidden = true;
+      }
+   }
+   req.send();
+}
+
 // Basically just a 0.2% fee, but truncates any dust from the fee itself (but
 // not from the payment so you can add your own dust if you so desire).
 function CalculateTax(amount) {
-   var feeWithDust = amount * 0.002;
+   var feeWithDust = amount * nanonymousFee;
    var fee = Math.floor(feeWithDust * 1000) / 1000;
 
-   var finalVal = amount + fee;
+   var finalVal = amount - fee;
 
    var precision = afterDecimal(amount);
    if (precision < 3) {
       precision = 3;
    }
    precision = 10 ** precision;
+
+   if (amount < 1) {
+      document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano.";
+   } else {
+      document.getElementById("errorMessage").innerHTML = "";
+   }
 
    return Math.round(finalVal * precision) / precision;
 }
 
 function CalculateInverseTax(amount) {
-   var origWithDust = amount / 1.002;
-   var origNoDust = Math.ceil(origWithDust * 1000) / 1000;
+   var origWithDust = amount / (1 - nanonymousFee);
+   var origNoDust = Math.floor(origWithDust * 1000) / 1000;
+   var amountNoDust = Math.floor(amount * 1000) / 1000;
 
-   var fee = thousandsRound(amount - origNoDust);
-   var trueOrig = amount - fee;
+   var fee = thousandsRound(origNoDust - amountNoDust);
+   var trueOrig = amount + fee;
 
    var precision = afterDecimal(amount);
    if (precision < 3) {
       precision = 3;
    }
    precision = 10 ** precision;
+
+   if (trueOrig < 1) {
+      document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano.";
+   } else {
+      document.getElementById("errorMessage").innerHTML = "";
+   }
 
    return Math.round(trueOrig * precision) / precision;
 }
@@ -130,7 +172,7 @@ async function ajaxGetAddress(finalAddress) {
          var qrCodeText = "nano:" + middleAddress + "?amount=" + raw;
 
          document.getElementById("QRLink").href = qrCodeText;
-         document.getElementById("qr-label").innerHTML = middleAddress;
+         document.getElementById("qr-label").innerHTML = middleAddress.concat("<img src=\"images/copyWhite.png\" style=\"width:17px;height:18px;padding:0px 0px 10px 5px\">");
          if (qrCodeText.length < 85) {
             var qrSize = 250;
          } else {
@@ -178,12 +220,16 @@ async function ajaxGetAddress(finalAddress) {
       };
       req2.onprogress = function() {
          var line = this.responseText.match(/info=(.*)\n$/i);
+         var update = this.responseText.match(/update=(.*)\n$/i);
          if (line !== null && line.length > 1) {
-            if (line[1] == "amountTooLow") {
-               document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano. Your transaction has been refunded."
-               document.getElementById("errorMessage").scrollIntoView();
-            } else if (line[1] == "") {
-            }
+            console.log(this.responseText);
+            document.getElementById("errorMessage").innerHTML = line[1]
+            document.getElementById("errorMessage").scrollIntoView();
+            document.getElementById("updateMessage").hidden = true;
+         } else if (update !== null && update.length > 1) {
+            console.log(this.responseText);
+            document.getElementById("updateMessage").innerHTML = update[1];
+            document.getElementById("updateMessage").hidden = false;
          }
       };
       req2.ontimeout = function() {
@@ -197,6 +243,7 @@ async function ajaxGetAddress(finalAddress) {
 
             document.getElementById("errorMessage").innerHTML = "";
             document.getElementById("errorMessage").scrollIntoView();
+            document.getElementById("updateMessage").hidden = true;
 
             // Animate the address disappearing
             document.getElementById("payment-label").classList.add("animate-zipRight-out");
@@ -246,7 +293,6 @@ async function ajaxGetAddress(finalAddress) {
             // Find the y-percent where the final hash is and put confetti there.
             var y = document.getElementById("HashLink").getBoundingClientRect().y;
             var percentY = y/window.innerHeight;
-            console.log(percentY);
             myConfetti({
                paricleCount: 80,
                spread: 140,
@@ -264,6 +310,8 @@ async function ajaxGetAddress(finalAddress) {
             }, 100);
             }, 100);
             }, 100);
+
+            req2.abort();
          } else {
             console.log(this.response);
             document.getElementById("errorMessage").innerHTML = "Something went wrong. Please try a different address or try again later.";
@@ -343,7 +391,6 @@ function off() {
 }
 
 function on() {
-   console.log("on")
    document.getElementById("Hashdiv").style.maxHeight = "0px";
    document.getElementById("QRdiv").style.maxHeight = "1000px";
 
