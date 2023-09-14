@@ -353,7 +353,7 @@ func getWalletRowsForRetirement(seedID int) (pgx.Rows, *pgx.Conn, error) {
 }
 
 // WARNING: You are responsible for closing Conn when you're done with it!!
-func getManagedWalletsRowsFromDatabase(startingPoint int, seed int) (pgx.Rows, *pgx.Conn, error) {
+func getManagedWalletsRowsFromDatabase(seed int) (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
       return nil, conn, fmt.Errorf("getManagedWalletsRowsFromDatabase: %w", err)
@@ -366,12 +366,11 @@ func getManagedWalletsRowsFromDatabase(startingPoint int, seed int) (pgx.Rows, *
       "wallets " +
    "WHERE " +
       "mixer = FALSE AND " +
-      "parent_seed = $1 AND " +
-      "index >= $2 " +
+      "parent_seed = $1 " +
    "ORDER BY " +
-      "index;"
+      "index DESC;"
 
-   rows, err := conn.Query(context.Background(), queryString, seed, startingPoint)
+   rows, err := conn.Query(context.Background(), queryString, seed)
    if (err != nil) {
       return nil, conn, fmt.Errorf("getManagedWalletsRowsFromDatabase: %w", err)
    }

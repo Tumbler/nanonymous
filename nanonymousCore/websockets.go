@@ -7,6 +7,7 @@ import (
    "strings"
    "strconv"
    "context"
+   "bytes"
 
    "golang.org/x/net/websocket"
 
@@ -48,6 +49,8 @@ func websocketListener(ch chan int, fullSubscribe bool) {
       }
       return
    }
+
+   numSubsribed = 0
 
    if (verbosity >= 5) {
       fmt.Println("Started listening to websockets on:", websocketAddress)
@@ -127,6 +130,16 @@ func websocketListener(ch chan int, fullSubscribe bool) {
             // Set up next receive
             go websocketReceive(ws, &notification, wsChan)
 
+         case <-time.After(60 * time.Second):
+            // If we haven't received anything in 60 seconds, send a KeepAlive packet.
+            request :=
+            `{
+               "action": "ping"
+            }`
+            if (verbosity >= 10) {
+               fmt.Println("ping")
+            }
+            ws.Write([]byte(request))
          case nanoAddress := <-addWebSocketSubscription:
             go addToSubscription(ws, nanoAddress)
          case nanoAddress := <-removeWebSocketSubscription:
@@ -160,12 +173,7 @@ func startSubscription(ws *websocket.Conn) error {
          break
       }
 
-      startingPoint := maxIndex - (ACCOUNTS_TRACKED - numSubsribed)
-      if (startingPoint < 0) {
-         startingPoint = 0
-      }
-
-      innerRows, walletConn, err := getManagedWalletsRowsFromDatabase(startingPoint, seedID)
+      innerRows, walletConn, err := getManagedWalletsRowsFromDatabase(seedID)
       if (err != nil) {
          return fmt.Errorf("startSubscription: %w", err)
       }
@@ -187,10 +195,10 @@ func startSubscription(ws *websocket.Conn) error {
          addressString += `"`+ key.NanoAddress + `", `
 
          numSubsribed++
-      }
 
-      if (numSubsribed >= ACCOUNTS_TRACKED) {
-         break seedLoop
+         if (numSubsribed >= ACCOUNTS_TRACKED) {
+            break seedLoop
+         }
       }
    }
    rows.Close()
@@ -362,6 +370,7 @@ func removeFromSubscriptions(ws *websocket.Conn, nanoAddress string) {
    numSubsribed--
 }
 
+var lastHashSeen nt.BlockHash
 func handleNotification(cBlock ConfirmationBlock) {
    wg.Add(1)
    defer wg.Done()
@@ -372,6 +381,16 @@ func handleNotification(cBlock ConfirmationBlock) {
          Error.Println("handleNotification panic: ", err)
       }
    }()
+
+   if (bytes.Equal(cBlock.Message.Hash, lastHashSeen)) {
+      // Just a KeepAlive response. Ignore.
+      if (verbosity >= 10) {
+         fmt.Println("pong")
+      }
+      return
+   } else {
+      lastHashSeen = cBlock.Message.Hash
+   }
 
    msg := cBlock.Message
    // Send to one of our tracked addresses

@@ -27,6 +27,9 @@ import (
    "golang.org/x/crypto/blake2b"
 )
 
+// TODO check for max send amount. (10% of total?)
+// TODO find any additional tests (seed retirement for one)
+
 //go:generate go run github.com/c-sto/encembed -i embed.txt -decvarname embeddedByte
 var embeddedData = string(embeddedByte)
 // "db = [url]" in embed.txt to set this value
@@ -685,7 +688,7 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
 // timeoutTransaction simply deletes the link between address B and C after the
 // deadline since we don't want to keep that information indefinitely even in
 // memory. There is no problem with double deleting.
-func timeoutTransaction(id int, seedIndex int) {
+func timeoutTransaction(seedID int, index int) {
 
    defer func() {
       err := recover()
@@ -700,9 +703,15 @@ func timeoutTransaction(id int, seedIndex int) {
 
    time.Sleep(TRANSACTION_DEADLINE)
 
-   err := setRecipientAddress(id, seedIndex, nil)
+   err := setRecipientAddress(seedID, index, nil)
    if (err != nil) {
       Warning.Println("timeoutTransaction: Failed to delete transaction: %w", err)
+   }
+
+   key, err := getSeedFromIndex(seedID, index)
+
+   if (err == nil) {
+      sendInfoToClient("info=Transaction timed out. Please acquire a new address.", key.PublicKey)
    }
 }
 
