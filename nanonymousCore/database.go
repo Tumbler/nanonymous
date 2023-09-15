@@ -215,7 +215,7 @@ func getSeedFromDatabase(id int) ([]byte, error) {
 func getSeedRowsFromDatabase() (pgx.Rows, *pgx.Conn, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return nil, conn, fmt.Errorf("getSeedFromDatabase: %w", err)
+      return nil, conn, fmt.Errorf("getSeedRowsFromDatabase: %w", err)
    }
 
    queryString :=
@@ -907,7 +907,7 @@ func getReadyMixerFunds() (*nt.Raw, error) {
 func setSeedInactive() (int, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return 0, fmt.Errorf("getReadyMixerFunds: %w", err)
+      return 0, fmt.Errorf("setSeedInactive: %w", err)
    }
 
    queryString :=
@@ -998,4 +998,28 @@ func deleteBlacklist(seedID int) error {
    }
 
    return nil
+}
+
+func balanceInSeed(seedID int) (*nt.Raw, error) {
+   zero := nt.NewRaw(0)
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return zero, fmt.Errorf("balanceInSeed: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "SUM(balance) " +
+   "FROM " +
+      "wallets "+
+   "WHERE " +
+      "parent_seed = $1;"
+
+   var balance = nt.NewRaw(0)
+   err = conn.QueryRow(context.Background(), queryString, seedID).Scan(balance)
+   if (err != nil) {
+      return zero, fmt.Errorf("balanceInSeed: %w", err)
+   }
+
+   return balance, nil
 }

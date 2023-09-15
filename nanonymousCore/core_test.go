@@ -1,6 +1,7 @@
 package main
 
 import (
+   "fmt"
    "testing"
    "golang.org/x/crypto/blake2b"
    "encoding/hex"
@@ -293,7 +294,7 @@ func Test_receivedNano(t *testing.T) {
       },
    }
 
-   for _, test := range test1 {
+   for i, test := range test1 {
       resetInUse()
       // Add address to recipient list
       recipientPub, err := keyMan.AddressToPubKey(test.recipientAddress)
@@ -301,6 +302,12 @@ func Test_receivedNano(t *testing.T) {
          t.Errorf("Error during execution: %s", err.Error())
       }
       setRecipientAddress(test.seedId, test.index, recipientPub)
+
+      if (i == 5) {
+         // Kinda weird to hardcode this, but whatever...
+         // Adding a receive only address to test.
+         getNewAddress("", true, false, 0)
+      }
 
       testingPayment = append(make([]*nt.Raw, 0), test.nanoReceived)
       testingPaymentExternal = true
@@ -351,6 +358,99 @@ func Test_receivedNano(t *testing.T) {
       }
    }
 
+}
+
+func Test_receiveOnly(t *testing.T) {
+   databaseUrl = "postgres://test:testing@localhost:5432/gotests"
+   databasePassword = "testing"
+
+   // Reset database to known state
+   script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
+   script.Run()
+   inTesting = true
+
+   test1 := []struct {
+      account string
+      amount *nt.Raw
+      balances []*nt.Raw
+   }{
+      {"nano_3usi45tj6oybeapseej9sgjzdyewz4gybrtpa88a8ttynifpc1w3nakxr8k5",
+       nt.NewRaw(0).Mul(nt.NewRaw(3), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+ []*nt.Raw{nt.NewRaw(0).Mul(nt.NewRaw(41), nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(6),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(32),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(29), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(0) ,   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(5),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(5),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(10),   nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil)),
+           nt.NewRaw(0).Mul(nt.NewRaw(3),    nt.NewRaw(0).Exp(nt.NewRaw(10), nt.NewRaw(30), nil))},
+      },
+   }
+
+   // Get new receive_only address
+   getNewAddress("", true, false, 0)
+
+   for _, test := range test1 {
+      resetInUse()
+
+      // Build the ConfirmationBlock
+      cBlock := ConfirmationBlock{
+         Message: struct{
+               Block keyMan.Block
+               Account string
+               Amount *nt.Raw
+               Hash nt.BlockHash
+               ConfirmationType string `json:"confirmation_type"`
+         }{
+            Amount: test.amount,
+            Block: keyMan.Block{
+               Subtype: "send",
+               LinkAsAccount: test.account,
+            },
+         },
+      }
+
+      testingPayment = append(make([]*nt.Raw, 0), test.amount)
+      testingPaymentExternal = true
+      handleNotification(cBlock)
+
+      // Now check that the database is as we expect
+      conn, err := pgx.Connect(context.Background(), databaseUrl)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+      queryString :=
+      "SELECT " +
+         "balance, " +
+         "parent_seed, " +
+         "index " +
+      "FROM " +
+         "wallets " +
+      "ORDER BY " +
+         "index;"
+
+      rows, err := conn.Query(context.Background(), queryString)
+
+      var balance = nt.NewRaw(0)
+      var seedId int
+      var index int
+      for i := 0; rows.Next(); i++ {
+         err = rows.Scan(balance, &seedId, &index)
+         if (err != nil) {
+            t.Errorf("Error during execution: %s", err.Error())
+         }
+         if (i >= len(test.balances)) {
+            t.Errorf("Too many wallets in database")
+            return
+         }
+
+         if (balance.Cmp(test.balances[i]) != 0) {
+            t.Errorf("Wrong balance at %d,%d\r\n want: %d\r\n got:  %d", seedId, index, test.balances[i], balance.Int)
+         }
+      }
+   }
+
+   verbosity = 0
 }
 
 func Test_extractFromMixer(t *testing.T) {
@@ -448,6 +548,71 @@ func Test_extractFromMixer(t *testing.T) {
          if (balance.Cmp(test.balances[i]) != 0) {
             t.Errorf("Wrong balance at %d,%d\r\n want: %d\r\n got:  %d", seedId, index, test.balances[i], balance.Int)
          }
+      }
+   }
+}
+
+func Test_seedRetire(t *testing.T){
+   databaseUrl = "postgres://test:testing@localhost:5432/gotests"
+   databasePassword = "testing"
+
+   // Reset database to known state
+   script := exec.Command("psql", "-f", resetScript, "-U", "test", "-d", "gotests")
+   script.Run()
+   inTesting = true
+
+   test1 := []struct {
+      finalSeed int
+      numOfPendingTxs []int
+   }{
+      {
+         3,
+         []int{100},
+      },
+   }
+
+   for _, test := range test1 {
+      testingReceiveAlls = 0
+      testingPendingHashesNum = test.numOfPendingTxs
+
+      beforeBalance, err := balanceInSeed(1)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+
+      retireCurrentSeed()
+      getNewAddress("", false, false, 0)
+      retireCurrentSeed()
+
+      afterBalance, err := balanceInSeed(3)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+
+      if (beforeBalance.Cmp(afterBalance) != 0) {
+         if (err != nil) {
+            t.Errorf("Error: Balances didn't match.\nBefore: %f\nAfter: %f", rawToNANO(beforeBalance), rawToNANO(afterBalance))
+         }
+      } else {
+            fmt.Println("Not error: Balances didn't match.\nBefore:", rawToNANO(beforeBalance), "\nAfter: ",  rawToNANO(afterBalance))
+      }
+
+      rows, conn, err := getSeedRowsFromDatabase()
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+      defer rows.Close()
+      defer conn.Close(context.Background())
+
+      var finalSeed int
+      rows.Next()
+      err = rows.Scan(nil, nil, &finalSeed)
+      if (err != nil) {
+         t.Errorf("Error during execution: %s", err.Error())
+      }
+
+      if (finalSeed != test.finalSeed) {
+         t.Errorf("Error: final seed does not match.\nwant: %d\nfound: %d", test.finalSeed, finalSeed)
       }
    }
 }

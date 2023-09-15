@@ -382,7 +382,7 @@ func handleNotification(cBlock ConfirmationBlock) {
       }
    }()
 
-   if (bytes.Equal(cBlock.Message.Hash, lastHashSeen)) {
+   if (bytes.Equal(cBlock.Message.Hash, lastHashSeen) && !inTesting) {
       // Just a KeepAlive response. Ignore.
       if (verbosity >= 10) {
          fmt.Println("pong")

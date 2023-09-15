@@ -934,7 +934,7 @@ func rcpCall(request string, response any, url string, ch chan error) (err error
    }()
 
    if (inTesting) {
-      fmt.Println("WARNING: Calling RCP from testing function.")
+      fmt.Println("WARNING: Calling RCP from testing function:\n", request)
    }
 
    // Check to make sure response is in the correct format

@@ -27,8 +27,8 @@ import (
    "golang.org/x/crypto/blake2b"
 )
 
-// TODO check for max send amount. (10% of total?)
 // TODO find any additional tests (seed retirement for one)
+// TODO email reports
 
 //go:generate go run github.com/c-sto/encembed -i embed.txt -decvarname embeddedByte
 var embeddedData = string(embeddedByte)
@@ -65,6 +65,7 @@ const TRANSACTION_DEADLINE = time.Hour
 const FEE_PERCENT = float64(0.2)
 var feeDividend int64
 var minPayment *nt.Raw
+var maxPayment *nt.Raw
 
 var betaMode bool
 
@@ -285,6 +286,34 @@ func initNanoymousCore(mainInstance bool) error {
       minPayment = nt.OneNano()
    } else {
       minPayment = nt.NewRaw(0)
+   }
+
+   totalFunds, _, _, err := findTotalBalance()
+   if (err != nil) {
+      return fmt.Errorf("initNanoymousCore: %w", err)
+   }
+
+   if (!betaMode) {
+      // Stop payments from more than 10% of total balance to avoid too few wallets.
+      maxPayment = nt.NewRaw(0)
+      maxPayment.Div(totalFunds, nt.NewRaw(10))
+      // Round down to nearest 100
+      oneHundred := nt.OneNano().Mul(nt.OneNano(), nt.NewRaw(100))
+      _, leftover := nt.OneNano().DivMod(maxPayment, oneHundred)
+      maxPayment.Sub(maxPayment, leftover)
+
+      oneThousand := nt.OneNano().Mul(oneHundred, nt.NewRaw(10))
+      if (maxPayment.Cmp(oneHundred) < 0) {
+         Warning.Println("Max payment was less than 100.")
+         // Has to be at least 100
+         maxPayment.Add(nt.NewRaw(0), oneHundred)
+      } else if (maxPayment.Cmp(oneThousand) > 0) {
+         // Has to be at most 1000
+         maxPayment.Add(nt.NewRaw(0), oneThousand)
+      }
+   } else {
+      // Max payment during beta is 1 Nano.
+      maxPayment = nt.OneNano()
    }
 
    // Seed randomness
@@ -843,10 +872,25 @@ func receivedNano(nanoAddress string) error {
          Error.Println("non-transaction Refund failed!! %w", err)
          return fmt.Errorf("non-transaction Refund failed!! %w", err)
       }
-
+      // Transaction aborted
+      return nil
+   } else if (maxPayment.Cmp(payment) < 0) {
+      // More than the maximum. Refund it.
+      pubKey, _ := keyMan.AddressToPubKey(nanoAddress)
+      sendInfoToClient("info=The maximum transaction currently supported is "+ strconv.FormatFloat(rawToNANO(maxPayment), 'f', -1, 64) +" Nano. Your transaction has been refunded.", pubKey)
+      err := Refund(receiveHash)
+      if (err != nil) {
+         sendEmail("IMMEDIATE ATTENTION REQUIRED", "Non-transaction refund failed! "+ err.Error() +
+               "\n\nPayment Hash: "+ receiveHash.String() +
+               "\nID: "+ strconv.Itoa(parentSeedId) +","+ strconv.Itoa(index) +
+               "\nAmount: "+ strconv.FormatFloat(rawToNANO(payment), 'f', -1, 64))
+         Error.Println("non-transaction Refund failed!! %w", err)
+         return fmt.Errorf("non-transaction Refund failed!! %w", err)
+      }
       // Transaction aborted
       return nil
    }
+
 
    // If anything goes wrong the transactionManager will make sure to clean up
    // the mess.
@@ -857,6 +901,7 @@ func receivedNano(nanoAddress string) error {
    t.paymentParentSeedId = parentSeedId
    t.paymentIndex = index
    t.receiveHash = receiveHash
+   t.amountToSend = nt.NewRaw(0)
    t.dirtyAddress = -1
    defer func () {
       if (err != nil) {
