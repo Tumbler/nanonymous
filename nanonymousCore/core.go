@@ -149,14 +149,14 @@ func main() {
          fmt.Println("-w option must be preceded by the -c option")
          return
       } else if (strings.ToLower(args[0]) == "-r") {
-         // Retire most recent seed
+         // Report on the week
 
          err = initNanoymousCore(false)
          if (err != nil) {
             panic(err)
          }
 
-         err := retireCurrentSeed()
+         err := lastWeekSummary()
          if (err != nil) {
             panic(err)
          }
@@ -172,7 +172,7 @@ func main() {
                      "\n     subscribe to websockets. (Will interfere with main instance if it's"+
                      "\n     running)"+
                    "\n\n  -s Go through all known wallets and check for receivable funds." +
-                   "\n\n  -r Retire current seed." +
+                   "\n\n  -r Give a report on how things went last week. (Prints and emails)"
                    "\n\n  -v Print version information." +
                    "\n\n  -beta Run in beta mode. (No fees)"+
                    "\n\n  # If the last argument is a number, the verbosity is changed to that number"+
