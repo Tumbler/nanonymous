@@ -224,6 +224,9 @@ async function ajaxGetAddress(finalAddress) {
             document.getElementById("errorMessage").innerHTML = line[1]
             document.getElementById("errorMessage").scrollIntoView();
             document.getElementById("updateMessage").hidden = true;
+            if (this.response.includes("timed out")) {
+               req2.abort();
+            }
          } else if (update !== null && update.length > 1) {
             console.log(this.responseText);
             document.getElementById("updateMessage").innerHTML = update[1];
