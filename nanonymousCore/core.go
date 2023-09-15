@@ -27,7 +27,7 @@ import (
    "golang.org/x/crypto/blake2b"
 )
 
-// TODO find any additional tests (seed retirement for one)
+// TODO update maxpaymetn periodicly. (Only updates on reboot currently)
 // TODO email reports
 
 //go:generate go run github.com/c-sto/encembed -i embed.txt -decvarname embeddedByte
