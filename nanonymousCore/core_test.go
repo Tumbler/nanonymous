@@ -22,7 +22,7 @@ const resetScript = "../scripts/resetTestDatabase.sql"
 func Test_Password(t *testing.T) {
    const SALT = "E29A8053962DB8E76A7"
    // This is my hash, GET YOUR OWN!
-   const P_HASH = "bd7ba7e0de3500733f4066499255ffb3fa155def272c87f259d10148ee5d2bf8613fe492d833795e3350166443cec75e6fb861029f03ff85f25aa0447b1d7b93"
+   const P_HASH = "270fabb2f590b0baf1824383b2ecfd4452e2ebcfee9a60744862bfe1620fac941abe7aa9522cc0f91c8e375097c27953de2dbdf571a15bb1a0f13b5ce23b3393"
 
    inTesting = true
    err := initNanoymousCore(false)

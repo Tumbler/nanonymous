@@ -4,6 +4,7 @@ import (
    "fmt"
    "context"
    "strings"
+   "time"
 
    // Local packages
    keyMan "nanoKeyManager"
@@ -813,6 +814,28 @@ func getNextTransactionId() (int, error) {
    return id, nil
 }
 
+func peekAtNextTransactionId() (int, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return -1, fmt.Errorf("peekAtNextTransactionId: %w", err)
+   }
+   defer conn.Close(context.Background())
+
+   queryString :=
+   "SELECT " +
+      "unique_id " +
+   "FROM " +
+      "transaction;"
+
+   var id int
+   err = conn.QueryRow(context.Background(), queryString).Scan(&id)
+   if (err != nil) {
+      return -1, fmt.Errorf("peekAtNextTransactionId: QueryRow failed: %w", err)
+   }
+
+   return id, nil
+}
+
 func recordProfit(gross *nt.Raw, tid int) error {
 
    // Don't bother recording if there was no fee.
@@ -1022,4 +1045,109 @@ func balanceInSeed(seedID int) (*nt.Raw, error) {
    }
 
    return balance, nil
+}
+
+func getProfitSince(date time.Time) (*nt.Raw, error) {
+   zero := nt.NewRaw(0)
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return zero, fmt.Errorf("getProfitSince: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "SUM(nano_gained) " +
+   "FROM " +
+      "profit_record "+
+   "WHERE " +
+      "time > $1;"
+
+   if (date.IsZero()) {
+      // Zero time (Make sure it's inititialized)
+      date = time.Time{}
+   }
+
+   var gross = nt.NewRaw(0)
+   err = conn.QueryRow(context.Background(), queryString, date).Scan(gross)
+   if (err != nil) {
+      return zero, fmt.Errorf("getProfitSince: %w", err)
+   }
+
+   return gross, nil
+}
+
+func getUSDSinceAtTimeOfTransaction(date time.Time) (float64, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return 0.0, fmt.Errorf("getUSDSinceAtTimeOfTransaction: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "SUM((nano_gained / 10^30) * nano_usd_value) " +
+   "FROM " +
+      "profit_record "+
+   "WHERE " +
+      "time > $1;"
+
+   if (date.IsZero()) {
+      // Zero time (Make sure it's inititialized)
+      date = time.Time{}
+   }
+
+   var USD float64
+   err = conn.QueryRow(context.Background(), queryString, date).Scan(&USD)
+   if (err != nil) {
+      return 0.0, fmt.Errorf("getUSDSinceAtTimeOfTransaction: %w", err)
+   }
+
+
+   return USD, nil
+}
+
+func getNumOfTransactionsSince(date time.Time) (int, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return 0, fmt.Errorf("getNumOfTransactionsSince: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "COUNT(nano_gained) " +
+   "FROM " +
+      "profit_record "+
+   "WHERE " +
+      "time > $1;"
+
+   var num int
+   err = conn.QueryRow(context.Background(), queryString, date).Scan(&num)
+   if (err != nil) {
+      return 0, fmt.Errorf("getNumOfTransactionsSince: %w", err)
+   }
+
+   return num, nil
+}
+
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getRowsOfWalletsWithAnyBalance() (pgx.Rows, *pgx.Conn, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, conn, fmt.Errorf("getRowsOfWalletsWithAnyBalance: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "parent_seed, " +
+      "index " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "balance > 0;"
+
+   rows, err := conn.Query(context.Background(), queryString)
+   if (err != nil) {
+      return nil, conn, fmt.Errorf("getRowsOfWalletsWithAnyBalance: %w", err)
+   }
+
+   return rows, conn, nil
 }
