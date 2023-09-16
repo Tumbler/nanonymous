@@ -1127,3 +1127,27 @@ func getNumOfTransactionsSince(date time.Time) (int, error) {
 
    return num, nil
 }
+
+// WARNING: You are responsible for closing Conn when you're done with it!!
+func getRowsOfWalletsWithAnyBalance() (pgx.Rows, *pgx.Conn, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return nil, conn, fmt.Errorf("getRowsOfWalletsWithAnyBalance: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "parent_seed, " +
+      "index " +
+   "FROM " +
+      "wallets " +
+   "WHERE " +
+      "balance > 0;"
+
+   rows, err := conn.Query(context.Background(), queryString)
+   if (err != nil) {
+      return nil, conn, fmt.Errorf("getRowsOfWalletsWithAnyBalance: %w", err)
+   }
+
+   return rows, conn, nil
+}

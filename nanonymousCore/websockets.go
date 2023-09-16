@@ -119,7 +119,7 @@ func websocketListener(ch chan int, fullSubscribe bool) {
                }
 
                // Try to reconnect. If the reconnect fails it will panic.
-               Warning.Println("Lost websockets: %w", err)
+               Warning.Println("Lost websockets: ", err)
                websocketRetries++
                go websocketListener(nil, fullSubscribe)
                return

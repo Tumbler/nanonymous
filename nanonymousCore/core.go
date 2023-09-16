@@ -172,7 +172,7 @@ func main() {
                      "\n     subscribe to websockets. (Will interfere with main instance if it's"+
                      "\n     running)"+
                    "\n\n  -s Go through all known wallets and check for receivable funds." +
-                   "\n\n  -r Give a report on how things went last week. (Prints and emails)"
+                   "\n\n  -r Give a report on how things went last week. (Prints and emails)" +
                    "\n\n  -v Print version information." +
                    "\n\n  -beta Run in beta mode. (No fees)"+
                    "\n\n  # If the last argument is a number, the verbosity is changed to that number"+
@@ -336,10 +336,10 @@ func initNanoymousCore(mainInstance bool) error {
       // Wait until websockets are initialized
       <-ch
    } else {
-      ch := make(chan int)
-      go websocketListener(ch, false)
-      // Wait until websockets are initialized
-      <-ch
+      //ch := make(chan int)
+      //go websocketListener(ch, false)
+      //// Wait until websockets are initialized
+      //<-ch
    }
 
    return nil
