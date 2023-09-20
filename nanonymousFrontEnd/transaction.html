@@ -9,7 +9,7 @@
 <script type="text/javascript" src="script/lib/qrious.js"></script>
 <script type="text/javascript" src="script/lib/nanocurrency.js"></script>
 <script type="text/javascript" src="script/lib/qr_reader.js"></script>
-<script type="text/javascript" src="script/transaction.js"></script>
+<script type="text/javascript" src="script/transaction-test.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 <a href="index.html">
    <img src="images/1_nospace.svg" id="logo" alt="Nanonymous"></img>
@@ -48,18 +48,19 @@
          </tr>
       </table>
       <table>
-         <tr>
+         <caption>Fee calculator</caption>
+         <tr class="row">
             <!-- $  -->
             <td><label> &nbsp;&nbsp;$ </label></td>
             <td><input type="number" step ='0.01' id="USDamount" class="inbox" placeholder="1.23" oninput="autoFill(1)"></td>
          </tr>
-         <tr>
+         <tr class="row">
             <!-- Ӿ  -->
             <td><img src="images/nano-symbol-white.svg" style="height: 1.3em;"/></td>
             <td><input type="number" step ='0.001' id="nanoAmount" class="inbox" placeholder="1.234" oninput="autoFill(2)"></td>
             <td><label class="info"> This is the amount that the address will receive </label></td>
          </tr>
-         <tr id="afterFeeRow">
+         <tr class="row" id="afterFeeRow">
             <td><label> After fee </label></td>
             <td><input type="number" step ='0.001' id="afterTaxAmount" class="inbox" placeholder="1.236" oninput="autoFill(3)"></td>
             <td><label class="info"> This is the amount you will send </label></td>
@@ -89,6 +90,7 @@
       <br>
       <div id="QRdiv" style="text-align: center;" hidden=true>
          <h3 id="payment-label" style="text-align: left;"> Send payment here: </h3>
+         <span id="tooltiptap">Tap me!</span><br>
          <a id="QRLink">
             <canvas id="QRCode" class="animate-grow"></canvas>
          </a>
@@ -98,7 +100,6 @@
          </div>
       </div>
       <br>
-      <div id="TransactionInfo"></div>
       <div id="Hashdiv">
          <a id="HashLink"></a>
       </div>

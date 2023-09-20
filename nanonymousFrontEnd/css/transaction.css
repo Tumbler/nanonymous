@@ -10,6 +10,10 @@
  .error {
     color: red
  }
+ .update {
+    color: #0BD1DF;
+    font-weight: bold;
+ }
  #Transpng {
     max-width: 90%;
     order: -1;
@@ -41,6 +45,11 @@
  }
  #InfoText {
     margin-top: 5px;
+ }
+ .row {
+    outline-style: ridge;
+    outline-color: grey;
+    outline-width: 2px;
  }
  .inbox {
     border-radius: 5px;
@@ -217,4 +226,28 @@
   border-width: 8px;
   border-style: solid;
   border-color: transparent transparent #0BD1DF transparent;
+}
+#tooltiptap {
+  background-color: white;
+  border-color: white;
+  color: black;
+  text-align: center;
+  border-radius: 8px;
+  padding: 5px;
+  position: relative;
+  z-index: 1;
+  bottom: 8px;
+  opacity: 0;
+  transition: opacity 0.3s;
+  font-size: 0.8em;
+}
+#tooltiptap::after {
+  content: "";
+  position: absolute;
+  top: 95%;
+  left: 45%;
+  margin-left: -5px;
+  border-width: 8px;
+  border-style: solid;
+  border-color: white transparent transparent transparent;
 }
