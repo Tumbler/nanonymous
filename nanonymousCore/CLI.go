@@ -25,7 +25,12 @@ func CLI() {
       verbosity = 5
    }
 
+   // TODO this shouldn't die if there's no accounts
    myKey, err := getSeedFromIndex(1, 0)
+   if (err != nil) {
+      fmt.Println("Get seed error: ", err)
+      return
+   }
    rawBalance, _ := getBalance(myKey.NanoAddress)
    NanoBalance := rawToNANO(rawBalance)
    prompt := fmt.Sprintf("(%.3f)%s> ", NanoBalance, myKey.NanoAddress)
@@ -138,6 +143,12 @@ func CLI() {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
                   fmt.Println("Nano: Ӿ", rawToNANO(Nano), "\nManaged: Ӿ", rawToNANO(managed), "\nMixer: Ӿ", rawToNANO(mixer))
+               case "countprofit":
+                  Nano, err := getProfitSince(time.Time{})
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
+                  fmt.Println("Profit: Ӿ", rawToNANO(Nano))
                case "mix":
                   err := sendToMixer(myKey , 1)
                   if (err != nil) {
@@ -1547,6 +1558,7 @@ var walletCompleter = readline.NewPrefixCompleter(
    readline.PcItem("exit"),
    readline.PcItem("verbosity"),
    readline.PcItem("count"),
+   readline.PcItem("countprofit"),
    readline.PcItem("mix"),
    readline.PcItem("extract"),
    readline.PcItem("refresh"),

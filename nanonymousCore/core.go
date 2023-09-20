@@ -28,7 +28,6 @@ import (
 )
 
 // TODO update maxpaymetn periodicly. (Only updates on reboot currently)
-// TODO email reports
 
 //go:generate go run github.com/c-sto/encembed -i embed.txt -decvarname embeddedByte
 var embeddedData = string(embeddedByte)
@@ -75,7 +74,7 @@ var activeTransactionList = make(map[string][]byte)
 
 var random *rand.Rand
 
-const version = "1.0.0"
+const version = "1.0.2"
 
 // Random info about used ports:
 // 41721    Nanonymous request port
@@ -336,10 +335,10 @@ func initNanoymousCore(mainInstance bool) error {
       // Wait until websockets are initialized
       <-ch
    } else {
-      //ch := make(chan int)
-      //go websocketListener(ch, false)
-      //// Wait until websockets are initialized
-      //<-ch
+      ch := make(chan int)
+      go websocketListener(ch, false)
+      // Wait until websockets are initialized
+      <-ch
    }
 
    return nil
@@ -437,20 +436,39 @@ func handleRequest(conn net.Conn) error {
       var subArray = strings.Split(array[1], "=")
       if (len(subArray) >= 2 && subArray[0] == "address") {
          if (addressExsistsInDB(subArray[1]) && !addressIsReceiveOnly(subArray[1])) {
-            // Cannont send to a Nanonymous wallet as the recipient.
-            conn.Write([]byte("Invalid Request!"))
-         } else {
-            newKey, _, err := getNewAddress(subArray[1], false, false, 0)
+            // They've selected a nanonymous wallet. Double check there isn't an
+            // active transaction waiting on it. If there is, "bridge the gap."
+            // If not, then it's invalid.
+            seedID, index, err := getWalletFromAddress(subArray[1])
             if (err != nil) {
-               if (verbosity >= 3) {
-                  fmt.Println("handleRequest2: ", err.Error())
-               }
-               conn.Write([]byte("There was an error, please try again later"))
-               conn.Close()
-               return fmt.Errorf("handleRequest: %w", err)
+               conn.Write([]byte("Invalid Request!"))
+               return fmt.Errorf("handleRequest3: %w", err)
             }
 
-            conn.Write([]byte("address="+ newKey.NanoAddress))
+            recipientPub := getRecipientAddress(seedID, index)
+
+            if (len(recipientPub) == 32) {
+               // Theres an active transaction
+
+               recipientAddress, err := keyMan.PubKeyToAddress(recipientPub)
+               if (err != nil) {
+                  return fmt.Errorf("handleRequest0: %w", err)
+               }
+
+               // Bridging to recipient address instead of the address
+               // specified.
+               err = respondWithNewAddress(recipientAddress, conn)
+               if (err != nil) {
+                  return fmt.Errorf("handleRequest2: %w", err)
+               }
+            } else {
+               conn.Write([]byte("Invalid Request!"))
+            }
+         } else {
+            err := respondWithNewAddress(subArray[1], conn)
+            if (err != nil) {
+               return fmt.Errorf("handleRequest4: %w", err)
+            }
          }
       } else {
          conn.Write([]byte("Invalid Request!"))
@@ -520,7 +538,6 @@ func handleRequest(conn net.Conn) error {
    } else if (conn.LocalAddr().String() == "127.0.0.1:41721") {
       // Local commands for controlling the core
       if (strings.Contains(text, "safeExit")) {
-         // Only allow exit command to come from the server itself
          safeExit = true
 
          httpHeader :=
@@ -548,9 +565,10 @@ func handleRequest(conn net.Conn) error {
    return nil
 }
 
-// getNewAddress finds the next availalbe address given the keys stored in the
+// getNewAddress finds the next available address given the keys stored in the
 // database and returns address B. If "receivingAddress" A is not an empty
-// string, then it will also place A->B into the blacklist.
+// string, then it will also place A->B into the blacklist. And registers it as
+// an active transaction.
 func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId int) (*keyMan.Key, int, error) {
    var seed keyMan.Key
 
@@ -2162,4 +2180,21 @@ func removeHash(hashList []nt.BlockHash, i int) []nt.BlockHash {
    }
    hashList[i] = hashList[len(hashList)-1]
    return hashList[:len(hashList)-1]
+}
+
+func respondWithNewAddress(recipientAddress string, conn net.Conn) error {
+   newKey, _, err := getNewAddress(recipientAddress, false, false, 0)
+   if (err != nil) {
+      if (verbosity >= 3) {
+         fmt.Println("respondWithNewAddress: ", err.Error())
+      }
+      conn.Write([]byte("There was an error, please try again later"))
+      conn.Close()
+      Warning.Println("respondWithNewAddress: ", err)
+      return fmt.Errorf("respondWithNewAddress: %w", err)
+   }
+
+   conn.Write([]byte("address="+ newKey.NanoAddress))
+
+   return nil
 }
