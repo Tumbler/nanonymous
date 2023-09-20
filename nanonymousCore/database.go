@@ -739,7 +739,12 @@ func findTotalBalance() (*nt.Raw, *nt.Raw, *nt.Raw, error) {
    if (row.Next()) {
       err = row.Scan(rawBalance)
       if (err != nil) {
-         return zero, zero, zero, fmt.Errorf("findTotalBalance: Query faild on total: %w", err)
+         if (strings.Contains(err.Error(), "(<nil>)")) {
+            // Just Scan complaining about nil like little baby.
+            rawBalance = nt.NewRaw(0)
+         } else {
+            return zero, zero, zero, fmt.Errorf("findTotalBalance: Query faild on total: %w", err)
+         }
       }
 
       nanoBalance = nt.NewFromRaw(rawBalance)
