@@ -308,6 +308,7 @@ async function ajaxGetAddress(finalAddress) {
             document.getElementById("QRdiv").style.maxHeight = "0px";
 
             document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
+            document.getElementById("HashLink").target = "blank";
             document.getElementById("HashLink").innerHTML = "Final hash:<br>" + hash;
             document.getElementById("HashLink").style.color = "#313133";
             document.getElementById("Hashdiv").style.maxHeight = "1000px";
