@@ -61,9 +61,6 @@
     width: 50%;
     left: 25%;
  }
- #Copywrite {
-    font-size: 12px;
- }
  #discord {
     margin: auto 20px;
     height: 90%;
@@ -81,4 +78,9 @@
     height: 100%;
 
     z-index: 1;
+ }
+ .footerImg {
+    width: 80px;
+    display: flex;
+    justify-content: center;
  }
