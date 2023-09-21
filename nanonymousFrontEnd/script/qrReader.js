@@ -10,15 +10,20 @@ qrcode.callback = (res) => {
    if (res) {
       var address = res.match(/nano_[a-z0-9]+/i);
       document.getElementById("finalAddress").value = address;
+
       var valid = validateNanoAddress();
 
       if (res.indexOf("amount") != -1) {
-         var amountInRaw = res.match(/amount=(\d+)/i)[1];
-         var amountInNano = nanocurrency.convert(amountInRaw, {from:"raw", to:"Nano"});
-         document.getElementById("nanoAmount").value = amountInNano;
-         autoFill(2);
+         var check = res.match(/amount=(\d+)/i);
+         if (check !== null && check.length > 1) {
+            var amountInRaw = res.match(/amount=(\d+)/i)[1];
+            if (!isNaN(amountInRaw)) {
+               var amountInNano = nanocurrency.convert(amountInRaw, {from:"raw", to:"Nano"});
+               document.getElementById("nanoAmount").value = amountInNano;
+               autoFill(2);
+            }
+         }
       }
-      scanning = false;
 
       stopCamera();
 
@@ -67,6 +72,8 @@ function scan() {
 }
 
 function stopCamera() {
+   scanning = false;
+
    video.srcObject.getTracks().forEach(track => {
       track.stop();
    });

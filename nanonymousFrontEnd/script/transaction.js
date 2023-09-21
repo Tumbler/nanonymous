@@ -10,12 +10,12 @@ function showQR() {
    ajaxGetAddress(finalAddress);
 
    if (mobileOrTablet) {
-      var tooltip = document.getElementById("tooltiptap");
+      var tooltiptap = document.getElementById("tooltiptap");
 
       setTimeout(function(){
-         tooltip.style.opacity = '1';
+         tooltiptap.style.opacity = '1';
          setTimeout(function(){
-            tooltip.style.opacity = '0';
+            tooltiptap.style.opacity = '0';
          }, 3000);
       }, 1500);
    }
@@ -36,25 +36,39 @@ function autoFill(caller) {
          var input = document.getElementById("nanoAmount").value;
          var usd = Math.round(input * price * 100) / 100;
          var afterTax = CalculateInverseTax(parseFloat(input))
-         document.getElementById("USDamount").value = usd;
-         document.getElementById("afterTaxAmount").value = afterTax;
+         if (!isNaN(usd) && !isNaN(afterTax)) {
+            document.getElementById("USDamount").value = usd;
+            document.getElementById("afterTaxAmount").value = afterTax;
+         } else {
+            document.getElementById("USDamount").value = "";
+            document.getElementById("afterTaxAmount").value = "";
+         }
          break;
       case 3:
          var price = document.getElementById("nanoPrice").innerHTML;
          var input = document.getElementById("afterTaxAmount").value;
          var nano = CalculateTax(parseFloat(input))
          var usd = Math.round(nano * price * 100) / 100;
-         document.getElementById("USDamount").value = usd;
-         document.getElementById("nanoAmount").value = nano;
+         if (!isNaN(usd) && !isNaN(nano)) {
+            document.getElementById("USDamount").value = usd;
+            document.getElementById("nanoAmount").value = nano;
+         } else {
+            document.getElementById("USDamount").value = "";
+            document.getElementById("nanoAmount").value = "";
+         }
          break;
    }
 
    if (QRactive) {
       let Nano = document.getElementById("afterTaxAmount").value;
       let raw = nanocurrency.convert(Nano, {from:"Nano", to:"raw"})
-      var qrCodeText = "nano:" + middleAddress + "?amount=" + raw;
+      if (isNaN(raw)) {
+         var qrCodeText = "nano:" + middleAddress;
+      } else {
+         var qrCodeText = "nano:" + middleAddress + "?amount=" + raw;
+      }
       if (qrCodeText.length < 85) {
-         var qrSize = 250;
+         var qrSize = 260;
       } else {
          var qrSize = 275;
       }
@@ -198,12 +212,16 @@ async function ajaxGetAddress(finalAddress) {
       if (reply !== null && reply.length > 1) {
          middleAddress = reply[1];
 
-         var qrCodeText = "nano:" + middleAddress + "?amount=" + raw;
+         if (isNaN(raw)) {
+            var qrCodeText = "nano:" + middleAddress;
+         } else {
+            var qrCodeText = "nano:" + middleAddress + "?amount=" + raw;
+         }
 
          document.getElementById("QRLink").href = qrCodeText;
          document.getElementById("qr-label").innerHTML = middleAddress.concat("<img src=\"images/copyWhite.png\" style=\"width:17px;height:18px;padding:0px 0px 10px 5px\">");
          if (qrCodeText.length < 85) {
-            var qrSize = 250;
+            var qrSize = 260;
          } else {
             var qrSize = 275;
          }
@@ -290,9 +308,11 @@ async function ajaxGetAddress(finalAddress) {
             document.getElementById("QRdiv").style.maxHeight = "0px";
 
             document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
+            document.getElementById("HashLink").target = "blank";
             document.getElementById("HashLink").innerHTML = "Final hash:<br>" + hash;
             document.getElementById("HashLink").style.color = "#313133";
             document.getElementById("Hashdiv").style.maxHeight = "1000px";
+            document.getElementById("tooltiptap").hidden = true;
 
             setTimeout(function(){ // delay by 900 ms
             document.getElementById("Hashdiv").classList.add("animate-zipRight-in");
