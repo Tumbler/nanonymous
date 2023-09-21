@@ -25,7 +25,12 @@ func CLI() {
       verbosity = 5
    }
 
-   // TODO this shouldn't die if there's no accounts
+   _, err := getCurrentIndexFromDatabase(1)
+   if (err != nil) {
+      // Probably has no wallets in the DB. Create one.
+      getNewAddress("", true, false, 0)
+   }
+
    myKey, err := getSeedFromIndex(1, 0)
    if (err != nil) {
       fmt.Println("Get seed error: ", err)

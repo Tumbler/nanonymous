@@ -27,8 +27,6 @@ import (
    "golang.org/x/crypto/blake2b"
 )
 
-// TODO update maxpaymetn periodicly. (Only updates on reboot currently)
-
 //go:generate go run github.com/c-sto/encembed -i embed.txt -decvarname embeddedByte
 var embeddedData = string(embeddedByte)
 // "db = [url]" in embed.txt to set this value
@@ -74,7 +72,7 @@ var activeTransactionList = make(map[string][]byte)
 
 var random *rand.Rand
 
-const version = "1.0.2"
+const version = "1.0.3"
 
 // Random info about used ports:
 // 41721    Nanonymous request port
@@ -239,7 +237,7 @@ func initNanoymousCore(mainInstance bool) error {
    Warning = log.New(logFile, "WARNING: ", log.Ldate|log.Ltime|log.Lshortfile|log.LUTC)
    Error = log.New(logFile, "ERROR: ", log.Ldate|log.Ltime|log.Lshortfile|log.LUTC)
 
-   Info.Println("Started Nanonymous Core")
+   Info.Println("Started Nanonymous Core version", version)
 
 
    // Grab embedded data
@@ -287,33 +285,7 @@ func initNanoymousCore(mainInstance bool) error {
       minPayment = nt.NewRaw(0)
    }
 
-   totalFunds, _, _, err := findTotalBalance()
-   if (err != nil) {
-      return fmt.Errorf("initNanoymousCore: %w", err)
-   }
-
-   if (!betaMode) {
-      // Stop payments from more than 10% of total balance to avoid too few wallets.
-      maxPayment = nt.NewRaw(0)
-      maxPayment.Div(totalFunds, nt.NewRaw(10))
-      // Round down to nearest 100
-      oneHundred := nt.OneNano().Mul(nt.OneNano(), nt.NewRaw(100))
-      _, leftover := nt.OneNano().DivMod(maxPayment, oneHundred)
-      maxPayment.Sub(maxPayment, leftover)
-
-      oneThousand := nt.OneNano().Mul(oneHundred, nt.NewRaw(10))
-      if (maxPayment.Cmp(oneHundred) < 0) {
-         Warning.Println("Max payment was less than 100.")
-         // Has to be at least 100
-         maxPayment.Add(nt.NewRaw(0), oneHundred)
-      } else if (maxPayment.Cmp(oneThousand) > 0) {
-         // Has to be at most 1000
-         maxPayment.Add(nt.NewRaw(0), oneThousand)
-      }
-   } else {
-      // Max payment during beta is 1 Nano.
-      maxPayment = nt.OneNano()
-   }
+   maxPayment = findMaxPayment()
 
    // Seed randomness
    if !(inTesting) {
@@ -538,6 +510,7 @@ func handleRequest(conn net.Conn) error {
    } else if (conn.LocalAddr().String() == "127.0.0.1:41721") {
       // Local commands for controlling the core
       if (strings.Contains(text, "safeExit")) {
+         Info.Println("Got safe Exit request.")
          safeExit = true
 
          httpHeader :=
@@ -546,6 +519,7 @@ func handleRequest(conn net.Conn) error {
          "Connection: Closed\n"
          conn.Write([]byte(httpHeader +"\nAck"))
       } else if (strings.Contains(text, "retireSeed")) {
+         Info.Println("Got retire seed request.")
          err := retireCurrentSeed()
          if (err != nil) {
             Warning.Println("handleRequest: ", err)
@@ -553,6 +527,15 @@ func handleRequest(conn net.Conn) error {
                fmt.Println("handleRequest: ", err)
             }
          }
+
+         httpHeader :=
+         "HTTP/1.1 200 OK\n"+
+         "Content-Type: text/plain\n"+
+         "Connection: Closed\n"
+         conn.Write([]byte(httpHeader +"\nAck"))
+      } else if (strings.Contains(text, "refreshMaxPayment")) {
+         Info.Println("Got refresh max payment request.")
+         maxPayment = findMaxPayment()
 
          httpHeader :=
          "HTTP/1.1 200 OK\n"+
@@ -2197,4 +2180,38 @@ func respondWithNewAddress(recipientAddress string, conn net.Conn) error {
    conn.Write([]byte("address="+ newKey.NanoAddress))
 
    return nil
+}
+
+func findMaxPayment() *nt.Raw {
+   var max *nt.Raw
+   var oneHundred = nt.OneNano().Mul(nt.OneNano(), nt.NewRaw(100))
+   totalFunds, _, _, err := findTotalBalance()
+   if (err != nil) {
+      Warning.Println("findMaxPayment: ", err)
+      return oneHundred
+   }
+
+   if (!betaMode) {
+      // Stop payments from more than 10% of total balance to avoid too few wallets.
+      max = nt.NewRaw(0)
+      max.Div(totalFunds, nt.NewRaw(10))
+      // Round down to nearest 100
+      _, leftover := nt.OneNano().DivMod(max, oneHundred)
+      max.Sub(max, leftover)
+
+      oneThousand := nt.OneNano().Mul(oneHundred, nt.NewRaw(10))
+      if (max.Cmp(oneHundred) < 0) {
+         Warning.Println("Max payment was less than 100.")
+         // Has to be at least 100
+         max.Add(nt.NewRaw(0), oneHundred)
+      } else if (max.Cmp(oneThousand) > 0) {
+         // Has to be at most 1000
+         max.Add(nt.NewRaw(0), oneThousand)
+      }
+   } else {
+      // Max payment during beta is 1 Nano.
+      max = nt.OneNano()
+   }
+
+   return max
 }

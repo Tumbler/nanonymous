@@ -474,7 +474,10 @@ func getCurrentIndexFromDatabase(id int) (int, error) {
       "id = $1;"
 
    var currentIndex int
-   _ = conn.QueryRow(context.Background(), queryString, id).Scan(&currentIndex)
+   err = conn.QueryRow(context.Background(), queryString, id).Scan(&currentIndex)
+   if (err != nil) {
+      return 0, fmt.Errorf("getCurrentIndexFromDatabase: %w", err)
+   }
 
    return currentIndex, nil
 }
