@@ -89,6 +89,10 @@
     overflow-x: auto;
     width: 100%;
  }
+ #finalAddress:disabled{
+    color: DimGrey;
+    background: #AAAAAA;
+ }
  .nButton {
     background-color: #0BD1DF;
     color: black;

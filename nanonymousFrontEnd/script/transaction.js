@@ -8,17 +8,6 @@ function showQR() {
    var finalAddress = document.getElementById("finalAddress").value;
    document.getElementById("errorMessage").innerHTML = "";
    ajaxGetAddress(finalAddress);
-
-   if (mobileOrTablet) {
-      var tooltiptap = document.getElementById("tooltiptap");
-
-      setTimeout(function(){
-         tooltiptap.style.opacity = '1';
-         setTimeout(function(){
-            tooltiptap.style.opacity = '0';
-         }, 3000);
-      }, 1500);
-   }
 }
 
 function autoFill(caller) {
@@ -235,6 +224,19 @@ async function ajaxGetAddress(finalAddress) {
          document.getElementById("scanQR").hidden = true;
          setTimeout(window.scrollTo(0, document.body.scrollHeight),100);
          QRactive = true;
+
+         document.getElementById("finalAddress").disabled = true;
+
+         if (mobileOrTablet) {
+            var tooltiptap = document.getElementById("tooltiptap");
+
+            setTimeout(function(){
+               tooltiptap.style.opacity = '1';
+               setTimeout(function(){
+                  tooltiptap.style.opacity = '0';
+               }, 3000);
+            }, 1500);
+         }
       } else if (info !== null && info.length > 1) {
          document.getElementById("errorMessage").innerHTML = info[1];
          document.getElementById("errorMessage").scrollIntoView();
