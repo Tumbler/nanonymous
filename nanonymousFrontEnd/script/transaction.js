@@ -10,12 +10,12 @@ function showQR() {
    ajaxGetAddress(finalAddress);
 
    if (mobileOrTablet) {
-      var tooltip = document.getElementById("tooltiptap");
+      var tooltiptap = document.getElementById("tooltiptap");
 
       setTimeout(function(){
-         tooltip.style.opacity = '1';
+         tooltiptap.style.opacity = '1';
          setTimeout(function(){
-            tooltip.style.opacity = '0';
+            tooltiptap.style.opacity = '0';
          }, 3000);
       }, 1500);
    }
@@ -312,6 +312,7 @@ async function ajaxGetAddress(finalAddress) {
             document.getElementById("HashLink").innerHTML = "Final hash:<br>" + hash;
             document.getElementById("HashLink").style.color = "#313133";
             document.getElementById("Hashdiv").style.maxHeight = "1000px";
+            document.getElementById("tooltiptap").hidden = true;
 
             setTimeout(function(){ // delay by 900 ms
             document.getElementById("Hashdiv").classList.add("animate-zipRight-in");
