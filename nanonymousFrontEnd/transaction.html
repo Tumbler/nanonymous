@@ -42,11 +42,16 @@
          </tr>
       </table>
       <table>
-         <tr id="feeInfo">
-            <td><h3>Nanonymous fee:</h3><img src="images/info-white.svg" style="height: 20px; margin-top: .75em; margin-left: .25em;"/></td>
+         <tr id="feeInfo" onclick='feeInfoPopup()'>
+            <td><h3>Nanonymous fee:</h3></td>
             <td><label id="nanonymousFee">??</label></td>
+            <td><img src="images/info-white.svg" style="height: 20px; margin-bottom: .5em;"/></td>
          </tr>
       </table>
+      <div id="feeInfopopup">
+         <p id="feeInfoText"> This is the maximum fee:<br><br>Taking a flat percent would leave your wallet with dust. Nobody wants that, so we round the fee down to get rid of any filthy digits before charging you.<br></p>
+         <button class="nButton" onclick='(function(){document.getElementById("feeInfopopup").style.visibility="hidden";})();' style="margin: auto;">Got it!</button>
+      </div>
       <table>
          <caption>Fee calculator</caption>
          <tr class="row">
@@ -134,6 +139,9 @@
 
    function infoPopup() {
       document.getElementById("infopopup").style.visibility="visible";
+   }
+   function feeInfoPopup() {
+      document.getElementById("feeInfopopup").style.visibility="visible";
    }
 
 </script>

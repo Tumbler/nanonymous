@@ -46,6 +46,29 @@
  #InfoText {
     margin-top: 5px;
  }
+ #feeInfo:hover {
+    text-decoration: underline;
+    cursor: pointer;
+ }
+ #feeInfopopup {
+    background-color: #777777;
+    border-radius: 15px;
+    border-width: 15px;
+    border-color: black;
+    box-shadow: 3px 6px #111111;
+
+    visibility: hidden;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    min-width: 15em;
+    transform: translate(-50%, -50%);
+
+    padding: 10px;
+ }
+ #feeInfoText {
+    margin-top: 5px;
+ }
  .row {
     outline-style: ridge;
     outline-color: grey;
