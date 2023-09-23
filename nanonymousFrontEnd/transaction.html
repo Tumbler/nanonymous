@@ -36,9 +36,23 @@
       <table>
          <tr>
             <td><h3>Current nano price:</h3></td>
-            <td><label>$</label></td>
+            <td><label class="currSym">$</label></td>
             <td><label id="nanoPrice"></label></td>
-            <td><label> USD</label></td>
+            <td><select id="currencyDropDown" onchange="changeCurrency()">
+                  <option value="$,USD">USD</option>
+                  <option value="$,AUD">AUD</option>
+                  <option value="$,CAD">CAD</option>
+                  <option value="Fr.,CHF">CHF</option>
+                  <option value="¥,CNY">CNY</option>
+                  <option value="€,EUR">EUR</option>
+                  <option value="£,GBP">GBP</option>
+                  <option value="$,HKD">HKD</option>
+                  <option value="¥,JPY">JPY</option>
+                  <option value="₦,NGN">NGN</option>
+                  <option value="$,NZD">NZD</option>
+               </select>
+            </td>
+            <!--<td><label> USD</label></td>-->
          </tr>
       </table>
       <table>
@@ -56,7 +70,7 @@
          <caption>Fee calculator</caption>
          <tr class="row">
             <!-- $  -->
-            <td style="text-align: right"><label> &nbsp;&nbsp;$ </label></td>
+            <td style="text-align: right"><label class="currSym">$</label></td>
             <td><input type="number" step ='0.01' id="USDamount" class="inbox" placeholder="1.23" oninput="autoFill(1)"></td>
          </tr>
          <tr class="row">

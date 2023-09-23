@@ -75,10 +75,11 @@ function GetCurrentPrice() {
    fetch("https://api.coingecko.com/api/v3/simple/price?ids=nano&vs_currencies=usd").then(response => response.json()).then(data => SetCurrentPrice(data.nano.usd));
 }
 
+let nanoVal = 0
 function SetCurrentPrice(data) {
-   var price = data
+   nanoVal = data
 
-   document.getElementById("nanoPrice").innerHTML = price;
+   document.getElementById("nanoPrice").innerHTML = nanoVal.toFixed(6);
 }
 
 function GetCurrentFee() {
@@ -461,6 +462,43 @@ function copyAddress() {
    tooltip.style.opacity = '1';
 
    setTimeout(function(){tooltip.style.opacity = '0';}, 3000);
+}
+
+function changeCurrency() {
+   let info = document.getElementById("currencyDropDown").value.split(",")
+   let newCurrency = ""
+   if (info !== null && info.length > 1) {
+      newCurrency = info[1]
+   }
+
+   let req = new XMLHttpRequest();
+   req.open("POST", "php/getCurrencyValue.php?curr="+ newCurrency)
+   req.onload = function() {
+      console.log(this.response);
+      var reply = this.response.match(/val=([0-9]+(?:\.[0-9]+)?),([0-9]+(?:\.[0-9]+)?)/i);
+      if (reply !== null && reply.length > 2) {
+         usdVal = parseFloat(reply[1]);
+         curVal = parseFloat(reply[2]);
+
+         // The API I'm using is based in euros, so I have to do an extra
+         // calculation to find the nano to curr val.
+         newVal = nanoVal * curVal / usdVal
+         document.getElementById("nanoPrice").innerHTML = newVal.toFixed(6);
+
+         // Change all the currency symbols
+         if (info !== null && info.length > 1) {
+            let labels = document.getElementsByClassName('currSym');
+            [].slice.call(labels).forEach(function(label) {
+               label.innerHTML = info[0]
+            });
+         }
+
+         if (document.getElementById("USDamount").value.length > 0) {
+            autoFill(1)
+         }
+      }
+   }
+   req.send();
 }
 
 function mobileOrTabletCheck() {
