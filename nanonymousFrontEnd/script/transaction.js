@@ -1,6 +1,7 @@
 let nanonymousFee = 0.01;
 let QRactive = false;
 let middleAddress = "";
+let beta = false;
 
 let mobileOrTablet = mobileOrTabletCheck()
 
@@ -96,6 +97,8 @@ function GetCurrentFee() {
          if (nanonymousFeePercent == 0) {
             document.getElementById("nanonymousFee").innerHTML = "Free!";
             document.getElementById("afterFeeRow").hidden = true;
+            beta = true
+            document.getElementById("calculator").deleteCaption();
          } else {
             document.getElementById("nanonymousFee").innerHTML = nanonymousFeePercent.toString().concat("% (less than a percent)");
          }
@@ -123,7 +126,7 @@ function CalculateTax(amount) {
    }
    precision = 10 ** precision;
 
-   if (amount < 1) {
+   if (amount < 1 && !beta) {
       document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano.";
    } else {
       document.getElementById("errorMessage").innerHTML = "";
@@ -144,7 +147,7 @@ function CalculateInverseTax(amount) {
    }
    precision = 10 ** precision;
 
-   if (trueOrig < 1) {
+   if (trueOrig < 1 && !beta) {
       document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano.";
    } else {
       document.getElementById("errorMessage").innerHTML = "";
