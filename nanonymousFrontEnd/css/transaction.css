@@ -23,11 +23,11 @@
     margin-top: 50px;
     margin-bottom: 50px;
  }
- #instructions:hover {
+ .instructions:hover {
     text-decoration: underline;
     cursor: pointer;
  }
- #infopopup {
+ .popupWindow {
     background-color: #777777;
     border-radius: 15px;
     border-width: 15px;
@@ -43,7 +43,7 @@
 
     padding: 10px;
  }
- #InfoText {
+ .InfoText {
     margin-top: 5px;
  }
  .row {
