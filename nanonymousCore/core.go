@@ -878,7 +878,11 @@ func receivedNano(nanoAddress string) error {
    } else if (maxPayment.Cmp(payment) < 0) {
       // More than the maximum. Refund it.
       pubKey, _ := keyMan.AddressToPubKey(nanoAddress)
-      sendInfoToClient("info=The maximum transaction currently supported is "+ strconv.FormatFloat(rawToNANO(maxPayment), 'f', -1, 64) +" Nano. Your transaction has been refunded.", pubKey)
+      if (betaMode) {
+         sendInfoToClient("info=During the beta, the maximum transaction is "+ strconv.FormatFloat(rawToNANO(maxPayment), 'f', -1, 64) +" Nano. Your transaction has been refunded.", pubKey)
+      } else {
+         sendInfoToClient("info=The maximum transaction currently supported is "+ strconv.FormatFloat(rawToNANO(maxPayment), 'f', -1, 64) +" Nano. Your transaction has been refunded.", pubKey)
+      }
       err := Refund(receiveHash)
       if (err != nil) {
          sendEmail("IMMEDIATE ATTENTION REQUIRED", "Non-transaction refund failed! "+ err.Error() +
