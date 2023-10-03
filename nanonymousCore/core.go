@@ -72,7 +72,7 @@ var activeTransactionList = make(map[string][]byte)
 
 var random *rand.Rand
 
-const version = "1.0.4"
+const version = "1.0.5"
 
 // Random info about used ports:
 // 41721    Nanonymous request port
@@ -1934,8 +1934,12 @@ func checkBalance(nanoAddress string) error {
          return fmt.Errorf("checkBalance: %w", err)
       }
 
+      fmt.Println("BalanceInDB:", balanceInDB, "\nbalance     :", balance)
       if (balance.Cmp(balanceInDB) != 0) {
-         updateBalance(nanoAddress, balance)
+         err := updateBalance(nanoAddress, balance)
+         if (err != nil) {
+            return fmt.Errorf("checkBalance: %w", err)
+         }
       }
    }
 

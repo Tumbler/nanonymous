@@ -26,7 +26,7 @@ func updateBalance(nanoAddress string, balance *nt.Raw) error {
    "UPDATE " +
       "wallets " +
    "SET " +
-      "\"balance\" = $1" +
+      "\"balance\" = $1 " +
    "WHERE " +
       "\"hash\" = $2;"
 
