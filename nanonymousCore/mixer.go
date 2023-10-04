@@ -21,11 +21,11 @@ func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
    }
 
    // Get new mixer addresses
-   mix1, _, err := getNewAddress("", false, true, 0)
+   mix1, _, err := getNewAddress("", false, true, false, 0)
    if (err != nil) {
       return fmt.Errorf("sendToMixer: Orig: %d, %d, Failed to get new address1: %w:", origSeed, origIndex, err)
    }
-   mix2, _, err := getNewAddress("", false, true, 0)
+   mix2, _, err := getNewAddress("", false, true, false, 0)
    if (err != nil) {
       return fmt.Errorf("sendToMixer: Orig: %d, %d, Failed to get new address2: %w:", origSeed, origIndex, err)
    }
@@ -202,7 +202,7 @@ func extractFromMixer(amountToSend *nt.Raw, publicKey []byte) (nt.BlockHash, err
 
    defer conn.Close(context.Background())
 
-   transitionalAddress, _, err := getNewAddress("", false, true, 0)
+   transitionalAddress, _, err := getNewAddress("", false, true, false, 0)
    if (err != nil) {
       return finalHash, fmt.Errorf("extractFromMixer: Can't get transitionaladdress: %w", err)
    }
