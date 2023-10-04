@@ -86,7 +86,7 @@ function SetCurrentPrice(data) {
 function GetCurrentFee() {
 
    var req = new XMLHttpRequest();
-   req.open("POST", "php/getFee.php")
+   req.open("POST", "php/getFeeTest.php")
 
    req.onload = function() {
       console.log(this.response);
@@ -192,7 +192,7 @@ function validateNanoAddress() {
 async function ajaxGetAddress(finalAddress) {
 
    var req = new XMLHttpRequest();
-   req.open("POST", "php/getNewAddress.php?address="+ finalAddress)
+   req.open("POST", "php/getNewAddressTest.php?address="+ finalAddress)
 
    var Nano = document.getElementById("afterTaxAmount").value;
    var raw = nanocurrency.convert(Nano, {from:"Nano", to:"raw"})
@@ -202,6 +202,7 @@ async function ajaxGetAddress(finalAddress) {
       console.log(this.response);
       var reply = this.response.match(/address=(nano_[a-z0-9]+)/i);
       var info = this.response.match(/info=(.*)\n$/i);
+      var bridge = this.response.match(/bridge=(\w+)/i);
       if (reply !== null && reply.length > 1) {
          middleAddress = reply[1];
 
@@ -231,6 +232,11 @@ async function ajaxGetAddress(finalAddress) {
 
          document.getElementById("finalAddress").disabled = true;
 
+         if (bridge !== null && bridge.length > 1 && bridge[1] == "true") {
+            document.getElementById("updateMessage").innerHTML = "Your recipient is also using Nanonymous. Your transaction will go to their final address, but you won't receive a final hash to respect their privacy. (The fee will only be applied once)";
+            document.getElementById("updateMessage").hidden = false;
+         }
+
          if (mobileOrTablet) {
             var tooltiptap = document.getElementById("tooltiptap");
 
@@ -254,7 +260,7 @@ async function ajaxGetAddress(finalAddress) {
 
       // Wait until transaction is complete and then post the hash.
       var req2 = new XMLHttpRequest();
-      req2.open("POST", "php/getFinalHash.php?address="+ middleAddress, true)
+      req2.open("POST", "php/getFinalHashTest.php?address="+ middleAddress, true)
       req2.timeout = 0; // No timeout
 
       req2.abort = function() {
@@ -313,14 +319,25 @@ async function ajaxGetAddress(finalAddress) {
             setTimeout(function(){ // delay by 100 ms
             document.getElementById("QRdiv").style.maxHeight = "0px";
 
-            document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
-            document.getElementById("HashLink").target = "blank";
-            document.getElementById("HashLink").innerHTML = "Final hash:<br>" + hash;
-            document.getElementById("HashLink").style.color = "#313133";
+            if (hash.length < 32) {
+               document.getElementById("HashLink").innerHTML = "";
+               document.getElementById("HashLink").style.color = "#313133";
+            } else {
+               document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
+               document.getElementById("HashLink").target = "blank";
+               document.getElementById("HashLink").innerHTML = "Final hash:<br>" + hash;
+               document.getElementById("HashLink").style.color = "#313133";
+            }
             document.getElementById("Hashdiv").style.maxHeight = "1000px";
             document.getElementById("tooltiptap").hidden = true;
 
             setTimeout(function(){ // delay by 900 ms
+            document.getElementById("TransactionInfo").classList.remove("animate-zipRight-out");
+            document.getElementById("TransactionInfo").style.textAlign = "center";
+            document.getElementById("TransactionInfo").innerHTML = "<b>Transaction Complete!</b>"
+            document.getElementById("TransactionInfo").classList.add("animate-zipRight-in");
+
+            setTimeout(function(){ // delay by 100 ms
             document.getElementById("Hashdiv").classList.add("animate-zipRight-in");
             document.getElementById("HashLink").style.removeProperty("color");
 
@@ -356,6 +373,7 @@ async function ajaxGetAddress(finalAddress) {
                document.body.removeChild(confettiCanvas);
             }, 5000);
             }, 1000);
+            }, 100);
             }, 900);
             }, 100);
             }, 100);
@@ -373,86 +391,6 @@ async function ajaxGetAddress(finalAddress) {
    };
    req.send();
 
-}
-
-function off() {
-   var hash = "UwU";
-            document.getElementById("payment-label").classList.add("animate-zipRight-out");
-            setTimeout(function(){ // delay by 100 ms
-            document.getElementById("QRCode").classList.remove("animate-grow");
-            document.getElementById("QRCode").classList.add("animate-zipRight-out");
-            setTimeout(function(){ // delay by 100 ms
-            document.getElementById("qr-label").classList.remove("animate-fade-in");
-            document.getElementById("qr-label").classList.add("animate-zipRight-out");
-            setTimeout(function(){ // delay by 100 ms
-            document.getElementById("TransactionInfo").classList.add("animate-zipRight-out");
-            document.getElementById("QRdiv").style.maxHeight = "0px";
-
-            document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
-            document.getElementById("HashLink").innerHTML = "Final hash:<br>" + hash;
-            document.getElementById("HashLink").style.color = "#313133";
-            document.getElementById("Hashdiv").style.maxHeight = "1000px";
-            setTimeout(function(){ // delay by 900 ms
-            document.getElementById("TransactionInfo").classList.remove("animate-zipRight-out");
-            document.getElementById("TransactionInfo").style.textAlign = "center";
-            document.getElementById("TransactionInfo").innerHTML = "Transaction Complete!"
-            document.getElementById("TransactionInfo").classList.add("animate-zipRight-in");
-
-            setTimeout(function(){ // delay by 100 ms
-
-
-            document.getElementById("Hashdiv").classList.add("animate-zipRight-in");
-            document.getElementById("HashLink").style.removeProperty("color");
-
-            setTimeout(function(){ // delay by 1000 ms
-
-            var confettiCanvas = document.createElement('canvas');
-            confettiCanvas.style.position = 'fixed';
-            confettiCanvas.style.width = '90%';
-            confettiCanvas.style.height = '90%';
-            confettiCanvas.style.top = '5%';
-            confettiCanvas.style.left = '5%';
-            confettiCanvas.style.zIndex = '-1';
-
-            document.body.appendChild(confettiCanvas);
-
-            myConfetti = confetti.create(confettiCanvas, {
-               resize: true,
-               useWorker: true
-            });
-            myConfetti({
-               paricleCount: 80,
-               spread: 140,
-               startVelocity: 40,
-               ticks: 175,
-               origin: { y:0.6 }
-            });
-            setTimeout(() => {
-               confetti.reset();
-               document.body.removeChild(confettiCanvas);
-            }, 5000);
-            }, 1500);
-            }, 100);
-            }, 900);
-            }, 100);
-            }, 100);
-            }, 100);
-
-   document.getElementById("reset").onclick = on;
-}
-
-function on() {
-   document.getElementById("Hashdiv").style.maxHeight = "0px";
-   document.getElementById("QRdiv").style.maxHeight = "1000px";
-
-      document.getElementById("QRCode").classList.remove("animate-zipRight-out");
-      document.getElementById("QRCode").classList.add("animate-grow");
-      document.getElementById("qr-label").classList.remove("animate-zipRight-out");
-      document.getElementById("qr-label").classList.add("animate-fade-in");
-      document.getElementById("payment-label").classList.remove("animate-zipRight-out");
-
-   document.getElementById("QRdiv").hidden = false;
-   document.getElementById("reset").onclick = off;
 }
 
 function copyAddress() {
@@ -488,8 +426,8 @@ function changeCurrency() {
          newVal = nanoVal * curVal / usdVal
          document.getElementById("nanoPrice").innerHTML = newVal.toFixed(6);
 
-         // Change all the currency symbols
          if (info !== null && info.length > 1) {
+            // Change all the currency symbols
             let labels = document.getElementsByClassName('currSym');
             [].slice.call(labels).forEach(function(label) {
                label.innerHTML = info[0]
