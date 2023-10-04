@@ -28,7 +28,10 @@ func CLI() {
    _, err := getCurrentIndexFromDatabase(1)
    if (err != nil) {
       // Probably has no wallets in the DB. Create one.
-      getNewAddress("", true, false, 0)
+      _, _, err := getNewAddress("", true, false, 0)
+      if (err != nil) {
+         fmt.Println("getNewAddress error: ", err)
+      }
    }
 
    myKey, err := getSeedFromIndex(1, 0)
