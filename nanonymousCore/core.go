@@ -68,7 +68,12 @@ var betaMode bool
 
 var wg sync.WaitGroup
 
-var activeTransactionList = make(map[string][]byte)
+type activeTransaction struct {
+   recipient []byte
+   bridge bool
+}
+
+var activeTransactionList = make(map[string]activeTransaction)
 
 var random *rand.Rand
 
@@ -417,7 +422,8 @@ func handleRequest(conn net.Conn) error {
                return fmt.Errorf("handleRequest3: %w", err)
             }
 
-            recipientPub := getRecipientAddress(seedID, index)
+            // TODO add bridge support/ update
+            recipientPub, _ := getRecipientAddress(seedID, index)
 
             if (len(recipientPub) == 32) {
                // Theres an active transaction
@@ -429,7 +435,7 @@ func handleRequest(conn net.Conn) error {
 
                // Bridging to recipient address instead of the address
                // specified.
-               err = respondWithNewAddress(recipientAddress, conn)
+               err = respondWithNewAddress(recipientAddress, conn, true)
                if (err != nil) {
                   return fmt.Errorf("handleRequest2: %w", err)
                }
@@ -437,7 +443,7 @@ func handleRequest(conn net.Conn) error {
                conn.Write([]byte("Invalid Request!"))
             }
          } else {
-            err := respondWithNewAddress(subArray[1], conn)
+            err := respondWithNewAddress(subArray[1], conn, false)
             if (err != nil) {
                return fmt.Errorf("handleRequest4: %w", err)
             }
@@ -550,9 +556,9 @@ func handleRequest(conn net.Conn) error {
 
 // getNewAddress finds the next available address given the keys stored in the
 // database and returns address B. If "receivingAddress" A is not an empty
-// string, then it will also place A->B into the blacklist. And registers it as
+// string, then it will also place A->B into the blacklist and register it as
 // an active transaction.
-func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId int) (*keyMan.Key, int, error) {
+func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, bridge bool, seedId int) (*keyMan.Key, int, error) {
    var seed keyMan.Key
 
    conn, err := pgx.Connect(context.Background(), databaseUrl)
@@ -678,7 +684,7 @@ func getNewAddress(receivingAddress string, receiveOnly bool, mixer bool, seedId
       }
 
       // Track so that when we receive funds we know where to send it
-      err = setRecipientAddress(seedID, seed.Index, receivingAddressByte)
+      err = setRecipientAddress(seedID, seed.Index, receivingAddressByte, bridge)
       if (err != nil) {
          Warning.Println("getNewAddress: ", err.Error())
          //return nil, 0, fmt.Errorf("getNewAddress: %w", err)
@@ -733,7 +739,7 @@ func timeoutTransaction(seedID int, index int) {
 
    time.Sleep(TRANSACTION_DEADLINE)
 
-   err := setRecipientAddress(seedID, index, nil)
+   err := setRecipientAddress(seedID, index, nil, false)
    if (err != nil) {
       Warning.Println("timeoutTransaction: Failed to delete transaction: %w", err)
    }
@@ -929,7 +935,7 @@ func receivedNano(nanoAddress string) error {
    setAddressInUse(nanoAddress)
 
    // Get recipient address for later use.
-   t.recipientAddress = getRecipientAddress(t.paymentParentSeedId, t.paymentIndex)
+   t.recipientAddress, t.bridge = getRecipientAddress(t.paymentParentSeedId, t.paymentIndex)
    if (t.recipientAddress == nil) {
       err = fmt.Errorf("receivedNano: no active transaction available")
       return err
@@ -1133,7 +1139,7 @@ func sendNanoToRecipient(t *Transaction) error {
       t.commChannel <- *new(transactionComm)
    } else if (len(t.sendingKeys) > 1) {
       // Need to do a multi-send; Get a new wallet to combine all funds into
-      t.transitionalKey, t.transitionSeedId, err = getNewAddress("", false, false, 0)
+      t.transitionalKey, t.transitionSeedId, err = getNewAddress("", false, false, false, 0)
       if (err != nil) {
          return fmt.Errorf("sendNanoToRecipient: %w", err)
       }
@@ -1381,26 +1387,31 @@ func checkBlackList(parentSeedId int, index int, clientAddress []byte) (bool, *k
 
 // getRecipientAddress is an interface to work with the active transaction list.
 // Takes an internal wallet and returns the registered recipient address.
-func getRecipientAddress(parentSeedId int, index int) []byte {
+func getRecipientAddress(parentSeedId int, index int) ([]byte, bool) {
    key := strconv.Itoa(parentSeedId) + "-" + strconv.Itoa(index)
-   return activeTransactionList[key]
+   return activeTransactionList[key].recipient, activeTransactionList[key].bridge
 }
 
 // setRecipientAddress is an interface to work with the active transaction list.
 // Adds or removes an entry that maps one of our internal wallets to a recipient
 // address.
-func setRecipientAddress(parentSeedId int, index int, recipientAddress []byte) error {
+func setRecipientAddress(parentSeedId int, index int, recipientAddress []byte, bridge bool) error {
    key := strconv.Itoa(parentSeedId) + "-" + strconv.Itoa(index)
-   if (activeTransactionList[key] != nil) {
+   _, exists := activeTransactionList[key]
+   if (exists) {
       if (recipientAddress == nil) {
          delete(activeTransactionList, key)
+         return nil
       } else {
          return fmt.Errorf("setRecipientAddress: address already exists in active transaction list")
       }
    }
 
    if (recipientAddress != nil) {
-      activeTransactionList[key] = recipientAddress
+      activeTransactionList[key] = activeTransaction {
+                                     recipientAddress,
+                                     bridge,
+                                  }
    }
 
    return nil
@@ -2173,8 +2184,8 @@ func removeHash(hashList []nt.BlockHash, i int) []nt.BlockHash {
    return hashList[:len(hashList)-1]
 }
 
-func respondWithNewAddress(recipientAddress string, conn net.Conn) error {
-   newKey, _, err := getNewAddress(recipientAddress, false, false, 0)
+func respondWithNewAddress(recipientAddress string, conn net.Conn, bridge bool) error {
+   newKey, _, err := getNewAddress(recipientAddress, false, false, bridge, 0)
    if (err != nil) {
       if (verbosity >= 3) {
          fmt.Println("respondWithNewAddress: ", err.Error())
@@ -2185,7 +2196,7 @@ func respondWithNewAddress(recipientAddress string, conn net.Conn) error {
       return fmt.Errorf("respondWithNewAddress: %w", err)
    }
 
-   conn.Write([]byte("address="+ newKey.NanoAddress))
+   conn.Write([]byte("address="+ newKey.NanoAddress +"&bridge="+ fmt.Sprint(bridge)))
 
    return nil
 }

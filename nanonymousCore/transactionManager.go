@@ -35,6 +35,7 @@ type Transaction struct {
    commChannel chan transactionComm
    errChannel chan error
    confirmationChannel chan string
+   bridge bool
    multiSend bool
    dirtyAddress int // The sendingKeys address that has been linked to other addresses but not blacklisted
    abort bool
@@ -100,7 +101,7 @@ func transactionManager(t *Transaction) {
       }
 
       // Remove active transaction
-      err := setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, nil)
+      err := setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, nil, false)
       if (err != nil) {
          Warning.Println("defer transactionManager: ", err.Error())
       }
@@ -140,6 +141,10 @@ func transactionManager(t *Transaction) {
          if (len(t.finalHash) < 32) {
             Warning.Println("Final hash for transaction is blank:\n", t)
             sendEmail("WARNING", "Final hash for transaction is blank:\n"+ t.String())
+         }
+         if (t.bridge) {
+            // Final hash would leak recipients address to sender. Redact it.
+            t.finalHash = []byte("COFFEE")
          }
          sendFinalHash(t.finalHash, t.paymentAddress)
 

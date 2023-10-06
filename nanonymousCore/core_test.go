@@ -121,7 +121,7 @@ func Test_getNewAddress(t *testing.T) {
    }
 
    for _, test := range test1 {
-      key, _, err := getNewAddress(test.inputAddress, false, false, 0)
+      key, _, err := getNewAddress(test.inputAddress, false, false, false, 0)
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
@@ -301,12 +301,12 @@ func Test_receivedNano(t *testing.T) {
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
-      setRecipientAddress(test.seedId, test.index, recipientPub)
+      setRecipientAddress(test.seedId, test.index, recipientPub, false)
 
       if (i == 5) {
          // Kinda weird to hardcode this, but whatever...
          // Adding a receive only address to test.
-         getNewAddress("", true, false, 0)
+         getNewAddress("", true, false, false, 0)
       }
 
       testingPayment = append(make([]*nt.Raw, 0), test.nanoReceived)
@@ -388,7 +388,7 @@ func Test_receiveOnly(t *testing.T) {
    }
 
    // Get new receive_only address
-   getNewAddress("", true, false, 0)
+   getNewAddress("", true, false, false, 0)
 
    for _, test := range test1 {
       resetInUse()
@@ -499,7 +499,7 @@ func Test_extractFromMixer(t *testing.T) {
       if (err != nil) {
          t.Errorf("Error during execution: %s", err.Error())
       }
-      setRecipientAddress(test.seedId, test.index, recipientPub)
+      setRecipientAddress(test.seedId, test.index, recipientPub, false)
 
       testingPaymentExternal = false
       testingReceiveAlls = 0
@@ -581,7 +581,7 @@ func Test_seedRetire(t *testing.T){
       }
 
       retireCurrentSeed()
-      getNewAddress("", false, false, 0)
+      getNewAddress("", false, false, false, 0)
       retireCurrentSeed()
 
       afterBalance, err := balanceInSeed(3)
