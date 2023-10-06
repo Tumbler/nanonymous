@@ -88,6 +88,66 @@
       </table>
       <br>
       <div id="addressInputContainer">
+         <label><input type="checkbox" id="advancedCheck" onclick="toggleOptions()"> Advanced options</label></input>
+         <div id="advancedOptions" hidden=true>
+            <label> Number of sends: <input id="numSends" type="number" class="smallNumber" min="1" max ="5" value="1" oninput="changeSends()"> </label>
+            <label> &nbsp;&nbsp;&nbsp;Delays <input type="checkbox" id="delayCheck" onclick="toggleDelays()"></label>
+            <label id="delayInput0" hidden=true>
+               <input id="send0Min" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> min
+               <input id="send0Sec" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> sec
+            </label>
+            <div id="send1" style="display:none;">
+               <label> Send 1:
+                  <input id="send1Percent" type="number" class="smallNumber" min="1" max ="99" value="1" oninput="balancePercents(this)"> %
+               </label>
+               <label class="delayInput" hidden=true>
+                  <input id="send1Min" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> min
+                  <input id="send1Sec" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> sec
+               </label>
+               <br>
+            </div>
+            <div id="send2" style="display:none;">
+               <label> Send 2:
+                  <input id="send2Percent" type="number" class="smallNumber" min="1" max ="99" value="1" oninput="balancePercents(this)"> %
+               </label>
+               <label class="delayInput" hidden=true>
+                  <input id="send2Min" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> min
+                  <input id="send2Sec" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> sec
+               </label>
+               <br>
+            </div>
+            <div id="send3" style="display:none;">
+               <label> Send 3:
+                  <input id="send3Percent" type="number" class="smallNumber" min="1" max ="99" value="1" oninput="balancePercents(this)"> %
+               </label>
+               <label class="delayInput" hidden=true>
+                  <input id="send3Min" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> min
+                  <input id="send3Sec" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> sec
+               </label>
+               <br>
+            </div>
+            <div id="send4" style="display:none;">
+               <label> Send 4:
+                  <input id="send4Percent" type="number" class="smallNumber" min="1" max ="99" value="1" oninput="balancePercents(this)"> %
+               </label>
+               <label class="delayInput" hidden=true>
+                  <input id="send4Min" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> min
+                  <input id="send4Sec" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> sec
+               </label>
+               <br>
+            </div>
+            <div id="send5" style="display:none;">
+               <label> Send 5:
+                  <input id="send5Percent" type="number" class="smallNumber" min="1" max ="99" value="1" oninput="balancePercents(this)"> %
+               </label>
+               <label class="delayInput" hidden=true>
+                  <input id="send5Min" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> min
+                  <input id="send5Sec" type="number" class="smallNumber" min="0" max ="59" value="1" oninput="timeCheck(this)"> sec
+               </label>
+               <br>
+            </div>
+         </div>
+         <br>
          <label> Address to send to:</label>
          <label> (type address or scan QR code)</label>
          <button id="scanQR" type="button" onclick="requestCamera()" style="height: 35px; width: 35px; border-radius: 5px; background: white;"> <img src="images/qr_icon.svg" height=20px width=20px></button>

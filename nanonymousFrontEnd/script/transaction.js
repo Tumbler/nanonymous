@@ -86,7 +86,7 @@ function SetCurrentPrice(data) {
 function GetCurrentFee() {
 
    var req = new XMLHttpRequest();
-   req.open("POST", "php/getFeeTest.php")
+   req.open("POST", "php/getFee.php")
 
    req.onload = function() {
       console.log(this.response);
@@ -191,8 +191,42 @@ function validateNanoAddress() {
 
 async function ajaxGetAddress(finalAddress) {
 
+   let url = "php/getNewAddress.php?address="+ finalAddress;
+
+   if (document.getElementById("advancedCheck").checked) {
+      let numSends = document.getElementById("numSends").value;
+
+      if (numSends > 1) {
+         url += "&percents="
+         for (let i = 1; i <= numSends; i++) {
+            url += document.getElementById("send"+ i +"Percent").value + ",";
+         }
+         // Remove trailing comma
+         url = url.slice(0, -1);
+      }
+
+      if (document.getElementById("delayCheck").checked) {
+         url += "&delays="
+         if (numSends == 1) {
+            let seconds = parseInt(document.getElementById("send0Min").value) * 60
+            seconds += parseInt(document.getElementById("send0Sec").value)
+            url += seconds
+         } else {
+            for (let i = 1; i <= numSends; i++) {
+               let seconds = parseInt(document.getElementById("send"+ i +"Min").value) * 60
+               seconds += parseInt(document.getElementById("send"+ i +"Sec").value)
+               url += seconds + ",";
+            }
+            // Remove trailing comma
+            url = url.slice(0, -1);
+         }
+      }
+   }
+
+   console.log("url="+ url);
+
    var req = new XMLHttpRequest();
-   req.open("POST", "php/getNewAddressTest.php?address="+ finalAddress)
+   req.open("POST", "php/getNewAddress.php?address="+ finalAddress)
 
    var Nano = document.getElementById("afterTaxAmount").value;
    var raw = nanocurrency.convert(Nano, {from:"Nano", to:"raw"})
@@ -231,6 +265,11 @@ async function ajaxGetAddress(finalAddress) {
          QRactive = true;
 
          document.getElementById("finalAddress").disabled = true;
+         document.getElementById("advancedCheck").disabled = true;
+         let nodes = document.getElementById("advancedOptions").getElementsByTagName('*');
+         for (let i = 0; i < nodes.length; i++) {
+            nodes[i].disabled = true
+         }
 
          if (bridge !== null && bridge.length > 1 && bridge[1] == "true") {
             document.getElementById("updateMessage").innerHTML = "Your recipient is also using Nanonymous. Your transaction will go to their final address, but you won't receive a final hash to respect their privacy. (The fee will only be applied once)";
@@ -260,7 +299,7 @@ async function ajaxGetAddress(finalAddress) {
 
       // Wait until transaction is complete and then post the hash.
       var req2 = new XMLHttpRequest();
-      req2.open("POST", "php/getFinalHashTest.php?address="+ middleAddress, true)
+      req2.open("POST", "php/getFinalHash.php?address="+ middleAddress, true)
       req2.timeout = 0; // No timeout
 
       req2.abort = function() {
@@ -430,16 +469,196 @@ function changeCurrency() {
             // Change all the currency symbols
             let labels = document.getElementsByClassName('currSym');
             [].slice.call(labels).forEach(function(label) {
-               label.innerHTML = info[0]
+               label.innerHTML = info[0];
             });
          }
 
          if (document.getElementById("USDamount").value.length > 0) {
-            autoFill(1)
+            autoFill(1);
          }
       }
    }
    req.send();
+}
+
+function timeCheck(textBox) {
+   if (textBox.value > 59) {
+      textBox.value = 59;
+   } else if (textBox.value < 0) {
+      textBox.value = 0;
+   }
+}
+
+function balancePercents(textBox) {
+   if (textBox.value > 99) {
+      textBox.value = 99;
+   } else if (textBox.value < 1 && textBox.value.length > 0) {
+      textBox.value = 1;
+   }
+
+   let numSends = document.getElementById("numSends").value;
+
+   for (let i = numSends; i > 0; i--) {
+      thisBox = document.getElementById("send"+ i +"Percent");
+      if (thisBox === textBox) {
+         // Don't alter the box we're editing.
+         continue;
+      }
+
+      let changeNeeded = 100 - getTotalPercent();
+
+      thisBox.value = parseInt(thisBox.value) + changeNeeded
+
+      if (thisBox.value > 99) {
+         thisBox.value = 99;
+      } else if (thisBox.value < 1) {
+         thisBox.value = 1;
+      } else {
+         // No more change needed
+         break
+      }
+   }
+
+   if (getTotalPercent() != 100) {
+      document.getElementById("errorMessage").innerHTML = "Percents do not add up to 100%.";
+   } else {
+      document.getElementById("errorMessage").innerHTML = "";
+   }
+}
+
+function getTotalPercent() {
+   let numSends = document.getElementById("numSends").value;
+   let totalPercent = 0
+   for (let i = 1; i <= numSends; i++) {
+      num = parseInt(document.getElementById("send"+ i +"Percent").value);
+      if (!isNaN(num)) {
+         totalPercent += num
+      }
+   }
+
+   return totalPercent
+}
+
+
+function toggleOptions() {
+   let checked = document.getElementById("advancedCheck").checked;
+
+   if (checked) {
+      document.getElementById("advancedOptions").hidden = false;
+      document.getElementById("numSends").value = 2;
+      changeSends();
+   } else {
+      document.getElementById("advancedOptions").hidden = true;
+   }
+}
+
+function changeSends() {
+   let numSends = document.getElementById("numSends").value;
+   if (numSends < 1) {
+      numSends = 1;
+      // Let them erase
+      if (document.getElementById("numSends").value.length > 0) {
+         document.getElementById("numSends").value = 1
+      }
+   } else if (numSends > 5) {
+      numSends = 5;
+      document.getElementById("numSends").value = 5
+   }
+
+   if (numSends > 1) {
+      document.getElementById("delayInput0").hidden = true;
+   } else if (document.getElementById("delayCheck").checked) {
+      document.getElementById("delayInput0").hidden = false;
+   }
+
+   if (numSends < 2) {
+      document.getElementById("send1").style.display = "none";
+      document.getElementById("send2").style.display = "none";
+   } else {
+      document.getElementById("send1").style.display = "block";
+      document.getElementById("send2").style.display = "block";
+   }
+
+   if (numSends < 3) {
+      document.getElementById("send3").style.display = "none";
+   } else {
+      document.getElementById("send3").style.display = "block";
+   }
+
+   if (numSends < 4) {
+      document.getElementById("send4").style.display = "none";
+   } else {
+      document.getElementById("send4").style.display = "block";
+   }
+
+   if (numSends < 5) {
+      document.getElementById("send5").style.display = "none";
+   } else {
+      document.getElementById("send5").style.display = "block";
+   }
+
+   // Randomize percents
+   if (numSends > 1) {
+      let percentLeft = 100
+      let randomPercents = new Array(numSends);
+      for (let i = 0; i < numSends; i++) {
+         if (i == numSends -1) {
+            // Last one; soak up the rest
+            randomPercents[i] = percentLeft;
+         } else {
+            value = getRandomInt(1, .8 * percentLeft);
+            randomPercents[i] = value
+            percentLeft -= value
+         }
+      }
+
+      shuffle(randomPercents)
+      document.getElementById("send1Percent").value = randomPercents[0]
+      if (randomPercents.length > 1) {
+         document.getElementById("send2Percent").value = randomPercents[1]
+      }
+      if (randomPercents.length > 2) {
+         document.getElementById("send3Percent").value = randomPercents[2]
+      }
+      if (randomPercents.length > 3) {
+         document.getElementById("send4Percent").value = randomPercents[3]
+      }
+      if (randomPercents.length > 4) {
+         document.getElementById("send5Percent").value = randomPercents[4]
+      }
+   }
+}
+
+function toggleDelays() {
+   let displayBool = document.getElementById("delayCheck").checked;
+
+   if (document.getElementById("numSends").value == 1) {
+      document.getElementById("delayInput0").hidden = !displayBool;
+
+   } else {
+      document.getElementById("delayInput0").hidden = true;
+   }
+
+   let delayInputs = document.getElementsByClassName('delayInput');
+   [].slice.call(delayInputs).forEach(function(delayInput) {
+      delayInput.hidden = !displayBool;
+   });
+
+   // Randomize delays
+   if (displayBool) {
+      document.getElementById("send0Min").value = getRandomInt(0, 14)
+      document.getElementById("send0Sec").value = getRandomInt(0, 59)
+      document.getElementById("send1Min").value = getRandomInt(0, 14)
+      document.getElementById("send1Sec").value = getRandomInt(0, 59)
+      document.getElementById("send2Min").value = getRandomInt(0, 14)
+      document.getElementById("send2Sec").value = getRandomInt(0, 59)
+      document.getElementById("send3Min").value = getRandomInt(0, 14)
+      document.getElementById("send3Sec").value = getRandomInt(0, 59)
+      document.getElementById("send4Min").value = getRandomInt(0, 14)
+      document.getElementById("send4Sec").value = getRandomInt(0, 59)
+      document.getElementById("send5Min").value = getRandomInt(0, 14)
+      document.getElementById("send5Sec").value = getRandomInt(0, 59)
+   }
 }
 
 function mobileOrTabletCheck() {
@@ -447,3 +666,33 @@ function mobileOrTabletCheck() {
   (function(a){if(/(android|bb\d+|meego).+mobile|avantgo|bada\/|blackberry|blazer|compal|elaine|fennec|hiptop|iemobile|ip(hone|od)|iris|kindle|lge |maemo|midp|mmp|mobile.+firefox|netfront|opera m(ob|in)i|palm( os)?|phone|p(ixi|re)\/|plucker|pocket|psp|series(4|6)0|symbian|treo|up\.(browser|link)|vodafone|wap|windows ce|xda|xiino|android|ipad|playbook|silk/i.test(a)||/1207|6310|6590|3gso|4thp|50[1-6]i|770s|802s|a wa|abac|ac(er|oo|s\-)|ai(ko|rn)|al(av|ca|co)|amoi|an(ex|ny|yw)|aptu|ar(ch|go)|as(te|us)|attw|au(di|\-m|r |s )|avan|be(ck|ll|nq)|bi(lb|rd)|bl(ac|az)|br(e|v)w|bumb|bw\-(n|u)|c55\/|capi|ccwa|cdm\-|cell|chtm|cldc|cmd\-|co(mp|nd)|craw|da(it|ll|ng)|dbte|dc\-s|devi|dica|dmob|do(c|p)o|ds(12|\-d)|el(49|ai)|em(l2|ul)|er(ic|k0)|esl8|ez([4-7]0|os|wa|ze)|fetc|fly(\-|_)|g1 u|g560|gene|gf\-5|g\-mo|go(\.w|od)|gr(ad|un)|haie|hcit|hd\-(m|p|t)|hei\-|hi(pt|ta)|hp( i|ip)|hs\-c|ht(c(\-| |_|a|g|p|s|t)|tp)|hu(aw|tc)|i\-(20|go|ma)|i230|iac( |\-|\/)|ibro|idea|ig01|ikom|im1k|inno|ipaq|iris|ja(t|v)a|jbro|jemu|jigs|kddi|keji|kgt( |\/)|klon|kpt |kwc\-|kyo(c|k)|le(no|xi)|lg( g|\/(k|l|u)|50|54|\-[a-w])|libw|lynx|m1\-w|m3ga|m50\/|ma(te|ui|xo)|mc(01|21|ca)|m\-cr|me(rc|ri)|mi(o8|oa|ts)|mmef|mo(01|02|bi|de|do|t(\-| |o|v)|zz)|mt(50|p1|v )|mwbp|mywa|n10[0-2]|n20[2-3]|n30(0|2)|n50(0|2|5)|n7(0(0|1)|10)|ne((c|m)\-|on|tf|wf|wg|wt)|nok(6|i)|nzph|o2im|op(ti|wv)|oran|owg1|p800|pan(a|d|t)|pdxg|pg(13|\-([1-8]|c))|phil|pire|pl(ay|uc)|pn\-2|po(ck|rt|se)|prox|psio|pt\-g|qa\-a|qc(07|12|21|32|60|\-[2-7]|i\-)|qtek|r380|r600|raks|rim9|ro(ve|zo)|s55\/|sa(ge|ma|mm|ms|ny|va)|sc(01|h\-|oo|p\-)|sdk\/|se(c(\-|0|1)|47|mc|nd|ri)|sgh\-|shar|sie(\-|m)|sk\-0|sl(45|id)|sm(al|ar|b3|it|t5)|so(ft|ny)|sp(01|h\-|v\-|v )|sy(01|mb)|t2(18|50)|t6(00|10|18)|ta(gt|lk)|tcl\-|tdg\-|tel(i|m)|tim\-|t\-mo|to(pl|sh)|ts(70|m\-|m3|m5)|tx\-9|up(\.b|g1|si)|utst|v400|v750|veri|vi(rg|te)|vk(40|5[0-3]|\-v)|vm40|voda|vulc|vx(52|53|60|61|70|80|81|83|85|98)|w3c(\-| )|webc|whit|wi(g |nc|nw)|wmlb|wonu|x700|yas\-|your|zeto|zte\-/i.test(a.substr(0,4))) check = true;})(navigator.userAgent||navigator.vendor||window.opera);
   return check;
 };
+
+function getRandomInt(min, max) {
+   const randomBuffer = new Uint32Array(1);
+
+   window.crypto.getRandomValues(randomBuffer);
+
+   let randomNumber = randomBuffer[0] / (0xffffffff + 1);
+
+   min = Math.ceil(min);
+   max = Math.floor(max);
+   return Math.floor(randomNumber * (max - min + 1)) + min;
+}
+
+function shuffle(array) {
+  let currentIndex = array.length,  randomIndex;
+
+  // While there remain elements to shuffle.
+  while (currentIndex > 0) {
+
+    // Pick a remaining element.
+    randomIndex = Math.floor(Math.random() * currentIndex);
+    currentIndex--;
+
+    // And swap it with the current element.
+    [array[currentIndex], array[randomIndex]] = [
+      array[randomIndex], array[currentIndex]];
+  }
+
+  return array;
+}

@@ -51,6 +51,11 @@
     outline-color: grey;
     outline-width: 2px;
  }
+ #currencyDropDown {
+    border-radius: 5px;
+    border-color: #0BD1DF;
+    font-size: 0.9em;
+ }
  .inbox {
     border-radius: 5px;
     border-color: #0BD1DF;
@@ -64,6 +69,29 @@
     max-width: 100%;
     height: auto;
     margin-top: 5px;
+ }
+ .smallNumber {
+    border-radius: 5px;
+    border-color: #0BD1DF;
+    width: 35px;
+    height: auto;
+    margin-top: 5px;
+ }
+ .smallNumber:disabled {
+    color: DimGrey;
+    background: #AAAAAA;
+ }
+ #advancedCheck {
+    border-radius: 5px;
+    border-color: #0BD1DF;
+ }
+ #advancedOptions {
+    padding: 10px;
+    font-size: 0.8em;
+    border-style: solid;
+    border-width: 1px;
+    border-color: grey;
+
  }
  #container {
     position: fixed;
