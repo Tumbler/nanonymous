@@ -28,7 +28,7 @@ func CLI() {
    _, err := getCurrentIndexFromDatabase(1)
    if (err != nil) {
       // Probably has no wallets in the DB. Create one.
-      _, _, err := getNewAddress("", true, false, false, 0)
+      _, _, err := getNewAddress("", true, false, false, []int{}, []int{}, 0)
       if (err != nil) {
          fmt.Println("getNewAddress error: ", err)
       }
@@ -1041,7 +1041,7 @@ func CLInew(myKey *keyMan.Key, args []string, prompt *string) error {
          seedId, _ = strconv.Atoi(args[1])
       }
 
-      key, seed, err := getNewAddress("", receiveOnly, false, false, seedId)
+      key, seed, err := getNewAddress("", receiveOnly, false, false, []int{}, []int{}, seedId)
       if (err != nil) {
          return fmt.Errorf("CLInew: %w", err)
       }

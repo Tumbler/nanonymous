@@ -20,24 +20,29 @@ type Transaction struct {
    paymentAddress []byte
    paymentParentSeedId int
    paymentIndex int
+   payment *nt.Raw
    receiveHash nt.BlockHash
-   receiveWg sync.WaitGroup
+   receiveWg []sync.WaitGroup // One per subsend
    recipientAddress []byte
    fee *nt.Raw
-   amountToSend *nt.Raw
-   sendingKeys []*keyMan.Key
-   walletSeed []int
-   walletBalance []*nt.Raw
-   individualSendAmount []*nt.Raw
-   transitionalKey *keyMan.Key
-   transitionSeedId int
-   finalHash nt.BlockHash
-   commChannel chan transactionComm
-   errChannel chan error
-   confirmationChannel chan string
+   amountToSend []*nt.Raw // One per subsend.
+   sendingKeys [][]*keyMan.Key // One per subsend.
+   walletSeed [][]int // One per subsend.
+   walletBalance [][]*nt.Raw // One per subsend.
+   individualSendAmount [][]*nt.Raw // One per subsend.
+   transitionalKey []*keyMan.Key // One per subsend.
+   transitionSeedId []int // One per subsend.
+   finalHash []nt.BlockHash // One per subsend.
+   commChannel []chan transactionComm // One per subsend
+   errChannel []chan error // One per subsend
+   confirmationChannel []chan string // One per subsend
+   percents []int
+   delays []int
    bridge bool
-   multiSend bool
-   dirtyAddress int // The sendingKeys address that has been linked to other addresses but not blacklisted
+   numSubSends int // This is how many individual sends the client has asked to split the transaction into.
+   multiSend []bool // This is if we're using multiple wallets to satisfy a single send. One per subsend.
+   dirtyAddress []int // The sendingKeys address that has been linked to other addresses but not blacklisted. One per subsend.
+   transactionSucessfull []bool // One per subsend.
    abort bool
 }
 
@@ -54,18 +59,18 @@ func (t Transaction) String() string {
    "\n  receiveHash: "+ t.receiveHash.String() +
    "\n  recipientAddress: "+ ra +
    "\n  fee: "+ t.fee.String() +
-   "\n  amountToSend: "+ t.amountToSend.String() +
+   "\n  amountToSend: "+ fmt.Sprint(t.amountToSend) +
    "\n  sendingKeys: "+ fmt.Sprint(t.sendingKeys) +
    "\n  walletSeed: "+ fmt.Sprint(t.walletSeed) +
    "\n  walletBalance: "+ fmt.Sprint(t.walletBalance) +
    "\n  individualSendAmount: "+ fmt.Sprint(t.individualSendAmount) +
    "\n  transitionalKey: "+ fmt.Sprint(t.transitionalKey) +
-   "\n  finalHash: "+ t.finalHash.String() +
-   "\n  multiSend: "+ strconv.FormatBool(t.multiSend) +
-   "\n  dirtyAddress: "+ strconv.Itoa(t.dirtyAddress) +
+   "\n  finalHash: "+ fmt.Sprint(t.finalHash) +
+   "\n  multiSend: "+ fmt.Sprint(t.multiSend) +
+   "\n  dirtyAddress: "+ fmt.Sprint(t.dirtyAddress) +
    "\n  abort: "+ strconv.FormatBool(t.abort)
 
- return ret
+   return ret
 }
 
 type transactionComm struct {
@@ -82,11 +87,6 @@ const RetryNumber = 3
 // transactionManager tracks all on-chain actions spawned by receivedNano(),
 // coordinates send/receives, and handles refunds if something goes wrong.
 func transactionManager(t *Transaction) {
-   t.receiveWg.Add(1)
-   var numDone = 0
-   var operation = 0
-   var transcationSucessfull bool
-
 
    wg.Add(1)
    defer wg.Done()
@@ -101,15 +101,15 @@ func transactionManager(t *Transaction) {
       }
 
       // Remove active transaction
-      err := setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, nil, false)
+      err := setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, nil, false, []int{}, []int{})
       if (err != nil) {
          Warning.Println("defer transactionManager: ", err.Error())
       }
 
       // Cancel all the things
-      if !(transcationSucessfull) {
+      if !(fullTransactionWasSuccessfull(t.transactionSucessfull)) {
          sendInfoToClient("info=There was an internal error. Your transaction has been refunded.", t.paymentAddress)
-         err := Refund(t.receiveHash)
+         err := checkPartialRefund(t)
          if (err != nil) {
             // VERY BAD! Just accepted money, failed to deliver it, and didn't
             //           refund the user!
@@ -118,12 +118,16 @@ func transactionManager(t *Transaction) {
             sendEmail("IMMEDIATE ATTENTION REQUIRED", "Refund failed!! Address: "+ nanoAddress +" error: "+ err.Error() +
                "\n\nPayment Hash: "+ t.receiveHash.String() +
                "\nID: "+ strconv.Itoa(t.paymentParentSeedId) +","+ strconv.Itoa(t.paymentIndex) +
-               "\nAmount: "+ strconv.FormatFloat(rawToNANO(nt.NewRaw(0).Add(t.amountToSend, t.fee)), 'f', -1, 64))
+               "\nAmount: "+ strconv.FormatFloat(rawToNANO(t.payment), 'f', -1, 64))
          }
-         reverseTransitionalAddress(t)
+         mixTransitionalAddresses(t)
          t.abort = true
-         t.receiveWg.Done()
-         if (t.multiSend) {
+         for i, _ := range t.receiveWg {
+            t.receiveWg[i].Done()
+         }
+         if (t.numSubSends > 1) {
+            Warning.Println("Sub send transaction failed (", t.id, ")")
+         } else if (t.multiSend[0]) {
             Warning.Println("Multi transaction failed (", t.id, ")")
          } else {
             Warning.Println("Transaction failed (", t.id, ")")
@@ -144,45 +148,82 @@ func transactionManager(t *Transaction) {
          }
          if (t.bridge) {
             // Final hash would leak recipients address to sender. Redact it.
-            t.finalHash = []byte("COFFEE")
+            for i, _ := range t.finalHash {
+               t.finalHash[i] = []byte("COFFEE")
+            }
          }
          sendFinalHash(t.finalHash, t.paymentAddress)
 
          // Send any dirty addresses to the mixer.
-         if (t.dirtyAddress != -1) {
-            if (verbosity >= 8) {
-               fmt.Println("Sending dirty address to mixer")
-            }
-            err := sendToMixer(t.sendingKeys[t.dirtyAddress], 1)
+         for i, dirtyAddress := range t.dirtyAddress {
+            if (dirtyAddress != -1) {
+               if (verbosity >= 8) {
+                  fmt.Println("Sending dirty address to mixer")
+               }
+               err := sendToMixer(t.sendingKeys[i][dirtyAddress], 1)
 
-            if (err != nil) {
-               Error.Println("Mixer Error:", err.Error())
-               sendEmail("WARNING", "Mixer Error: "+ err.Error())
+               if (err != nil) {
+                  Error.Println("Mixer Error:", err.Error())
+                  sendEmail("WARNING", "Mixer Error: "+ err.Error())
+               }
             }
          }
       }
 
       // Un-mark all addresses
       setAddressNotInUse(address)
-      for _, key := range t.sendingKeys {
-         setAddressNotInUse(key.NanoAddress)
+      for _, sendingKeys := range t.sendingKeys {
+         for _, key := range sendingKeys {
+            setAddressNotInUse(key.NanoAddress)
+         }
       }
-      if (t.transitionalKey != nil) {
-         setAddressNotInUse(t.transitionalKey.NanoAddress)
+      for _, transitionalKey := range t.transitionalKey {
+         if (transitionalKey != nil) {
+            setAddressNotInUse(transitionalKey.NanoAddress)
+         }
       }
 
    }()
 
+   var subWait sync.WaitGroup
+   // Start up a mini manager for every sub-send
+   t.receiveWg = make([]sync.WaitGroup, t.numSubSends)
+   for i := 0; i < t.numSubSends; i++ {
+      subWait.Add(1)
+      t.transactionSucessfull = append(t.transactionSucessfull, false)
+      t.finalHash = append(t.finalHash, make([]byte, 0))
+      t.receiveWg[i].Add(1)
+
+      go monitorSubSend(t, &subWait, i)
+
+   }
+
+   subWait.Wait()
+
+   if (verbosity >= 5 && fullTransactionWasSuccessfull(t.transactionSucessfull)) {
+      fmt.Println("Transaction Complete!")
+   }
+}
+
+// TODO if one aborts they ALL need to abort
+func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
+   defer tWait.Done()
+   var numDone = 0
+   var operation = 0
+
+   fmt.Println("Entering sub send", subSend)
+
    // Waiting until first send
    select {
-      case <-t.commChannel:
+      case <-t.commChannel[subSend]:
+         fmt.Println(" saw send for:", subSend)
          // Proceed to next step
-         if (t.multiSend) {
-            t.confirmationChannel = make(chan string)
-            registerConfirmationListener(t.transitionalKey.NanoAddress, t.confirmationChannel, "send")
-            defer unregisterConfirmationListener(t.transitionalKey.NanoAddress, "send")
+         if (t.multiSend[subSend]) {
+            t.confirmationChannel[subSend] = make(chan string)
+            registerConfirmationListener(t.transitionalKey[subSend].NanoAddress, t.confirmationChannel[subSend], "send")
+            defer unregisterConfirmationListener(t.transitionalKey[subSend].NanoAddress, "send")
          }
-      case err := <-t.errChannel:
+      case err := <-t.errChannel[subSend]:
          // There was a problem.
          if (verbosity >= 5) {
             fmt.Println("Error:", err.Error())
@@ -194,13 +235,15 @@ func transactionManager(t *Transaction) {
          return
    }
 
+   fmt.Println("Initial send seen: ", subSend)
+
    // First manage all initial sends
-   numOfSends := len(t.sendingKeys)
+   numOfSends := len(t.sendingKeys[subSend])
    for {
       // All sends finished
       if (numDone >= numOfSends) {
-         if !(t.multiSend) {
-            transcationSucessfull = true
+         if !(t.multiSend[subSend]) {
+            t.transactionSucessfull[subSend] = true
          }
          if (verbosity >= 5) {
             fmt.Println("Done with Sends!")
@@ -209,22 +252,22 @@ func transactionManager(t *Transaction) {
          break
       }
       select {
-         case i := <-t.commChannel:
+         case i := <-t.commChannel[subSend]:
             // A send finished with no errors
             numDone++
 
-            if !(t.multiSend) {
-               t.finalHash = i.hashes[0]
+            if !(t.multiSend[subSend]) {
+               t.finalHash[subSend] = i.hashes[0]
             }
 
             // This is known as the "reverse-blacklist." It makes sure that we
             // don't send funds from the address associated with address C to
             // address A. (see blacklist documentation)
-            if (t.walletBalance[i.i].Cmp(t.individualSendAmount[i.i]) > 0) {
+            if (t.walletBalance[subSend][i.i].Cmp(t.individualSendAmount[subSend][i.i]) > 0) {
                go func() {
-                  err := blacklistHash(t.sendingKeys[i.i].PublicKey, t.receiveHash)
+                  err := blacklistHash(t.sendingKeys[subSend][i.i].PublicKey, t.receiveHash)
                   if (err != nil) {
-                     _, seedID, index, _ := getSeedFromAddress(t.sendingKeys[i.i].NanoAddress)
+                     _, seedID, index, _ := getSeedFromAddress(t.sendingKeys[subSend][i.i].NanoAddress)
                      Error.Println("BlacklistHash failed to blacklist ", seedID, ",", index, ":", err.Error())
                      sendEmail("WARNING", "Blacklist failed."+
                      "\n\nID: "+ strconv.Itoa(seedID) +","+strconv.Itoa(index) +
@@ -232,7 +275,7 @@ func transactionManager(t *Transaction) {
 
                      // Wait for address to not be in use by the transaction.
                      for {
-                        in_use, _ := isAddressInUse(t.sendingKeys[i.i].NanoAddress)
+                        in_use, _ := isAddressInUse(t.sendingKeys[subSend][i.i].NanoAddress)
                         if (in_use) {
                            time.Sleep(10 * time.Second)
                         } else {
@@ -241,16 +284,16 @@ func transactionManager(t *Transaction) {
                      }
 
                      // Keep funds locked until manual intervention.
-                     setAddressInUse(t.sendingKeys[i.i].NanoAddress)
+                     setAddressInUse(t.sendingKeys[subSend][i.i].NanoAddress)
                   }
                }()
             }
-         case err := <-t.errChannel:
+         case err := <-t.errChannel[subSend]:
             // There was an error. Deal with it.
             if (verbosity >= 5) {
                fmt.Println("Error with sends", err.Error())
             }
-            if (t.multiSend) {
+            if (t.multiSend[subSend]) {
                findIndex, _ := regexp.Compile(">>([0-9]+)<<")
                regexResults := findIndex.FindSubmatch([]byte(err.Error()))
                var whichSend int
@@ -258,7 +301,7 @@ func transactionManager(t *Transaction) {
                   whichSend, _ = strconv.Atoi(string(findIndex.FindSubmatch([]byte(err.Error()))[1]))
                }
 
-               if (handleMultiSendError(t, operation, whichSend, err)) {
+               if (handleMultiSendError(t, operation, whichSend, subSend, err)) {
                   // We recovered so go back to regular operation
                   numDone++
                } else {
@@ -266,7 +309,7 @@ func transactionManager(t *Transaction) {
                   return
                }
             } else {
-               if (handleSingleSendError(t, err)) {
+               if (handleSingleSendError(t, subSend, err)) {
                   // We recovered so go back to regular operation
                   numDone++
                } else {
@@ -277,7 +320,7 @@ func transactionManager(t *Transaction) {
          case <-time.After(5 * time.Minute):
             Info.Println("Transaction timeout(1)")
             if (verbosity >= 5) {
-               if (t.multiSend) {
+               if (t.multiSend[subSend]) {
                   fmt.Println("Transaction error: timout during sends")
                } else {
                   fmt.Println("Transaction error: timout during single send")
@@ -289,7 +332,7 @@ func transactionManager(t *Transaction) {
 
 
    // Sends are done, wait for them to be confirmed
-   if (t.multiSend) {
+   if (t.multiSend[subSend]) {
       trackConfirms := make(map[string]bool)
       var numConfirmed int
 
@@ -299,7 +342,7 @@ func transactionManager(t *Transaction) {
          }
 
          select {
-            case hash := <-t.confirmationChannel:
+            case hash := <-t.confirmationChannel[subSend]:
                // Make sure we didn't receive the same block twice
                if (trackConfirms[hash] == false) {
                   trackConfirms[hash] = true
@@ -311,7 +354,7 @@ func transactionManager(t *Transaction) {
             case <-time.After(5 * time.Minute):
                Info.Println("Transaction timeout(2)")
                t.abort = true
-               t.receiveWg.Done()
+               t.receiveWg[subSend].Done()
                return
          }
       }
@@ -319,21 +362,21 @@ func transactionManager(t *Transaction) {
          fmt.Println("All sends confirmed!")
       }
       // Signal receives to start in ReceiveAndSend()
-      t.receiveWg.Done()
+      t.receiveWg[subSend].Done()
    }
 
 
    // Now if it's a multi send then we need monitor the last step of receiving
    // and sending to the recipient
-   if (t.multiSend) {
+   if (t.multiSend[subSend]) {
       operation = 1
 
-      registerConfirmationListener(t.transitionalKey.NanoAddress, t.confirmationChannel, "receive")
-      defer unregisterConfirmationListener(t.transitionalKey.NanoAddress, "receive")
+      registerConfirmationListener(t.transitionalKey[subSend].NanoAddress, t.confirmationChannel[subSend], "receive")
+      defer unregisterConfirmationListener(t.transitionalKey[subSend].NanoAddress, "receive")
 
       for (operation < 3) {
          select {
-            case tComm := <-t.commChannel:
+            case tComm := <-t.commChannel[subSend]:
                operation = tComm.i
                if (operation == 2) {
                   // Done with receives
@@ -357,7 +400,7 @@ func transactionManager(t *Transaction) {
                      }
 
                      select {
-                        case hash := <-t.confirmationChannel:
+                        case hash := <-t.confirmationChannel[subSend]:
                            // Make sure we didn't receive the same block twice
                            if (trackConfirms[hash] == false) {
                               if (verbosity >= 9) {
@@ -392,27 +435,27 @@ func transactionManager(t *Transaction) {
                         case <-time.After(timeLimit.Sub(time.Now())):
                            Info.Println("Transaction timeout(3)")
                            t.abort = true
-                           t.receiveWg.Done()
+                           t.receiveWg[subSend].Done()
                            return
                      }
                   }
-                  t.receiveWg.Done()
+                  t.receiveWg[subSend].Done()
                } else if (operation == 3) {
                   // All finished
-                  t.finalHash = tComm.hashes[0]
-                  transcationSucessfull = true
+                  t.finalHash[subSend] = tComm.hashes[0]
+                  t.transactionSucessfull[subSend] = true
                   if (verbosity >= 5) {
                      fmt.Println("Done with everything!")
                   }
                }
-            case err := <-t.errChannel:
+            case err := <-t.errChannel[subSend]:
                // There was an error. Deal with it.
                if (verbosity >= 5) {
                   fmt.Println("Error with receives or final send", err.Error())
                }
-               if (handleMultiSendError(t, operation, -1, err)) {
+               if (handleMultiSendError(t, operation, -1, subSend, err)) {
                   operation++
-                  t.receiveWg.Done()
+                  t.receiveWg[subSend].Done()
                } else {
                   // This is just to exit the loop
                   operation = 10
@@ -431,28 +474,24 @@ func transactionManager(t *Transaction) {
          }
       }
    }
-
-   if (verbosity >= 5) {
-      fmt.Println("Transaction Complete!")
-   }
 }
 
-func handleSingleSendError(t *Transaction, prevError error) bool {
+func handleSingleSendError(t *Transaction, subSend int, prevError error) bool {
    var retryCount = 0
    var err error
 
    // If there was some problem with PoW then regenerate it.
    if (prevError != nil && strings.Contains(prevError.Error(), "work")){
-      clearPoW(t.sendingKeys[0].NanoAddress)
+      clearPoW(t.sendingKeys[subSend][0].NanoAddress)
    }
    if (errors.Is(prevError, databaseError)) {
       // Just a database error. Update internal database and move on
-      checkBalance(t.sendingKeys[0].NanoAddress)
+      checkBalance(t.sendingKeys[subSend][0].NanoAddress)
       return true
    }
 
    for (retryCount < RetryNumber) {
-      _, err = Send(t.sendingKeys[0], t.recipientAddress, t.amountToSend, nil, nil, -1)
+      _, err = Send(t.sendingKeys[subSend][0], t.recipientAddress, t.amountToSend[subSend], nil, nil, -1)
       if (err != nil) {
          if (verbosity >= 5) {
             fmt.Println("Error with resend: ", retryCount, err.Error())
@@ -469,14 +508,14 @@ func handleSingleSendError(t *Transaction, prevError error) bool {
    return false
 }
 
-func handleMultiSendError(t *Transaction, operation int, i int, err error) bool {
+func handleMultiSendError(t *Transaction, operation int, i int, subSend int, err error) bool {
 
    if (errors.Is(err, databaseError)) {
       // Just a database error. Update internal database and move on
       if (operation == 0) {
-         checkBalance(t.sendingKeys[i].NanoAddress)
+         checkBalance(t.sendingKeys[subSend][i].NanoAddress)
       } else {
-         checkBalance(t.transitionalKey.NanoAddress)
+         checkBalance(t.transitionalKey[subSend].NanoAddress)
       }
       return true
    }
@@ -484,17 +523,17 @@ func handleMultiSendError(t *Transaction, operation int, i int, err error) bool 
    switch (operation){
       case 0:
          // Problem with initial sends
-         if (retryMultiSend(t, i, err)) {
+         if (retryMultiSend(t, subSend, i, err)) {
             return true
          }
       case 1:
          // Problem with receives
-         if (retryReceives(t, err)) {
+         if (retryReceives(t, subSend, err)) {
             return true
          }
       case 2:
          // Problem with final send
-         if (retryFinalSend(t, err)) {
+         if (retryFinalSend(t, subSend, err)) {
             return true
          }
       case 3:
@@ -507,8 +546,36 @@ func handleMultiSendError(t *Transaction, operation int, i int, err error) bool 
    return false
 }
 
+// This function will find out how much of the transaction is unrecoverable and
+// refund the rest. (Fee is fully refunded)
+func checkPartialRefund(t *Transaction) error {
+   var partialSuccess bool
+   for _, success := range t.transactionSucessfull {
+      if (success) {
+         partialSuccess = true
+      }
+   }
+
+   if (!partialSuccess) {
+      // Just refund the whole thing
+      return Refund(t.receiveHash, nt.NewRaw(0))
+   } else {
+      // Find out how much is unrecoverable.
+      amountSent := nt.NewRaw(0)
+      for i, success := range t.transactionSucessfull {
+         if (success) {
+            amountSent.Add(amountSent, t.amountToSend[i])
+         }
+      }
+
+      // Return everything they paid that hasn't got sent already
+      return Refund(t.receiveHash, nt.NewRaw(0).Sub(t.payment, amountSent))
+   }
+}
+
 // Refund just takes a single receive block hash and reverses it.
-func Refund(receiveHash nt.BlockHash)  error {
+// Will refund the whole receive if amount is 0.
+func Refund(receiveHash nt.BlockHash, amount *nt.Raw)  error {
    // Find the address that send the payment so we can send it back
    if (verbosity >= 5) {
       fmt.Println("Refunding!")
@@ -536,7 +603,13 @@ func Refund(receiveHash nt.BlockHash)  error {
 
    retryCount := 0
    for (retryCount < RetryNumber) {
-      _, err = Send(&sendingKey, clientOriginalAddress, blockInfo.Amount, nil, nil, -1)
+      // If the amount given is 0 or is larger than the actual amount, refund
+      // the whole block.
+      if (amount.Cmp(nt.NewRaw(0)) == 0 || amount.Cmp(blockInfo.Amount) > 0) {
+         _, err = Send(&sendingKey, clientOriginalAddress, blockInfo.Amount, nil, nil, -1)
+      } else {
+         _, err = Send(&sendingKey, clientOriginalAddress, amount, nil, nil, -1)
+      }
       if (err != nil) {
          if (verbosity >= 5) {
             fmt.Println("Refund send error: ", err.Error())
@@ -553,49 +626,51 @@ func Refund(receiveHash nt.BlockHash)  error {
    return nil
 }
 
-// reverseTransitionalAddress takes all funds that were sent to one of our
-// internal addresses and returns them to their original wallets. This is so
-// that the wallets can continue using their own blacklist entries correctly.
-func reverseTransitionalAddress(t *Transaction) {
+// mixTransitionalAddresses takes all funds that were sent to one of our
+// internal addresses and sends it to the mixer because it's now been combined
+// in a way that can't be undone.
+func mixTransitionalAddresses(t *Transaction) {
 
-   if !(t.multiSend) {
-      return
+   for i := 0; i < t.numSubSends; i++ {
+      if !(t.multiSend[i]) {
+         return
+      }
+
+      nanoAddress := t.transitionalKey[i].NanoAddress
+
+      if !(addressExsistsInDB(nanoAddress)) {
+         return
+      }
+
+      // Give some time for any transactions that might be in progres (might not
+      // even be pending yet) to finish before trying to find them all.
+      time.Sleep(10 * time.Second)
+
+      hashList, _ := ReceiveAll(nanoAddress)
+      err := waitForConfirmations(hashList)
+      if (err != nil) {
+         Error.Println("reverseTransitional: ", err)
+      }
+
+      // We're stuck with a bunch of funds that have been combined. We have no way
+      // to forward blacklist entries, so the best thing to do is just mix it all.
+      sendToMixer(t.transitionalKey[i], 1)
+
+      setAddressNotInUse(nanoAddress)
    }
-
-   nanoAddress := t.transitionalKey.NanoAddress
-
-   if !(addressExsistsInDB(nanoAddress)) {
-      return
-   }
-
-   // Give some time for any transactions that might be in progres (might not
-   // even be pending yet) to finish before trying to find them all.
-   time.Sleep(10 * time.Second)
-
-   hashList, _ := ReceiveAll(nanoAddress)
-   err := waitForConfirmations(hashList)
-   if (err != nil) {
-      Error.Println("reverseTransitional: ", err)
-   }
-
-   // We're stuck with a bunch of funds that have been combined. We have no way
-   // to forward blacklist entries, so the best thing to do is just mix it all.
-   sendToMixer(t.transitionalKey, 1)
-
-   setAddressNotInUse(nanoAddress)
 }
 
-func retryMultiSend(t *Transaction, i int, prevError error) bool {
+func retryMultiSend(t *Transaction, subSend int, i int, prevError error) bool {
    retryCount := 0
 
    // If there was some problem with PoW then regenerate it.
    if (prevError != nil && strings.Contains(prevError.Error(), "work")){
-      clearPoW(t.sendingKeys[i].NanoAddress)
+      clearPoW(t.sendingKeys[subSend][i].NanoAddress)
    }
 
    var err error
    for (retryCount < RetryNumber) {
-      _, err = Send(t.sendingKeys[i], t.transitionalKey.PublicKey, t.individualSendAmount[i], nil, nil, -1)
+      _, err = Send(t.sendingKeys[subSend][i], t.transitionalKey[subSend].PublicKey, t.individualSendAmount[subSend][i], nil, nil, -1)
       if (err != nil) {
          retryCount++
       } else {
@@ -606,16 +681,16 @@ func retryMultiSend(t *Transaction, i int, prevError error) bool {
    return false
 }
 
-func retryFinalSend(t *Transaction, prevError error) bool {
+func retryFinalSend(t *Transaction, subSend int, prevError error) bool {
    retryCount := 0
 
    var err error
    for (retryCount < RetryNumber) {
-      newHash, err := Send(t.transitionalKey, t.recipientAddress, t.amountToSend, nil, nil, -1)
+      newHash, err := Send(t.transitionalKey[subSend], t.recipientAddress, t.amountToSend[subSend], nil, nil, -1)
       if (err != nil) {
          retryCount++
       } else {
-         t.finalHash = newHash
+         t.finalHash[subSend] = newHash
          return true
       }
    }
@@ -649,9 +724,9 @@ func retryOrigReceive(nanoAddress string, prevError error) (*nt.Raw, nt.BlockHas
    return nil, nil, err
 }
 
-func retryReceives(t *Transaction, prevError error) bool {
+func retryReceives(t *Transaction, subSend int, prevError error) bool {
 
-   receiveHashes, err := ReceiveAll(t.transitionalKey.NanoAddress)
+   receiveHashes, err := ReceiveAll(t.transitionalKey[subSend].NanoAddress)
    if (err != nil) {
       Error.Println("ID", t.id, "Problem with multi receives orig:", prevError, "final:", err)
       return false
@@ -662,7 +737,7 @@ func retryReceives(t *Transaction, prevError error) bool {
       var tComm transactionComm
       tComm.i = 2
       tComm.hashes = receiveHashes
-      t.commChannel <- tComm
+      t.commChannel[subSend] <- tComm
    }()
 
    return true
@@ -695,13 +770,31 @@ func sendInfoToClient(info string, clientPubkey []byte) {
    }
 }
 
-func sendFinalHash(hash nt.BlockHash, pubkey []byte) {
+func sendFinalHash(hashes []nt.BlockHash, pubkey []byte) {
    if (inTesting) {
       return
    }
 
+   var response = "hash="
+
+   for _, hash := range hashes {
+      response += hash.String() + ","
+   }
+   // remove final comma TODO if no hash then makes invalid communincation
+   response = response[:len(response)-1]
+
    nanoAddress, _ := keyMan.PubKeyToAddress(pubkey)
    if (registeredClientComunicationPipes[nanoAddress] != nil) {
-      registeredClientComunicationPipes[nanoAddress] <- "hash="+ hash.String()
+      registeredClientComunicationPipes[nanoAddress] <- response
    }
+}
+
+func fullTransactionWasSuccessfull(subSuccess []bool) bool {
+   for _, success := range subSuccess {
+      if (!success) {
+         return false
+      }
+   }
+
+   return true
 }
