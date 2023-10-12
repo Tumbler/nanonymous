@@ -44,6 +44,7 @@ type Transaction struct {
    dirtyAddress []int // The sendingKeys address that has been linked to other addresses but not blacklisted. One per subsend.
    transactionSucessfull []bool // One per subsend.
    abort bool
+   abortchan chan int
 }
 
 func (t Transaction) String() string {
@@ -139,12 +140,14 @@ func transactionManager(t *Transaction) {
          recordProfit(t.fee, t.id)
          Info.Println("Transaction", t.id, "Complete")
 
-         // There was a bug that I saw occasionally where it would send a blank
-         // hash to the client. I haven't been able to reproduce it recently,
-         // but if it happens, log it and try to track it down.
-         if (len(t.finalHash) < 32) {
-            Warning.Println("Final hash for transaction is blank:\n", t)
-            sendEmail("WARNING", "Final hash for transaction is blank:\n"+ t.String())
+         for _, hash := range t.finalHash {
+            // There was a bug that I saw occasionally where it would send a blank
+            // hash to the client. I haven't been able to reproduce it recently,
+            // but if it happens, log it and try to track it down.
+            if (len(hash) < 32) {
+               Warning.Println("Final hash for transaction is blank:\n", t)
+               sendEmail("WARNING", "Final hash for transaction is blank:\n"+ t.String())
+            }
          }
          if (t.bridge) {
             // Final hash would leak recipients address to sender. Redact it.
@@ -205,18 +208,18 @@ func transactionManager(t *Transaction) {
    }
 }
 
-// TODO if one aborts they ALL need to abort
 func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
    defer tWait.Done()
    var numDone = 0
    var operation = 0
 
-   fmt.Println("Entering sub send", subSend)
+   if (t.abort) {
+      return
+   }
 
    // Waiting until first send
    select {
       case <-t.commChannel[subSend]:
-         fmt.Println(" saw send for:", subSend)
          // Proceed to next step
          if (t.multiSend[subSend]) {
             t.confirmationChannel[subSend] = make(chan string)
@@ -233,9 +236,12 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
          // Timeout.
          Info.Println("Transaction timeout(0)")
          return
+      case <-t.abortchan:
+         if (verbosity >= 5) {
+            fmt.Println("1 Aborting early on subSend", subSend)
+         }
+         return
    }
-
-   fmt.Println("Initial send seen: ", subSend)
 
    // First manage all initial sends
    numOfSends := len(t.sendingKeys[subSend])
@@ -306,6 +312,8 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
                   numDone++
                } else {
                   // Abort rest of transaction
+                  t.abort = true
+                  broadcastAbort(t)
                   return
                }
             } else {
@@ -314,6 +322,8 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
                   numDone++
                } else {
                   // Abort transaction
+                  t.abort = true
+                  broadcastAbort(t)
                   return
                }
             }
@@ -327,9 +337,25 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
                }
             }
             return
+         case <-t.abortchan:
+            // The send to the recipient needs to be able to finish to make sure
+            // we don't send funds and then also refund them.
+            fmt.Println("Received abort from someone")
+            if (t.multiSend[subSend]) {
+               if (verbosity >= 5) {
+                  fmt.Println("3 Aborting early on subSend", subSend)
+               }
+               return
+            }
       }
    }
 
+   if (t.abort) {
+      if (verbosity >= 5) {
+         fmt.Println("4 Aborting early on subSend", subSend)
+      }
+      return
+   }
 
    // Sends are done, wait for them to be confirmed
    if (t.multiSend[subSend]) {
@@ -354,7 +380,13 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
             case <-time.After(5 * time.Minute):
                Info.Println("Transaction timeout(2)")
                t.abort = true
+               broadcastAbort(t)
                t.receiveWg[subSend].Done()
+               return
+            case <-t.abortchan:
+               if (verbosity >= 5) {
+                  fmt.Println("5 Aborting early on subSend", subSend)
+               }
                return
          }
       }
@@ -365,6 +397,12 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
       t.receiveWg[subSend].Done()
    }
 
+   if (t.abort) {
+      if (verbosity >= 5) {
+         fmt.Println("6 Aborting early on subSend", subSend)
+      }
+      return
+   }
 
    // Now if it's a multi send then we need monitor the last step of receiving
    // and sending to the recipient
@@ -435,6 +473,7 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
                         case <-time.After(timeLimit.Sub(time.Now())):
                            Info.Println("Transaction timeout(3)")
                            t.abort = true
+                           broadcastAbort(t)
                            t.receiveWg[subSend].Done()
                            return
                      }
@@ -459,6 +498,8 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
                } else {
                   // This is just to exit the loop
                   operation = 10
+                  t.abort = true
+                  broadcastAbort(t)
                   return
                }
             case <-time.After(5 * time.Minute):
@@ -470,7 +511,18 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
                      Info.Println("Transaction error: timout during final send")
                   }
                }
+               t.abort = true
+               broadcastAbort(t)
                return
+            case <-t.abortchan:
+               // The send to the recipient needs to be able to finish to make sure
+               // we don't send funds and then also refund them.
+               if (operation == 1) {
+                  if (verbosity >= 5) {
+                     fmt.Println("7 Aborting early on subSend", subSend)
+                  }
+                  return
+               }
          }
       }
    }
@@ -491,13 +543,15 @@ func handleSingleSendError(t *Transaction, subSend int, prevError error) bool {
    }
 
    for (retryCount < RetryNumber) {
-      _, err = Send(t.sendingKeys[subSend][0], t.recipientAddress, t.amountToSend[subSend], nil, nil, -1)
+      blockHash, err := Send(t.sendingKeys[subSend][0], t.recipientAddress, t.amountToSend[subSend], nil, nil, -1)
       if (err != nil) {
          if (verbosity >= 5) {
             fmt.Println("Error with resend: ", retryCount, err.Error())
          }
          retryCount++
       } else {
+         // TODO Do we also need to check for reverse blacklist??
+         t.finalHash[subSend] = blockHash
          return true
       }
    }
@@ -576,6 +630,11 @@ func checkPartialRefund(t *Transaction) error {
 // Refund just takes a single receive block hash and reverses it.
 // Will refund the whole receive if amount is 0.
 func Refund(receiveHash nt.BlockHash, amount *nt.Raw)  error {
+   if (inTesting) {
+      fmt.Println("Refunding in testing")
+      return nil
+   }
+
    // Find the address that send the payment so we can send it back
    if (verbosity >= 5) {
       fmt.Println("Refunding!")
@@ -797,4 +856,18 @@ func fullTransactionWasSuccessfull(subSuccess []bool) bool {
    }
 
    return true
+}
+
+func broadcastAbort(t *Transaction) {
+
+   // Send to all other subsends in no particular order. Some might actually
+   // accept more than one so make sure we send more than the total amount to
+   // ensure everybody hears it at least once.
+   for i := 0; i < t.numSubSends * 2; i++ {
+      select {
+         case t.abortchan <- 1:
+         case <-time.After(5 * time.Second):
+            // Don't wait forever, some might have already finished.
+      }
+   }
 }

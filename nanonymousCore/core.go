@@ -82,7 +82,7 @@ var activeTransactionList = make(map[string]activeTransaction)
 
 var random *rand.Rand
 
-const version = "1.0.5"
+const version = "1.0.6"
 
 // Random info about used ports:
 // 41721    Nanonymous request port
@@ -911,15 +911,7 @@ func receivedNano(nanoAddress string) error {
       // Less than the minimum. Refund it.
       pubKey, _ := keyMan.AddressToPubKey(nanoAddress)
       sendInfoToClient("info=The minimum transaction supported is 1 Nano. Your transaction has been refunded.", pubKey)
-      err := Refund(receiveHash, nt.NewRaw(0))
-      if (err != nil) {
-         sendEmail("IMMEDIATE ATTENTION REQUIRED", "Non-transaction refund failed! "+ err.Error() +
-               "\n\nPayment Hash: "+ receiveHash.String() +
-               "\nID: "+ strconv.Itoa(parentSeedId) +","+ strconv.Itoa(index) +
-               "\nAmount: "+ strconv.FormatFloat(rawToNANO(payment), 'f', -1, 64))
-         Error.Println("non-transaction Refund failed!! %w", err)
-         return fmt.Errorf("non-transaction Refund failed!! %w", err)
-      }
+      nonTransactionRefund(receiveHash, parentSeedId, index, payment)
       // Transaction aborted
       return nil
    } else if (maxPayment.Cmp(payment) < 0) {
@@ -930,15 +922,7 @@ func receivedNano(nanoAddress string) error {
       } else {
          sendInfoToClient("info=The maximum transaction currently supported is "+ strconv.FormatFloat(rawToNANO(maxPayment), 'f', -1, 64) +" Nano. Your transaction has been refunded.", pubKey)
       }
-      err := Refund(receiveHash, nt.NewRaw(0))
-      if (err != nil) {
-         sendEmail("IMMEDIATE ATTENTION REQUIRED", "Non-transaction refund failed! "+ err.Error() +
-               "\n\nPayment Hash: "+ receiveHash.String() +
-               "\nID: "+ strconv.Itoa(parentSeedId) +","+ strconv.Itoa(index) +
-               "\nAmount: "+ strconv.FormatFloat(rawToNANO(payment), 'f', -1, 64))
-         Error.Println("non-transaction Refund failed!! %w", err)
-         return fmt.Errorf("non-transaction Refund failed!! %w", err)
-      }
+      nonTransactionRefund(receiveHash, parentSeedId, index, payment)
       // Transaction aborted
       return nil
    }
@@ -951,11 +935,12 @@ func receivedNano(nanoAddress string) error {
    t.paymentIndex = index
    t.payment = payment
    t.receiveHash = receiveHash
-   // TODO refund for these errors before the transaction manager is actually started
 
    t.id, err = getNextTransactionId()
    if (err != nil) {
       err = fmt.Errorf("receivedNano: %w", err)
+      nonTransactionRefund(receiveHash, parentSeedId, index, payment)
+      // Transaction aborted
       return err
    }
 
@@ -964,6 +949,8 @@ func receivedNano(nanoAddress string) error {
    t.paymentAddress, err = keyMan.AddressToPubKey(nanoAddress)
    if (err != nil) {
       err = fmt.Errorf("receivedNano: %w", err)
+      nonTransactionRefund(receiveHash, parentSeedId, index, payment)
+      // Transaction aborted
       return err
    }
    setAddressInUse(nanoAddress)
@@ -972,15 +959,16 @@ func receivedNano(nanoAddress string) error {
    t.recipientAddress, t.bridge, t.percents, t.delays = getRecipientAddress(t.paymentParentSeedId, t.paymentIndex)
    if (t.recipientAddress == nil) {
       err = fmt.Errorf("receivedNano: no active transaction available")
+      nonTransactionRefund(receiveHash, parentSeedId, index, payment)
+      // Transaction aborted
       return err
    }
 
-   // Nothing in percents means one send.
+   // Nothing in percents means only one send.
    if (len(t.percents) == 0) {
       t.percents = append(t.percents, 100)
    }
 
-   // TODO should ALL sub send arrays be initted here instead of getting appended to later??
    t.numSubSends = len(t.percents)
    t.confirmationChannel = make([]chan string, t.numSubSends)
    t.transitionalKey = make([]*keyMan.Key, t.numSubSends)
@@ -992,9 +980,12 @@ func receivedNano(nanoAddress string) error {
    }
 
    go transactionManager(&t)
-   defer func () {
+   defer func() {
       if (err != nil) {
-         t.errChannel[subSend] <- err
+         select {
+            case t.errChannel[subSend] <- err:
+            case <-time.After(5 * time.Second):
+         }
       }
    }()
 
@@ -1063,27 +1054,25 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) (int, error) {
       t.walletBalance = append(t.walletBalance, make([]*nt.Raw, 0))
       t.multiSend = append(t.multiSend, false)
 
-      fmt.Println(" starting find wallets for subsend", i)
-
       // Find all wallets that have enough funds to send out the payment that
       // aren't the wallet we just received in.
       queryString :=
       "SELECT " +
-      "parent_seed, " +
-      "index, " +
-      "balance " +
+         "parent_seed, " +
+         "index, " +
+         "balance " +
       "FROM " +
-      "wallets " +
+         "wallets " +
       "WHERE " +
-      "balance >= $1 AND NOT" +
-      "( parent_seed = $2 AND " +
-      "  index = $3 ) AND " +
-      "in_use = FALSE AND " +
-      "receive_only = FALSE AND " +
-      "mixer = FALSE " +
+         "balance >= $1 AND NOT" +
+         "( parent_seed = $2 AND " +
+         "  index = $3 ) AND " +
+         "in_use = FALSE AND " +
+         "receive_only = FALSE AND " +
+         "mixer = FALSE " +
       "ORDER BY " +
-      "balance, " +
-      "index;"
+         "balance, " +
+         "index;"
 
       var rows pgx.Rows
       rows, err = conn.Query(context.Background(), queryString, t.amountToSend[i], t.paymentParentSeedId, t.paymentIndex)
@@ -1126,21 +1115,21 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) (int, error) {
          // No single wallet has enough, try to combine several.
          queryString =
          "SELECT " +
-         "parent_seed, " +
-         "index, " +
-         "balance " +
+            "parent_seed, " +
+            "index, " +
+            "balance " +
          "FROM " +
-         "wallets " +
+            "wallets " +
          "WHERE " +
-         "balance > 0 AND NOT (" +
-         "parent_seed = $1 AND " +
-         "index = $2) AND " +
-         "in_use = FALSE AND " +
-         "receive_only = FALSE AND " +
-         "mixer = FALSE " +
+            "balance > 0 AND NOT (" +
+            "parent_seed = $1 AND " +
+            "index = $2) AND " +
+            "in_use = FALSE AND " +
+            "receive_only = FALSE AND " +
+            "mixer = FALSE " +
          "ORDER BY " +
-         "balance, " +
-         "index;"
+            "balance, " +
+            "index;"
 
          rows, err := conn.Query(context.Background(), queryString, t.paymentParentSeedId, t.paymentIndex)
          if (err != nil) {
@@ -1172,7 +1161,6 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) (int, error) {
                if (totalBalance.Cmp(t.amountToSend[i]) >= 0) {
                   // We've found enough
                   enough = true
-                  fmt.Println("Doing mulitsend for subsend", i)
                   break
                }
             }
@@ -1200,8 +1188,6 @@ func findSendingWallets(t *Transaction, conn *pgx.Conn) (int, error) {
                t.walletSeed[i] = append(t.walletSeed[i], seeds...)
                t.walletBalance[i] = append(t.walletBalance[i], balances...)
 
-               fmt.Println("Doing mixer send for subsend", i)
-
             } else {
                // Not enough even if we add the mixer.
                return i, fmt.Errorf("findSendingWallets: not enough funds")
@@ -1228,16 +1214,16 @@ func sendNanoToRecipient(t *Transaction) (int, error) {
       t.transitionSeedId = append(t.transitionSeedId, 0)
       t.dirtyAddress = append(t.dirtyAddress, -1)
 
-      fmt.Println(" starting send nano to recip for subsend", i)
+      if (t.abort) {
+         return i, fmt.Errorf("Aborted by another send")
+      }
 
       // Send nano to recipient
       if (len(t.sendingKeys[i]) == 1) {
          t.individualSendAmount[i] = append(t.individualSendAmount[i], t.amountToSend[i])
-         fmt.Println("Single send happneing for subsend", i)
          go Send(t.sendingKeys[i][0], t.recipientAddress, t.amountToSend[i], t.commChannel[i], t.errChannel[i], 0)
          t.commChannel[i] <- *new(transactionComm)
       } else if (len(t.sendingKeys[i]) > 1) {
-         fmt.Println("multisend happneing for subsend", i)
          // Need to do a multi-send; Get a new wallet to combine all funds into
          t.transitionalKey[i], t.transitionSeedId[i], err = getNewAddress("", false, false, false, []int{}, []int{}, 0)
          if (err != nil) {
@@ -1292,7 +1278,6 @@ func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan t
          }
       }
    }()
-   fmt.Println(" Sending", amount)
 
    var tComm transactionComm
 
@@ -1313,7 +1298,6 @@ func Send(fromKey *keyMan.Key, toPublicKey []byte, amount *nt.Raw, commCh chan t
    setAddressNotInUse(fromKey.NanoAddress)
 
    if (commCh != nil) {
-      fmt.Println("Sending tComm")
       tComm.i = i
       tComm.hashes = []nt.BlockHash{newHash}
       commCh <- tComm
@@ -1336,6 +1320,10 @@ func ReceiveAndSend(transitionalKey *keyMan.Key, toPublicKey []byte, amount *nt.
          }
       }
    }()
+
+   if (*abort) {
+      return
+   }
 
    wg.Add(1)
    defer wg.Done()
@@ -1529,8 +1517,6 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt
    var block keyMan.Block
    var newHash nt.BlockHash
 
-   fmt.Println("sendNano")
-
    if !(inTesting) {
       accountInfo, err := getAccountInfo(fromKey.NanoAddress)
       if (err != nil) {
@@ -1570,7 +1556,6 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt
       if (err != nil) {
          return nil, fmt.Errorf("sendNano: %w", err)
       }
-      fmt.Println("RCP outbound")
 
       // Send RCP request
       newHash, err = publishSend(block, sig, PoW)
@@ -1594,7 +1579,6 @@ func sendNano(fromKey *keyMan.Key, toPublicKey []byte, amountToSend *nt.Raw) (nt
          Error.Println("Balance update failed from send:", err.Error())
          return nil, fmt.Errorf("sendNano: updatebalance error %w", databaseError)
       }
-      fmt.Println("Send complete")
    } else {
       // Doing tests; behave as close as possible without calling RCP
 
@@ -2342,4 +2326,18 @@ func findMaxPayment() *nt.Raw {
    }
 
    return max
+}
+
+func nonTransactionRefund(receiveHash nt.BlockHash, parentID int, index int, payment *nt.Raw) {
+   err := Refund(receiveHash, nt.NewRaw(0))
+   if (err != nil) {
+      sendEmail("IMMEDIATE ATTENTION REQUIRED", "Non-transaction refund failed! "+ err.Error() +
+            "\n\nPayment Hash: "+ receiveHash.String() +
+            "\nID: "+ strconv.Itoa(parentID) +","+ strconv.Itoa(index) +
+            "\nAmount: "+ strconv.FormatFloat(rawToNANO(payment), 'f', -1, 64))
+      Error.Println("non-transaction Refund failed!!", err)
+      if (verbosity >= 1) {
+         fmt.Println("non-transaction Refund failed!!", err)
+      }
+   }
 }
