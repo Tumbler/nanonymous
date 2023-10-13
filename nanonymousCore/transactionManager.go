@@ -234,6 +234,7 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
          return
       case <-time.After(5 * time.Minute):
          // Timeout.
+         // TODO change for delays
          Info.Println("Transaction timeout(0)")
          return
       case <-t.abortchan:
