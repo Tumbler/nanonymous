@@ -51,9 +51,46 @@ func (r *Raw) Scan(src any) error {
    return nil
 }
 
+type RawArray []*Raw
+func (r RawArray) Scan(src any) error {
+
+   if str, ok := src.(string); ok {
+      array := strings.Split(strings.Trim(str, "{}"), ",")
+      for i, raw := range array {
+         if (len(r) <= i) {
+            r = append(r, NewRaw(0))
+         }
+
+         text := strings.Split(raw, "e")
+         numZeros, _ := strconv.Atoi(text[1])
+         text[0] += strings.Repeat("0", numZeros)
+
+         r[i].SetString(text[0], 10)
+      }
+   } else {
+      return fmt.Errorf("Can't assign %s to Raw Array", src)
+   }
+
+   return nil
+}
+
 // Postgres Insert driver for Raw
 func (r *Raw) Value() (driver.Value, error) {
    return r.Int.String(), nil
+}
+
+// Postgres Insert driver for Raw arrays
+func RawArrayToPostgres(array []*Raw) string {
+   output := "{"
+
+   for _, raw := range array {
+      output += "\""+ raw.String() +"\","
+   }
+
+   // Remove traling comma, add final brace
+   output = output[:len(output)-1] + "}"
+
+   return output
 }
 
 // Wrapper functions for big.Int

@@ -20,6 +20,7 @@ import (
 )
 
 func CLI() {
+   testFunction()
    var usr string
    if (verbosity == 0) {
       verbosity = 5

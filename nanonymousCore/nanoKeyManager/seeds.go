@@ -30,6 +30,10 @@ type Key struct {
    NanoAddress string
 }
 
+func (k Key) String() string{
+   return k.NanoAddress
+}
+
 var ChecksumMismatch = errors.New("checksum mismatch")
 
 var activeSeed Key

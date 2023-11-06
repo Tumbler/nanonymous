@@ -42,7 +42,7 @@ type Transaction struct {
    numSubSends int // This is how many individual sends the client has asked to split the transaction into.
    multiSend []bool // This is if we're using multiple wallets to satisfy a single send. One per subsend.
    dirtyAddress []int // The sendingKeys address that has been linked to other addresses but not blacklisted. One per subsend.
-   transactionSucessfull []bool // One per subsend.
+   transactionSuccessful []bool // One per subsend.
    abort bool
    abortchan chan int
 }
@@ -60,6 +60,8 @@ func (t Transaction) String() string {
    "\n  receiveHash: "+ t.receiveHash.String() +
    "\n  recipientAddress: "+ ra +
    "\n  fee: "+ t.fee.String() +
+   "\n  percents: "+ fmt.Sprint(t.percents) +
+   "\n  delays: "+ fmt.Sprint(t.delays) +
    "\n  amountToSend: "+ fmt.Sprint(t.amountToSend) +
    "\n  sendingKeys: "+ fmt.Sprint(t.sendingKeys) +
    "\n  walletSeed: "+ fmt.Sprint(t.walletSeed) +
@@ -69,6 +71,9 @@ func (t Transaction) String() string {
    "\n  finalHash: "+ fmt.Sprint(t.finalHash) +
    "\n  multiSend: "+ fmt.Sprint(t.multiSend) +
    "\n  dirtyAddress: "+ fmt.Sprint(t.dirtyAddress) +
+   "\n  numOfSends: "+ fmt.Sprint(t.numSubSends) +
+   "\n  transactionSuccessful: "+ fmt.Sprint(t.transactionSuccessful) +
+   "\n  bridge: "+ fmt.Sprint(t.bridge) +
    "\n  abort: "+ strconv.FormatBool(t.abort)
 
    return ret
@@ -96,6 +101,7 @@ func transactionManager(t *Transaction) {
 
    // We have a lot of clean up to do
    defer func() {
+      // TODO if we safe exit during a delay we need a way to exit without cleaning everything up.
       recoverMessage := recover()
       if (recoverMessage != nil) {
          Error.Println("transactionManager panic: ", recoverMessage)
@@ -106,9 +112,10 @@ func transactionManager(t *Transaction) {
       if (err != nil) {
          Warning.Println("defer transactionManager: ", err.Error())
       }
+      // Get rid of it in delayed transactions db TOdO
 
       // Cancel all the things
-      if !(fullTransactionWasSuccessfull(t.transactionSucessfull)) {
+      if !(fullTransactionWasSuccessfull(t.transactionSuccessful)) {
          sendInfoToClient("info=There was an internal error. Your transaction has been refunded.", t.paymentAddress)
          err := checkPartialRefund(t)
          if (err != nil) {
@@ -116,7 +123,7 @@ func transactionManager(t *Transaction) {
             //           refund the user!
             nanoAddress, _ := keyMan.PubKeyToAddress(t.paymentAddress)
             Error.Println("Refund failed!! Address:", nanoAddress, " error:", err.Error())
-            sendEmail("IMMEDIATE ATTENTION REQUIRED", "Refund failed!! Address: "+ nanoAddress +" error: "+ err.Error() +
+            sendEmail("IMMEDIATE ATtENTION REQUIRED", "Refund failed!! Address: "+ nanoAddress +" error: "+ err.Error() +
                "\n\nPayment Hash: "+ t.receiveHash.String() +
                "\nID: "+ strconv.Itoa(t.paymentParentSeedId) +","+ strconv.Itoa(t.paymentIndex) +
                "\nAmount: "+ strconv.FormatFloat(rawToNANO(t.payment), 'f', -1, 64))
@@ -146,7 +153,7 @@ func transactionManager(t *Transaction) {
             // but if it happens, log it and try to track it down.
             if (len(hash) < 32) {
                Warning.Println("Final hash for transaction is blank:\n", t)
-               sendEmail("WARNING", "Final hash for transaction is blank:\n"+ t.String())
+               sendEmail("WARNInG", "Final hash for transaction is blank:\n"+ t.String())
             }
          }
          if (t.bridge) {
@@ -186,35 +193,60 @@ func transactionManager(t *Transaction) {
          }
       }
 
+      err = deleteTransactionRecord(t.id)
+      if (err != nil) {
+         Warning.Println("Delayed transaction delete failed:", err)
+      }
+
    }()
 
    var subWait sync.WaitGroup
    // Start up a mini manager for every sub-send
    t.receiveWg = make([]sync.WaitGroup, t.numSubSends)
    for i := 0; i < t.numSubSends; i++ {
-      subWait.Add(1)
-      t.transactionSucessfull = append(t.transactionSucessfull, false)
-      t.finalHash = append(t.finalHash, make([]byte, 0))
-      t.receiveWg[i].Add(1)
+      // Check to see if prevous info has been loaded or we need to init new arrays
+      if (len(t.transactionSuccessful) == t.numSubSends) {
+         if (t.transactionSuccessful[i]) {
+            // Transaction has already been completed. Skip this one.
+            continue
+         }
+      } else {
+         // Init new stuff
+         t.transactionSuccessful = append(t.transactionSuccessful, false)
+         t.finalHash = append(t.finalHash, make([]byte, 0))
+      }
 
+      subWait.Add(1)
+      t.receiveWg[i].Add(1)
       go monitorSubSend(t, &subWait, i)
 
    }
 
    subWait.Wait()
 
-   if (verbosity >= 5 && fullTransactionWasSuccessfull(t.transactionSucessfull)) {
+   if (verbosity >= 5 && fullTransactionWasSuccessfull(t.transactionSuccessful)) {
       fmt.Println("Transaction Complete!")
    }
 }
 
 func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
+   // TODO panic recovery
    defer tWait.Done()
    var numDone = 0
    var operation = 0
 
    if (t.abort) {
       return
+   }
+
+   defer updateDelayRecords(t)
+
+   var initialWait time.Duration
+   if (len(t.delays) > subSend) {
+      // 5 minutes + the delay time.
+      initialWait = (time.Duration(5 * 60 + t.delays[subSend]) * time.Second)
+   } else {
+      initialWait = (5 * time.Minute)
    }
 
    // Waiting until first send
@@ -232,9 +264,8 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
             fmt.Println("Error:", err.Error())
          }
          return
-      case <-time.After(5 * time.Minute):
+      case <-time.After(initialWait):
          // Timeout.
-         // TODO change for delays
          Info.Println("Transaction timeout(0)")
          return
       case <-t.abortchan:
@@ -250,7 +281,7 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
       // All sends finished
       if (numDone >= numOfSends) {
          if !(t.multiSend[subSend]) {
-            t.transactionSucessfull[subSend] = true
+            t.transactionSuccessful[subSend] = true
          }
          if (verbosity >= 5) {
             fmt.Println("Done with Sends!")
@@ -483,7 +514,7 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
                } else if (operation == 3) {
                   // All finished
                   t.finalHash[subSend] = tComm.hashes[0]
-                  t.transactionSucessfull[subSend] = true
+                  t.transactionSuccessful[subSend] = true
                   if (verbosity >= 5) {
                      fmt.Println("Done with everything!")
                   }
@@ -605,7 +636,7 @@ func handleMultiSendError(t *Transaction, operation int, i int, subSend int, err
 // refund the rest. (Fee is fully refunded)
 func checkPartialRefund(t *Transaction) error {
    var partialSuccess bool
-   for _, success := range t.transactionSucessfull {
+   for _, success := range t.transactionSuccessful {
       if (success) {
          partialSuccess = true
       }
@@ -617,7 +648,7 @@ func checkPartialRefund(t *Transaction) error {
    } else {
       // Find out how much is unrecoverable.
       amountSent := nt.NewRaw(0)
-      for i, success := range t.transactionSucessfull {
+      for i, success := range t.transactionSuccessful {
          if (success) {
             amountSent.Add(amountSent, t.amountToSend[i])
          }
@@ -840,12 +871,17 @@ func sendFinalHash(hashes []nt.BlockHash, pubkey []byte) {
    for _, hash := range hashes {
       response += hash.String() + ","
    }
-   // remove final comma TODO if no hash then makes invalid communincation
-   response = response[:len(response)-1]
+   // remove final comma
+   if (response[len(response)-1] == ',') {
+      response = response[:len(response)-1]
+   }
 
    nanoAddress, _ := keyMan.PubKeyToAddress(pubkey)
    if (registeredClientComunicationPipes[nanoAddress] != nil) {
-      registeredClientComunicationPipes[nanoAddress] <- response
+      select {
+         case registeredClientComunicationPipes[nanoAddress] <- response:
+         case <-time.After(5 * time.Second):
+      }
    }
 }
 
@@ -869,6 +905,22 @@ func broadcastAbort(t *Transaction) {
          case t.abortchan <- 1:
          case <-time.After(5 * time.Second):
             // Don't wait forever, some might have already finished.
+      }
+   }
+}
+
+// This function will update the database with the success or failure of
+// subsends. (This only matters if there are delays as we don't store
+// transactions in the database otherwise)
+func updateDelayRecords(t *Transaction) {
+
+   fmt.Println("Updating records, length of delays:", len(t.delays))
+
+   if (len(t.delays) > 0) {
+      err := upsertTransactionRecord(t)
+      if (err != nil) {
+         fmt.Println("updateDelayRecords:", err)
+         Warning.Println("updateDelayRecords:", err)
       }
    }
 }

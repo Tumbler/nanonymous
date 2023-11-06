@@ -4,6 +4,8 @@ import (
    "fmt"
    "context"
    "strings"
+   "strconv"
+   "encoding/hex"
    "time"
 
    // Local packages
@@ -1158,4 +1160,364 @@ func getRowsOfWalletsWithAnyBalance() (pgx.Rows, *pgx.Conn, error) {
    }
 
    return rows, conn, nil
+}
+
+func upsertTransactionRecord(t *Transaction) error {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return fmt.Errorf("updateTransactionRecord: %w", err)
+   }
+
+   var stamps []time.Time
+   // this timestamp is.... probably not correct because time could have passed before calling this function TODO
+   for _, delay := range t.delays {
+      stamps = append(stamps, time.Now().Add(time.Duration(delay) * time.Second))
+   }
+
+   var sendingKeys [][]string
+   for i, keys := range t.sendingKeys {
+      sendingKeys = append(sendingKeys, make([]string, 0))
+
+      if (len(keys) == 0) {
+         sendingKeys[i] = append(sendingKeys[i], "0,0")
+      }
+      for _, key := range keys {
+         if (key != nil) {
+            seedId, index, err := getWalletFromAddress(key.NanoAddress)
+            if (err != nil) {
+               // TODO Log
+               fmt.Println("upsertTransactionRecord: getting sending keys: ", err)
+            }
+            sendingKeys[i] = append(sendingKeys[i], strconv.Itoa(seedId) +","+ strconv.Itoa(index))
+         } else {
+            sendingKeys[i] = append(sendingKeys[i], "0,0")
+         }
+      }
+   }
+
+   var transitionalKey []string
+   for _, key := range t.transitionalKey {
+      if (key != nil) {
+         seedId, index, err := getWalletFromAddress(key.NanoAddress)
+         if (err != nil) {
+            fmt.Println("upsertTransactionRecord: getting transitional keys: ", err)
+         }
+         transitionalKey = append(transitionalKey, strconv.Itoa(seedId) +","+ strconv.Itoa(index))
+      } else {
+         transitionalKey = append(transitionalKey, "0,0")
+      }
+   }
+
+   var finalHash string
+   for _, hash := range t.finalHash {
+      hashString := hash.String()
+
+      finalHash += hashString +","
+   }
+   if (finalHash[len(finalHash)-1] == ',') {
+      finalHash = finalHash[:len(finalHash)-1]
+   }
+
+   queryString :=
+   "INSERT INTO " +
+      "delayed_transactions ( " +
+         "id, " +
+         "timestamps, " +
+         "paymentAddress, " +
+         "paymentParentSeedId, " +
+         "paymentIndex, " +
+         "payment, " +
+         "receiveHash, " +
+         "recipientAddress, " +
+         "fee, " +
+         "amountToSend, " +
+         "sendingKeys, " +
+         "transitionalKey, " +
+         "finalHash, " +
+         "percents, " +
+         "bridge, " +
+         "numSubSends, " +
+         "dirtyAddress, " +
+         "multisend, " +
+         "transactionSuccessful " +
+      ") " +
+   "VALUES " +
+      "($1, $2, pgp_sym_encrypt_bytea($3, $20), $4, $5, $6, pgp_sym_encrypt_bytea($7, $20), pgp_sym_encrypt_bytea($8, $20), $9, $10, $11, $12, pgp_sym_encrypt_bytea($13, $20), $14, $15, $16, $17, $18, $19) " +
+   "ON CONFLICT " +
+      "(id) " +
+   "DO UPDATE " +
+      "SET " +
+         "sendingKeys = $11, " +
+         "transitionalKey = $12, " +
+         "finalHash = pgp_sym_encrypt_bytea($13, $20), " +
+         "dirtyAddress = $17, " +
+         "transactionSuccessful = $19 " +
+      "WHERE " +
+         "delayed_transactions.id = $1;"
+
+   rowsAffected, err := conn.Exec(context.Background(), queryString,
+      t.id,
+      stamps,
+      t.paymentAddress,
+      t.paymentParentSeedId,
+      t.paymentIndex,
+      t.payment,
+      t.receiveHash,
+      t.recipientAddress,
+      t.fee,
+      nt.RawArrayToPostgres(t.amountToSend),
+      sendingKeys,
+      transitionalKey,
+      finalHash,
+      t.percents,
+      t.bridge,
+      t.numSubSends,
+      t.dirtyAddress,
+      t.multiSend,
+      t.transactionSuccessful,
+      databasePassword,
+   )
+   if (err != nil) {
+      return fmt.Errorf("upsertTransactionRecord INSERT: %w", err)
+   }
+   if (rowsAffected.RowsAffected() < 1) {
+      return fmt.Errorf("upsertTransactionRecord: no rows affected in update")
+   }
+
+
+   return nil
+}
+
+func getTranscationRecord(id int, t *Transaction) error {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return fmt.Errorf("getTranscationRecord: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "numSubSends " +
+   "FROM " +
+      "delayed_transactions " +
+   "WHERE " +
+      "id = $1";
+
+   var numSubSends int
+   err = conn.QueryRow(context.Background(), queryString, id).Scan(&numSubSends)
+   if (err != nil) {
+      return fmt.Errorf("getTranscationRecord first query: %w", err)
+   }
+
+   fmt.Println(" subsends:", numSubSends)
+
+   // Init what needs to be initted
+   t.payment = nt.NewRaw(0)
+   t.fee = nt.NewRaw(0)
+   for (len(t.amountToSend) < numSubSends) {
+      t.amountToSend = append(t.amountToSend, nt.NewRaw(0))
+   }
+
+   queryString =
+   "SELECT " +
+      "id, " +
+      "timestamps, " +
+      "pgp_sym_decrypt_bytea(paymentAddress, $2), " +
+      "paymentParentSeedId, " +
+      "paymentIndex, " +
+      "payment, " +
+      "pgp_sym_decrypt_bytea(receiveHash, $2), " +
+      "pgp_sym_decrypt_bytea(recipientAddress, $2),  " +
+      "fee, " +
+      "amountToSend, " +
+      "sendingKeys, " +
+      "transitionalKey, " +
+      //// TODO individualSendAmount??
+      "pgp_sym_decrypt_bytea(finalHash, $2), " +
+      "percents, " +
+      "bridge, " +
+      "numSubSends, " +
+      "dirtyAddress, " +
+      "multisend, " +
+      "transactionSuccessful " +
+   "FROM " +
+      "delayed_transactions " +
+   "WHERE " +
+      "id = $1;"
+
+   var dates []time.Time
+   var sendingKeys [][]string
+   var transitionalKey []string
+   var finalHash []byte
+   err = conn.QueryRow(context.Background(), queryString, id, databasePassword).Scan(
+         &t.id,
+         &dates,
+         &t.paymentAddress,
+         &t.paymentParentSeedId,
+         &t.paymentIndex,
+          t.payment,
+         &t.receiveHash,
+         &t.recipientAddress,
+          t.fee,
+         (*nt.RawArray)(&t.amountToSend),
+         &sendingKeys,
+         &transitionalKey,
+         &finalHash,
+         &t.percents,
+         &t.bridge,
+         &t.numSubSends,
+         &t.dirtyAddress,
+         &t.multiSend,
+         &t.transactionSuccessful,
+      )
+
+   if (err != nil) {
+      return fmt.Errorf("getTranscationRecord second query: %w", err)
+   }
+
+   // Populate delays
+   now := time.Now()
+   for i, date := range dates {
+      if (len(t.delays) <= i) {
+         t.delays = append(t.delays, int(date.Sub(now).Seconds()))
+      } else {
+         t.delays[i] = int(date.Sub(now).Seconds())
+      }
+   }
+
+   // Init arrays
+   for i := 0; i < t.numSubSends; i++ {
+      if (len(t.sendingKeys) <= i) {
+         t.sendingKeys = append(t.sendingKeys, make([]*keyMan.Key, 0))
+      }
+      if (len(t.walletSeed) <= i) {
+         t.walletSeed = append(t.walletSeed, make([]int, 0))
+      }
+      if (len(t.walletBalance) <= i) {
+         t.walletBalance = append(t.walletBalance, make([]*nt.Raw, 0))
+      }
+      if (len(t.individualSendAmount) <= i) {
+         t.individualSendAmount = append(t.individualSendAmount, make([]*nt.Raw, 0))
+      }
+   }
+
+   // Populate sending keys
+   for j, array := range sendingKeys {
+      for i, IDindex := range array {
+         nums := strings.Split(IDindex, ",")
+         if (len(nums) < 2) {
+            return fmt.Errorf("getTranscationRecord: Not enough integers in sendingKeys.")
+         }
+
+         seed, err := strconv.Atoi(nums[0])
+         if (err != nil) {
+            return fmt.Errorf("getTranscationRecord: Bad data in seed ID: %w", err)
+         }
+         id, err := strconv.Atoi(nums[1])
+         if (err != nil) {
+            return fmt.Errorf("getTranscationRecord: Bad data in index ID: %w", err)
+         }
+
+         if (seed != 0) {
+            key, err := getSeedFromIndex(seed, id)
+            if (err != nil) {
+               return fmt.Errorf("getTranscationRecord: Coudn't get seed: %w", err)
+            }
+
+            if (len(t.sendingKeys[j]) <= i) {
+               t.sendingKeys[j] = append(t.sendingKeys[j], key)
+            } else {
+               t.sendingKeys[j][i] = key
+            }
+         }
+      }
+   }
+
+   // Populate transitional keys
+   for i, IDindex := range transitionalKey {
+      nums := strings.Split(IDindex, ",")
+      if (len(nums) < 2) {
+         return fmt.Errorf("getTranscationRecord: Not enough integers in transitionalKey.")
+      }
+
+      seed, err := strconv.Atoi(nums[0])
+      if (err != nil) {
+         return fmt.Errorf("getTranscationRecord: Bad data in seed ID: %w", err)
+      }
+      id, err := strconv.Atoi(nums[1])
+      if (err != nil) {
+         return fmt.Errorf("getTranscationRecord: Bad data in index ID: %w", err)
+      }
+
+      if (seed != 0) {
+         key, err := getSeedFromIndex(seed, id)
+         if (err != nil) {
+            return fmt.Errorf("getTranscationRecord: Coudn't get seed: %w", err)
+         }
+
+         if (len(t.transitionalKey) <= i) {
+            t.transitionalKey = append(t.transitionalKey, key)
+         } else {
+            t.transitionalKey[i] = key
+         }
+      }
+   }
+
+   // Populate final Hashes
+   for _, hash := range strings.Split(string(finalHash), ",") {
+      // TODO error handling
+      hexString, _ := hex.DecodeString(hash)
+      t.finalHash = append(t.finalHash, hexString)
+   }
+
+   return nil
+}
+
+func deleteTransactionRecord (id int) error {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return fmt.Errorf("deleteTransactionRecord: %w", err)
+   }
+
+   queryString :=
+   "DELETE " +
+   "FROM " +
+      "delayed_transactions " +
+   "WHERE " +
+      "id = $1";
+
+   _, err = conn.Exec(context.Background(), queryString, id)
+   if (err != nil) {
+      return fmt.Errorf("deleteTransactionRecord: %w", err)
+   }
+
+   return nil
+}
+
+func getDelayedIds() ([]int, error) {
+   conn, err := pgx.Connect(context.Background(), databaseUrl)
+   if (err != nil) {
+      return []int{}, fmt.Errorf("getDelayedIds: %w", err)
+   }
+
+   queryString :=
+   "SELECT " +
+      "id " +
+   "FROM " +
+      "delayed_transactions " +
+   "ORDER BY " +
+      "id;"
+
+   rows, err := conn.Query(context.Background(), queryString)
+   if (err != nil) {
+      return []int{}, fmt.Errorf("getDelayedIds: %w", err)
+   }
+
+   var id int
+   var ids [] int
+   for (rows.Next()) {
+      rows.Scan(&id)
+      ids = append(ids, id)
+   }
+
+   return ids, nil
 }
