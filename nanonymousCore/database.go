@@ -1209,6 +1209,7 @@ func upsertTransactionRecord(t *Transaction) error {
    }
 
    var finalHash string
+   // Turn into one long string so we can encrypt it.
    for _, hash := range t.finalHash {
       hashString := hash.String()
 
@@ -1389,6 +1390,12 @@ func getTranscationRecord(id int, t *Transaction) error {
       if (len(t.sendingKeys) <= i) {
          t.sendingKeys = append(t.sendingKeys, make([]*keyMan.Key, 0))
       }
+      if (len(t.transitionalKey) <= i) {
+         t.transitionalKey = append(t.transitionalKey, new(keyMan.Key))
+      }
+      if (len(t.transitionSeedId) <= i) {
+         t.transitionSeedId = append(t.transitionSeedId, 0)
+      }
       if (len(t.walletSeed) <= i) {
          t.walletSeed = append(t.walletSeed, make([]int, 0))
       }
@@ -1463,6 +1470,7 @@ func getTranscationRecord(id int, t *Transaction) error {
    }
 
    // Populate final Hashes
+   // This as an array but stored as plaintext so that we can encrypt it.
    for _, hash := range strings.Split(string(finalHash), ",") {
       // TODO error handling
       hexString, _ := hex.DecodeString(hash)

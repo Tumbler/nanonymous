@@ -412,6 +412,7 @@ func oneInstanceInits() (err error) {
          t.commChannel = append(t.commChannel, make(chan transactionComm))
          t.errChannel = append(t.errChannel, make(chan error))
       }
+      t.confirmationChannel = make([]chan string, t.numSubSends)
       t.abortchan = make(chan int)
 
       // Start it up.

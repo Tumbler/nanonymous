@@ -123,7 +123,7 @@ func transactionManager(t *Transaction) {
             //           refund the user!
             nanoAddress, _ := keyMan.PubKeyToAddress(t.paymentAddress)
             Error.Println("Refund failed!! Address:", nanoAddress, " error:", err.Error())
-            sendEmail("IMMEDIATE ATtENTION REQUIRED", "Refund failed!! Address: "+ nanoAddress +" error: "+ err.Error() +
+            sendEmail("IMMEDIATE ATTENTION REQUIRED", "Refund failed!! Address: "+ nanoAddress +" error: "+ err.Error() +
                "\n\nPayment Hash: "+ t.receiveHash.String() +
                "\nID: "+ strconv.Itoa(t.paymentParentSeedId) +","+ strconv.Itoa(t.paymentIndex) +
                "\nAmount: "+ strconv.FormatFloat(rawToNANO(t.payment), 'f', -1, 64))
@@ -204,6 +204,8 @@ func transactionManager(t *Transaction) {
    // Start up a mini manager for every sub-send
    t.receiveWg = make([]sync.WaitGroup, t.numSubSends)
    for i := 0; i < t.numSubSends; i++ {
+      t.receiveWg[i].Add(1)
+
       // Check to see if prevous info has been loaded or we need to init new arrays
       if (len(t.transactionSuccessful) == t.numSubSends) {
          if (t.transactionSuccessful[i]) {
@@ -217,7 +219,6 @@ func transactionManager(t *Transaction) {
       }
 
       subWait.Add(1)
-      t.receiveWg[i].Add(1)
       go monitorSubSend(t, &subWait, i)
 
    }
