@@ -9,6 +9,7 @@ function showQR() {
    var finalAddress = document.getElementById("finalAddress").value;
    document.getElementById("errorMessage").innerHTML = "";
    ajaxGetAddress(finalAddress);
+
 }
 
 function autoFill(caller) {
@@ -191,7 +192,7 @@ function validateNanoAddress() {
 
 async function ajaxGetAddress(finalAddress) {
 
-   let url = "php/getNewAddress.php?address="+ finalAddress;
+   let url = "php/getNewAddress.php?newaddress&address="+ finalAddress;
 
    if (document.getElementById("advancedCheck").checked) {
       let numSends = document.getElementById("numSends").value;
@@ -226,7 +227,7 @@ async function ajaxGetAddress(finalAddress) {
    console.log("url="+ url);
 
    var req = new XMLHttpRequest();
-   req.open("POST", "php/getNewAddress.php?address="+ finalAddress)
+   req.open("POST", url)
 
    var Nano = document.getElementById("afterTaxAmount").value;
    var raw = nanocurrency.convert(Nano, {from:"Nano", to:"raw"})
@@ -341,7 +342,8 @@ async function ajaxGetAddress(finalAddress) {
       req2.onload = function() {
          if (this.response.includes("hash=")) {
             console.log(this.response);
-            var hash = this.response.match(/hash=([a-f0-9]+)/i)[1];
+            var hashText = this.response.match(/hash=([a-f0-9,]+)/i)[1];
+            var hashArray = hashText.split(",")
 
             document.getElementById("errorMessage").innerHTML = "";
             document.getElementById("errorMessage").scrollIntoView();
@@ -358,14 +360,24 @@ async function ajaxGetAddress(finalAddress) {
             setTimeout(function(){ // delay by 100 ms
             document.getElementById("QRdiv").style.maxHeight = "0px";
 
-            if (hash.length < 32) {
-               document.getElementById("HashLink").innerHTML = "";
-               document.getElementById("HashLink").style.color = "#313133";
+            if (hashText.length < 32) {
+               let ahref = document.createElement("a");
+               ahref.innerHTML = "";
+               ahref.style.color = "#313133";
+               ahref.classList.add("HashLink");
+               document.getElementById("Hashdiv").append(ahref)
             } else {
-               document.getElementById("HashLink").href = "https://www.nanolooker.com/block/" + hash;
-               document.getElementById("HashLink").target = "blank";
-               document.getElementById("HashLink").innerHTML = "Final hash:<br>" + hash;
-               document.getElementById("HashLink").style.color = "#313133";
+               for (let i = 0; i < hashArray.length; i++) {
+                  let hash = hashArray[i]
+                  let ahref = document.createElement("a");
+                  ahref.href = "https://www.nanolooker.com/block/" + hash;
+                  ahref.target = "blank";
+                  ahref.innerHTML = "Final hash:<br>" + hash + "<br>";
+                  ahref.style.color = "#313133";
+                  ahref.classList.add("HashLink");
+
+                  document.getElementById("Hashdiv").append(ahref)
+               }
             }
             document.getElementById("Hashdiv").style.maxHeight = "1000px";
             document.getElementById("tooltiptap").hidden = true;
@@ -378,7 +390,10 @@ async function ajaxGetAddress(finalAddress) {
 
             setTimeout(function(){ // delay by 100 ms
             document.getElementById("Hashdiv").classList.add("animate-zipRight-in");
-            document.getElementById("HashLink").style.removeProperty("color");
+            let HashLinks = document.getElementsByClassName('HashLink');
+            [].slice.call(HashLinks).forEach(function(HashLink) {
+               HashLink.style.removeProperty("color");
+            });
 
             setTimeout(function(){ // delay by 1000 ms
 
@@ -398,7 +413,7 @@ async function ajaxGetAddress(finalAddress) {
             });
 
             // Find the y-percent where the final hash is and put confetti there.
-            var y = document.getElementById("HashLink").getBoundingClientRect().y;
+            var y = document.getElementsByClassName("HashLink")[0].getBoundingClientRect().y;
             var percentY = y/window.innerHeight;
             myConfetti({
                paricleCount: 80,
