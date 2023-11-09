@@ -101,101 +101,107 @@ func transactionManager(t *Transaction) {
 
    // We have a lot of clean up to do
    defer func() {
-      // TODO if we safe exit during a delay we need a way to exit without cleaning everything up.
       recoverMessage := recover()
       if (recoverMessage != nil) {
          Error.Println("transactionManager panic: ", recoverMessage)
       }
 
-      // Remove active transaction
-      err := setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, nil, false, []int{}, []int{})
-      if (err != nil) {
-         Warning.Println("defer transactionManager: ", err.Error())
-      }
-      // Get rid of it in delayed transactions db TOdO
-
-      // Cancel all the things
-      if !(fullTransactionWasSuccessfull(t.transactionSuccessful)) {
-         sendInfoToClient("info=There was an internal error. Your transaction has been refunded.", t.paymentAddress)
-         err := checkPartialRefund(t)
+      // If we're doing a safe exit then leave the transaction intact to be
+      // picked up next time we start.
+      if (!safeExit) {
+         // Remove active transaction
+         err := setRecipientAddress(t.paymentParentSeedId, t.paymentIndex, nil, false, []int{}, []int{})
          if (err != nil) {
-            // VERY BAD! Just accepted money, failed to deliver it, and didn't
-            //           refund the user!
-            nanoAddress, _ := keyMan.PubKeyToAddress(t.paymentAddress)
-            Error.Println("Refund failed!! Address:", nanoAddress, " error:", err.Error())
-            sendEmail("IMMEDIATE ATTENTION REQUIRED", "Refund failed!! Address: "+ nanoAddress +" error: "+ err.Error() +
-               "\n\nPayment Hash: "+ t.receiveHash.String() +
-               "\nID: "+ strconv.Itoa(t.paymentParentSeedId) +","+ strconv.Itoa(t.paymentIndex) +
-               "\nAmount: "+ strconv.FormatFloat(rawToNANO(t.payment), 'f', -1, 64))
+            Warning.Println("defer transactionManager: ", err.Error())
          }
-         mixTransitionalAddresses(t)
-         t.abort = true
-         for i, _ := range t.receiveWg {
-            t.receiveWg[i].Done()
-         }
-         if (t.numSubSends > 1) {
-            Warning.Println("Sub send transaction failed (", t.id, ")")
-         } else if (t.multiSend[0]) {
-            Warning.Println("Multi transaction failed (", t.id, ")")
+
+         // Cancel all the things
+         if !(fullTransactionWasSuccessfull(t.transactionSuccessful)) {
+            sendInfoToClient("info=There was an internal error. Your transaction has been refunded.", t.paymentAddress)
+            err := checkPartialRefund(t)
+            if (err != nil) {
+               // VERY BAD! Just accepted money, failed to deliver it, and didn't
+               //           refund the user!
+               nanoAddress, _ := keyMan.PubKeyToAddress(t.paymentAddress)
+               Error.Println("Refund failed!! Address:", nanoAddress, " error:", err.Error())
+               sendEmail("IMMEDIATE ATTENTION REQUIRED", "Refund failed!! Address: "+ nanoAddress +" error: "+ err.Error() +
+                  "\n\nPayment Hash: "+ t.receiveHash.String() +
+                  "\nID: "+ strconv.Itoa(t.paymentParentSeedId) +","+ strconv.Itoa(t.paymentIndex) +
+                  "\nAmount: "+ strconv.FormatFloat(rawToNANO(t.payment), 'f', -1, 64))
+            }
+            mixTransitionalAddresses(t)
+            t.abort = true
+            for i, _ := range t.receiveWg {
+               t.receiveWg[i].Done()
+            }
+            if (t.numSubSends > 1) {
+               Warning.Println("Sub send transaction failed (", t.id, ")")
+            } else if (t.multiSend[0]) {
+               Warning.Println("Multi transaction failed (", t.id, ")")
+            } else {
+               Warning.Println("Transaction failed (", t.id, ")")
+            }
+            if (verbosity >= 5) {
+               fmt.Println("Transaction failed...")
+            }
          } else {
-            Warning.Println("Transaction failed (", t.id, ")")
+            recordProfit(t.fee, t.id)
+            Info.Println("Transaction", t.id, "Complete")
+
+            for _, hash := range t.finalHash {
+               // There was a bug that I saw occasionally where it would send a blank
+               // hash to the client. I haven't been able to reproduce it recently,
+               // but if it happens, log it and try to track it down.
+               if (len(hash) < 32) {
+                  Warning.Println("Final hash for transaction is blank:\n", t)
+                  sendEmail("WARNInG", "Final hash for transaction is blank:\n"+ t.String())
+               }
+            }
+            if (t.bridge) {
+               // Final hash would leak recipients address to sender. Redact it.
+               for i, _ := range t.finalHash {
+                  t.finalHash[i] = []byte("COFFEE")
+               }
+            }
+            sendFinalHash(t.finalHash, t.paymentAddress)
+
+            // Send any dirty addresses to the mixer.
+            for i, dirtyAddress := range t.dirtyAddress {
+               if (dirtyAddress != -1) {
+                  if (verbosity >= 8) {
+                     fmt.Println("Sending dirty address to mixer")
+                  }
+                  err := sendToMixer(t.sendingKeys[i][dirtyAddress], 1)
+
+                  if (err != nil) {
+                     Error.Println("Mixer Error:", err.Error())
+                     sendEmail("WARNING", "Mixer Error: "+ err.Error())
+                  }
+               }
+            }
          }
-         if (verbosity >= 5) {
-            fmt.Println("Transaction failed...")
+
+         // Un-mark all addresses
+         setAddressNotInUse(address)
+         for _, sendingKeys := range t.sendingKeys {
+            for _, key := range sendingKeys {
+               setAddressNotInUse(key.NanoAddress)
+            }
+         }
+         for _, transitionalKey := range t.transitionalKey {
+            if (transitionalKey != nil) {
+               setAddressNotInUse(transitionalKey.NanoAddress)
+            }
+         }
+
+         err = deleteTransactionRecord(t.id)
+         if (err != nil) {
+            Warning.Println("Delayed transaction delete failed:", err)
          }
       } else {
-         recordProfit(t.fee, t.id)
-         Info.Println("Transaction", t.id, "Complete")
-
-         for _, hash := range t.finalHash {
-            // There was a bug that I saw occasionally where it would send a blank
-            // hash to the client. I haven't been able to reproduce it recently,
-            // but if it happens, log it and try to track it down.
-            if (len(hash) < 32) {
-               Warning.Println("Final hash for transaction is blank:\n", t)
-               sendEmail("WARNInG", "Final hash for transaction is blank:\n"+ t.String())
-            }
+         if (len(t.delays) > 0) {
+            fmt.Println("Transaction stopped, but saved to db")
          }
-         if (t.bridge) {
-            // Final hash would leak recipients address to sender. Redact it.
-            for i, _ := range t.finalHash {
-               t.finalHash[i] = []byte("COFFEE")
-            }
-         }
-         sendFinalHash(t.finalHash, t.paymentAddress)
-
-         // Send any dirty addresses to the mixer.
-         for i, dirtyAddress := range t.dirtyAddress {
-            if (dirtyAddress != -1) {
-               if (verbosity >= 8) {
-                  fmt.Println("Sending dirty address to mixer")
-               }
-               err := sendToMixer(t.sendingKeys[i][dirtyAddress], 1)
-
-               if (err != nil) {
-                  Error.Println("Mixer Error:", err.Error())
-                  sendEmail("WARNING", "Mixer Error: "+ err.Error())
-               }
-            }
-         }
-      }
-
-      // Un-mark all addresses
-      setAddressNotInUse(address)
-      for _, sendingKeys := range t.sendingKeys {
-         for _, key := range sendingKeys {
-            setAddressNotInUse(key.NanoAddress)
-         }
-      }
-      for _, transitionalKey := range t.transitionalKey {
-         if (transitionalKey != nil) {
-            setAddressNotInUse(transitionalKey.NanoAddress)
-         }
-      }
-
-      err = deleteTransactionRecord(t.id)
-      if (err != nil) {
-         Warning.Println("Delayed transaction delete failed:", err)
       }
 
    }()
@@ -231,7 +237,13 @@ func transactionManager(t *Transaction) {
 }
 
 func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
-   // TODO panic recovery
+   defer func() {
+      recoverMessage := recover()
+      if (recoverMessage != nil) {
+         Error.Println("monitorSubSend panic: ", recoverMessage)
+      }
+   }()
+
    defer tWait.Done()
    var numDone = 0
    var operation = 0
@@ -274,6 +286,13 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
             fmt.Println("1 Aborting early on subSend", subSend)
          }
          return
+      case <-safeExitChan:
+         // If we're waiting for the first send and we get a safeExit then exit.
+         // Otherwise let the subsend finish before exiting.
+         if (verbosity >= 5) {
+            fmt.Println("Safe exit early on subSend", subSend)
+         }
+         return
    }
 
    // First manage all initial sends
@@ -299,34 +318,7 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
                t.finalHash[subSend] = i.hashes[0]
             }
 
-            // This is known as the "reverse-blacklist." It makes sure that we
-            // don't send funds from the address associated with address C to
-            // address A. (see blacklist documentation)
-            if (t.walletBalance[subSend][i.i].Cmp(t.individualSendAmount[subSend][i.i]) > 0) {
-               go func() {
-                  err := blacklistHash(t.sendingKeys[subSend][i.i].PublicKey, t.receiveHash)
-                  if (err != nil) {
-                     _, seedID, index, _ := getSeedFromAddress(t.sendingKeys[subSend][i.i].NanoAddress)
-                     Error.Println("BlacklistHash failed to blacklist ", seedID, ",", index, ":", err.Error())
-                     sendEmail("WARNING", "Blacklist failed."+
-                     "\n\nID: "+ strconv.Itoa(seedID) +","+strconv.Itoa(index) +
-                       "\nHash: "+ t.receiveHash.String())
-
-                     // Wait for address to not be in use by the transaction.
-                     for {
-                        in_use, _ := isAddressInUse(t.sendingKeys[subSend][i.i].NanoAddress)
-                        if (in_use) {
-                           time.Sleep(10 * time.Second)
-                        } else {
-                           break
-                        }
-                     }
-
-                     // Keep funds locked until manual intervention.
-                     setAddressInUse(t.sendingKeys[subSend][i.i].NanoAddress)
-                  }
-               }()
-            }
+            reverseBlacklist(t, subSend, i.i)
          case err := <-t.errChannel[subSend]:
             // There was an error. Deal with it.
             if (verbosity >= 5) {
@@ -455,7 +447,7 @@ func monitorSubSend(t *Transaction, tWait *sync.WaitGroup, subSend int) {
                      fmt.Println("Done with receives")
                   }
 
-                  // Recives have been published, now wait for them to confirm
+                  // Receives have been published, now wait for them to confirm
 
                   trackConfirms := make(map[string]bool)
                   for _, hash := range tComm.hashes {
@@ -583,8 +575,8 @@ func handleSingleSendError(t *Transaction, subSend int, prevError error) bool {
          }
          retryCount++
       } else {
-         // TODO Do we also need to check for reverse blacklist??
          t.finalHash[subSend] = blockHash
+         reverseBlacklist(t, subSend, 0)
          return true
       }
    }
@@ -915,13 +907,49 @@ func broadcastAbort(t *Transaction) {
 // transactions in the database otherwise)
 func updateDelayRecords(t *Transaction) {
 
-   fmt.Println("Updating records, length of delays:", len(t.delays))
-
    if (len(t.delays) > 0) {
       err := upsertTransactionRecord(t)
       if (err != nil) {
          fmt.Println("updateDelayRecords:", err)
          Warning.Println("updateDelayRecords:", err)
       }
+   }
+}
+
+// This is known as the "reverse-blacklist." It makes sure that we don't send
+// funds from the address associated with address C to address A. (see blacklist
+// documentation)
+func reverseBlacklist(t *Transaction, subSend int, multiSendIndex int) {
+   if (t.walletBalance[subSend][multiSendIndex].Cmp(t.individualSendAmount[subSend][multiSendIndex]) > 0) {
+      go func() {
+         defer func() {
+            recoverMessage := recover()
+            if (recoverMessage != nil) {
+               Error.Println("reverseBlacklist panic: ", recoverMessage)
+            }
+         }()
+
+         err := blacklistHash(t.sendingKeys[subSend][multiSendIndex].PublicKey, t.receiveHash)
+         if (err != nil) {
+            _, seedID, index, _ := getSeedFromAddress(t.sendingKeys[subSend][multiSendIndex].NanoAddress)
+            Error.Println("BlacklistHash failed to blacklist ", seedID, ",", index, ":", err.Error())
+            sendEmail("WARNING", "Blacklist failed."+
+            "\n\nID: "+ strconv.Itoa(seedID) +","+strconv.Itoa(index) +
+              "\nHash: "+ t.receiveHash.String())
+
+            // Wait for address to not be in use by the transaction.
+            for {
+               in_use, _ := isAddressInUse(t.sendingKeys[subSend][multiSendIndex].NanoAddress)
+               if (in_use) {
+                  time.Sleep(10 * time.Second)
+               } else {
+                  break
+               }
+            }
+
+            // Keep funds locked until manual intervention.
+            setAddressInUse(t.sendingKeys[subSend][multiSendIndex].NanoAddress)
+         }
+      }()
    }
 }

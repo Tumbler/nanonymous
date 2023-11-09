@@ -1169,7 +1169,6 @@ func upsertTransactionRecord(t *Transaction) error {
    }
 
    var stamps []time.Time
-   // this timestamp is.... probably not correct because time could have passed before calling this function TODO
    for _, delay := range t.delays {
       stamps = append(stamps, time.Now().Add(time.Duration(delay) * time.Second))
    }
@@ -1185,7 +1184,7 @@ func upsertTransactionRecord(t *Transaction) error {
          if (key != nil) {
             seedId, index, err := getWalletFromAddress(key.NanoAddress)
             if (err != nil) {
-               // TODO Log
+               Warning.Println("upsertTransactionRecord: getting sending keys: ", err)
                fmt.Println("upsertTransactionRecord: getting sending keys: ", err)
             }
             sendingKeys[i] = append(sendingKeys[i], strconv.Itoa(seedId) +","+ strconv.Itoa(index))
@@ -1196,8 +1195,8 @@ func upsertTransactionRecord(t *Transaction) error {
    }
 
    var transitionalKey []string
-   for _, key := range t.transitionalKey {
-      if (key != nil) {
+   for i, key := range t.transitionalKey {
+      if (t.multiSend[i]) {
          seedId, index, err := getWalletFromAddress(key.NanoAddress)
          if (err != nil) {
             fmt.Println("upsertTransactionRecord: getting transitional keys: ", err)
@@ -1332,7 +1331,6 @@ func getTranscationRecord(id int, t *Transaction) error {
       "amountToSend, " +
       "sendingKeys, " +
       "transitionalKey, " +
-      //// TODO individualSendAmount??
       "pgp_sym_decrypt_bytea(finalHash, $2), " +
       "percents, " +
       "bridge, " +
@@ -1472,8 +1470,10 @@ func getTranscationRecord(id int, t *Transaction) error {
    // Populate final Hashes
    // This as an array but stored as plaintext so that we can encrypt it.
    for _, hash := range strings.Split(string(finalHash), ",") {
-      // TODO error handling
-      hexString, _ := hex.DecodeString(hash)
+      hexString, err := hex.DecodeString(hash)
+      if (err != nil) {
+         Error.Println("getTranscationRecord: Decode String: ", err)
+      }
       t.finalHash = append(t.finalHash, hexString)
    }
 
@@ -1501,31 +1501,36 @@ func deleteTransactionRecord (id int) error {
    return nil
 }
 
-func getDelayedIds() ([]int, error) {
+func getDelayedIds() ([]int, []string, error) {
    conn, err := pgx.Connect(context.Background(), databaseUrl)
    if (err != nil) {
-      return []int{}, fmt.Errorf("getDelayedIds: %w", err)
+      return []int{}, []string{}, fmt.Errorf("getDelayedIds: %w", err)
    }
 
    queryString :=
    "SELECT " +
-      "id " +
+      "id, " +
+      "pgp_sym_decrypt_bytea(paymentAddress, $1) " +
    "FROM " +
       "delayed_transactions " +
    "ORDER BY " +
       "id;"
 
-   rows, err := conn.Query(context.Background(), queryString)
+   rows, err := conn.Query(context.Background(), queryString, databasePassword)
    if (err != nil) {
-      return []int{}, fmt.Errorf("getDelayedIds: %w", err)
+      return []int{}, []string{}, fmt.Errorf("getDelayedIds: %w", err)
    }
 
    var id int
-   var ids [] int
+   var ids []int
+   var address []byte
+   var addresses []string
    for (rows.Next()) {
-      rows.Scan(&id)
+      rows.Scan(&id, &address)
       ids = append(ids, id)
+      pa, _ := keyMan.PubKeyToAddress(address)
+      addresses = append(addresses, pa)
    }
 
-   return ids, nil
+   return ids, addresses, nil
 }

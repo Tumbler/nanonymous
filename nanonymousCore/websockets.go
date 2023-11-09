@@ -375,13 +375,12 @@ func handleNotification(cBlock ConfirmationBlock) {
    wg.Add(1)
    defer wg.Done()
 
-   // TODO
-   //defer func() {
-      //err := recover()
-      //if (err != nil) {
-         //Error.Println("handleNotification panic: ", err)
-      //}
-   //}()
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("handleNotification panic: ", err)
+      }
+   }()
 
    if (bytes.Equal(cBlock.Message.Hash, lastHashSeen) && !inTesting) {
       // Just a KeepAlive response. Ignore.

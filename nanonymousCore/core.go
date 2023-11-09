@@ -329,18 +329,18 @@ func initNanoymousCore(mainInstance bool) error {
 }
 
 var safeExit bool
+var safeExitChan = make(chan int)
 // listen is the default operation of nanonymousCore. It listens on port 41721
 // for incoming requests from the front end and passes them off to the handler.
 func listen() error {
 
-   // TODO
-   //defer func() {
-      //err := recover()
-      //if (err != nil) {
-         //Error.Println("listen panic: ", err)
-         //go listen()
-      //}
-   //}()
+   defer func() {
+      err := recover()
+      if (err != nil) {
+         Error.Println("listen panic: ", err)
+         go listen()
+      }
+   }()
 
    const INSTANCE_PORT = 41721
 
@@ -377,28 +377,54 @@ func listen() error {
       if (verbosity >= 3) {
          fmt.Println("Listening....")
       }
-      conn, err := listener.Accept()
-      if (err != nil) {
-         Error.Println("Error with single instance port:", err.Error())
-         if (verbosity >= 3) {
-            fmt.Println("Error with single instance port:", err.Error())
-         }
+      go accept(listener)
+      var conn net.Conn
+      select {
+         case ret := <- listenChan:
+            if (ret.err != nil) {
+               Error.Println("Error with single instance port:", err.Error())
+               if (verbosity >= 3) {
+                  fmt.Println("Error with single instance port:", err.Error())
+               }
+            }
+            conn = ret.conn
+         case <- safeExitChan:
       }
 
-      go handleRequest(conn)
+      if (!safeExit) {
+         go handleRequest(conn)
+      }
    }
+
+   fmt.Println(" Leaving due to safe exit")
 
    return nil
 }
 
+// This whole thing is simply so that listen.Accept() can be interrupted if we need.
+type listenRet struct{
+   conn net.Conn
+   err error
+}
+var listenChan = make(chan listenRet)
+func accept(listener net.Listener) {
+   conn, err := listener.Accept()
+   listenChan <- listenRet{conn, err}
+}
+
 func oneInstanceInits() (err error) {
    resetInUse()
-   // TODO make sure to set anything being used in a loaded delayed transaction back to in use.
 
    // Check if there are any delayed transactions that still need to be completed.
-   ids, err := getDelayedIds()
+   ids, paymentAddresses, err := getDelayedIds()
    if (err != nil) {
       return fmt.Errorf("oneInstanceInits: %w", err)
+   }
+
+   // Make sure that any received funds in pending transactions are locked until the transaction completes.
+   for _, paymentAddress := range paymentAddresses {
+      fmt.Println("setting in use:", paymentAddress)
+      setAddressInUse(paymentAddress)
    }
 
    for _, id := range ids {
@@ -429,11 +455,23 @@ func oneInstanceInits() (err error) {
          var subSend = i
 
          go func() {
-            // TODO panic recovery
+            defer func() {
+               recoverMessage := recover()
+               if (recoverMessage != nil) {
+                  Error.Println("oneInstanceInits: Delayed subsend panic: ", recoverMessage)
+               }
+            }()
+
             // Delay for amount specified.
-            // TODO check for negative delay
             if (len(t.delays) > subSend && t.delays[subSend] > 0) {
-               time.Sleep(time.Duration(t.delays[subSend]) * time.Second)
+               select {
+                  case <-time.After(time.Duration(t.delays[subSend]) * time.Second):
+                     // Normal delay, proceed as normal.
+                  case <-safeExitChan:
+                     fmt.Println("Safe Exit from delayed send")
+                     // Exiting early
+                     return
+               }
             }
 
             if (verbosity >= 5) {
@@ -501,7 +539,9 @@ func handleRequest(conn net.Conn) error {
    var percents []int
    var delays []int
    for _, optionString := range array {
-      fmt.Println(optionString)
+      if (verbosity >= 6) {
+         fmt.Println(optionString)
+      }
       optionArray := strings.Split(optionString, "=")
       switch (optionArray[0]) {
          case "percents":
@@ -636,6 +676,7 @@ func handleRequest(conn net.Conn) error {
       if (strings.Contains(text, "safeExit")) {
          Info.Println("Got safe Exit request.")
          safeExit = true
+         sendSafeExit()
 
          httpHeader :=
          "HTTP/1.1 200 OK\n"+
@@ -1099,7 +1140,13 @@ func receivedNano(nanoAddress string) error {
       var subSend = i
 
       go func() {
-         // TODO panic recovery
+         defer func() {
+            recoverMessage := recover()
+            if (recoverMessage != nil) {
+               Error.Println("receivedNano: Subsend panic: ", recoverMessage)
+            }
+         }()
+
          // Delay for amount specified.
          if (len(t.delays) > subSend) {
             time.Sleep(time.Duration(t.delays[subSend]) * time.Second)
@@ -2439,90 +2486,13 @@ func nonTransactionRefund(receiveHash nt.BlockHash, parentID int, index int, pay
    }
 }
 
-func testFunction() {
+func sendSafeExit() {
 
-   deleteTransactionRecord(41)
-
-   feeDividend = int64(math.Trunc(100/FEE_PERCENT))
-   minPayment = nt.OneNano()
-   var t Transaction
-   t.paymentParentSeedId = 1
-   t.paymentIndex = 72
-   t.payment = nt.OneNano()
-   t.fee = calculateFee(t.payment)
-   t.receiveHash, _ = hex.DecodeString("DCC89776B79E96C778EAECB4C2A6C4EE8EE22DE9388651FD5C57DDE32E181D96")
-   t.id = 41
-   t.paymentAddress, _ = keyMan.AddressToPubKey("nano_3mhrc9czyfzzok7xeoeaknq6w5ok9horo7d4a99m8tbtbyogg8apz491pkzt")
-   t.recipientAddress, _ = keyMan.AddressToPubKey("nano_3rksbipm1b1g64gw6t36ufc77q7mtw1uybnto4xyn1e7ae5aikyknb9fg4su")
-   hash, _ := hex.DecodeString("AC684A9447E47340DFC2C0F92208F1EBC58798FDAB9D1A40A46ACBAD73BE3314")
-   t.finalHash = append([]nt.BlockHash{}, hash)
-   t.bridge = false
-   t.percents = []int{40, 60}
-   t.delays = []int{15, 349}
-   t.numSubSends = len(t.percents)
-   t.confirmationChannel = make([]chan string, t.numSubSends)
-   t.transitionalKey = make([]*keyMan.Key, t.numSubSends)
-   t.commChannel = make([]chan transactionComm, t.numSubSends)
-   t.errChannel = make([]chan error, t.numSubSends)
-   t.transactionSuccessful = []bool{false, false}
-   for i := 0; i < t.numSubSends; i++ {
-      t.commChannel[i] = make(chan transactionComm)
-      t.errChannel[i] = make(chan error)
-      t.sendingKeys = append(t.sendingKeys, make([]*keyMan.Key, 0))
-      tmp, _ := getSeedFromIndex(1, i)
-      t.sendingKeys[i] = append(t.sendingKeys[i], tmp)
-      t.walletSeed = append(t.walletSeed, make([]int, 0))
-      //t.walletSeed[i] = []int{}
-      t.walletBalance = append(t.walletBalance, make([]*nt.Raw, 0))
-      //t.walletBalance[i] = []*nt.Raw{}
-      t.multiSend = append(t.multiSend, false)
-      t.individualSendAmount = append(t.individualSendAmount, make([]*nt.Raw, 0))
-      //t.individualSendAmount[i] = []*nt.Raw{}
-      t.transitionSeedId = append(t.transitionSeedId, 0)
-      t.dirtyAddress = append(t.dirtyAddress, -1)
-
-      var err error
-      t.transitionalKey[i], err = getSeedFromIndex(1, i)
-      if (err != nil) {
-         fmt.Println("error? ", err)
+   for {
+      select {
+         case safeExitChan <- 1:
+         case <-time.After(1 * time.Second):
+            break
       }
    }
-   // Split the send up into its smaller pieces
-   totalAdded := nt.NewRaw(0)
-   var amountToSend = nt.OneNano()
-   for i, percent := range t.percents {
-      t.amountToSend = append(t.amountToSend, nt.NewRaw(0))
-      if (i == len(t.percents) -1) {
-         // Final send is just whatever is left over
-         t.amountToSend[i] = nt.NewRaw(0).Sub(amountToSend, totalAdded)
-      } else {
-         onePercent := nt.NewRaw(0).Div(amountToSend, nt.NewRaw(100))
-         xPercent := onePercent.Mul(onePercent, nt.NewRaw(int64(percent)))
-         t.amountToSend[i] = xPercent
-
-         totalAdded.Add(totalAdded, t.amountToSend[i])
-      }
-   }
-   fmt.Println("Split send:", t.amountToSend)
-
-   err := upsertTransactionRecord(&t)
-   if (err != nil) {
-      fmt.Println("ERROR!!: ", err)
-   }
-
-   err = upsertTransactionRecord(&t)
-   if (err != nil) {
-      fmt.Println("ERROR!!: ", err)
-   }
-
-   var u Transaction
-   err = getTranscationRecord(t.id, &u)
-   if (err != nil) {
-      fmt.Println("ERROR2!: ", err)
-   }
-
-   fmt.Println("Transaction saved: ", t)
-   fmt.Println("Transaction loaded: ", u)
-
-   deleteTransactionRecord(41)
 }
