@@ -82,7 +82,7 @@ var activeTransactionList = make(map[string]activeTransaction)
 
 var random *rand.Rand
 
-const version = "1.0.7"
+const version = "1.1.0"
 
 // Random info about used ports:
 // 41721    Nanonymous request port
