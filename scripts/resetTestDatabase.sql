@@ -20,12 +20,14 @@ SET row_security = off;
 ALTER TABLE ONLY public.wallets DROP CONSTRAINT seed;
 ALTER TABLE ONLY public.wallets DROP CONSTRAINT wallets_pkey;
 ALTER TABLE ONLY public.seeds DROP CONSTRAINT seeds_pkey;
+ALTER TABLE ONLY public.delayed_transactions DROP CONSTRAINT delayed_transactions_pkey;
 ALTER TABLE ONLY public.blacklist DROP CONSTRAINT blacklist_pkey;
 ALTER TABLE public.seeds ALTER COLUMN id DROP DEFAULT;
 DROP TABLE public.wallets;
 DROP TABLE public.transaction;
 DROP SEQUENCE public.seeds_id_seq;
 DROP TABLE public.seeds;
+DROP TABLE public.delayed_transactions;
 DROP TABLE public.blacklist;
 DROP EXTENSION pgcrypto;
 --
@@ -57,6 +59,35 @@ CREATE TABLE public.blacklist (
 
 
 ALTER TABLE public.blacklist OWNER TO test;
+
+--
+-- Name: delayed_transactions; Type: TABLE; Schema: public; Owner: tumbler
+--
+
+CREATE TABLE public.delayed_transactions (
+    id bigint NOT NULL,
+    timestamps timestamp with time zone[] NOT NULL,
+    paymentaddress bytea NOT NULL,
+    paymentparentseedid bigint NOT NULL,
+    paymentindex bigint NOT NULL,
+    payment numeric(40,0) NOT NULL,
+    receivehash bytea NOT NULL,
+    recipientaddress bytea NOT NULL,
+    fee numeric(40,0) NOT NULL,
+    amounttosend numeric(40,0)[] NOT NULL,
+    sendingkeys text[],
+    transitionalkey text[],
+    finalhash bytea,
+    percents integer[],
+    bridge boolean,
+    numsubsends integer,
+    dirtyaddress bigint[],
+    multisend boolean[] NOT NULL,
+    transactionsuccessful boolean[]
+);
+
+
+ALTER TABLE public.delayed_transactions OWNER TO tumbler;
 
 --
 -- Name: seeds; Type: TABLE; Schema: public; Owner: test
@@ -134,11 +165,19 @@ ALTER TABLE ONLY public.seeds ALTER COLUMN id SET DEFAULT nextval('public.seeds_
 -- Data for Name: blacklist; Type: TABLE DATA; Schema: public; Owner: test
 --
 
-COPY public.blacklist (hash) FROM stdin;
-\\x229f159f32139fac10a1e2135a9b2d05653f38794690008439dfcc0f3f6dcd1c
-\\xa98cfe2664590f3646b0552a82760bf56c4c70732a378a3db0ce161d2a38a2c4
-\\x07df75587b148251ea97a898d9a0968d188df87a70e0ee26f15104bb3e69ad5f
-\\xad033a213924c894aff483e5bf62da600aa7f46df04826e07d98b5ea5e2a0be5
+COPY public.blacklist (hash, seed_id) FROM stdin;
+\\x229f159f32139fac10a1e2135a9b2d05653f38794690008439dfcc0f3f6dcd1c	0
+\\xa98cfe2664590f3646b0552a82760bf56c4c70732a378a3db0ce161d2a38a2c4	0
+\\x07df75587b148251ea97a898d9a0968d188df87a70e0ee26f15104bb3e69ad5f	0
+\\xad033a213924c894aff483e5bf62da600aa7f46df04826e07d98b5ea5e2a0be5	0
+\.
+
+
+--
+-- Data for Name: delayed_transactions; Type: TABLE DATA; Schema: public; Owner: tumbler
+--
+
+COPY public.delayed_transactions (id, timestamps, paymentaddress, paymentparentseedid, paymentindex, payment, receivehash, recipientaddress, fee, amounttosend, sendingkeys, transitionalkey, finalhash, percents, bridge, numsubsends, dirtyaddress, multisend, transactionsuccessful) FROM stdin;
 \.
 
 
@@ -188,6 +227,14 @@ SELECT pg_catalog.setval('public.seeds_id_seq', 1, true);
 
 ALTER TABLE ONLY public.blacklist
     ADD CONSTRAINT blacklist_pkey PRIMARY KEY (hash);
+
+
+--
+-- Name: delayed_transactions delayed_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: tumbler
+--
+
+ALTER TABLE ONLY public.delayed_transactions
+    ADD CONSTRAINT delayed_transactions_pkey PRIMARY KEY (id);
 
 
 --

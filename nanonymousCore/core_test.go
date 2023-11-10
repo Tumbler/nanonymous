@@ -486,8 +486,6 @@ func Test_receiveOnly(t *testing.T) {
          }
       }
    }
-
-   verbosity = 0
 }
 
 func Test_extractFromMixer(t *testing.T) {
@@ -777,4 +775,3 @@ func Test_checkBlackList(t *testing.T) {
    }
 
 }
-

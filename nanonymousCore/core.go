@@ -442,6 +442,7 @@ func oneInstanceInits() (err error) {
       t.abortchan = make(chan int)
 
       // Start it up.
+      wg.Add(1)
       go transactionManager(&t)
 
       for i := 0; i < t.numSubSends; i++ {
@@ -1100,6 +1101,7 @@ func receivedNano(nanoAddress string) error {
       t.dirtyAddress = append(t.dirtyAddress, -1)
    }
 
+   wg.Add(1)
    go transactionManager(&t)
 
    t.fee = calculateFee(payment)

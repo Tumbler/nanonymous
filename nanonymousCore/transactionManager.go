@@ -94,7 +94,7 @@ const RetryNumber = 3
 // coordinates send/receives, and handles refunds if something goes wrong.
 func transactionManager(t *Transaction) {
 
-   wg.Add(1)
+   // WARNING: use wg.Add(1) before calling
    defer wg.Done()
 
    address, _ := keyMan.PubKeyToAddress(t.paymentAddress)
@@ -770,7 +770,8 @@ func retryFinalSend(t *Transaction, subSend int, prevError error) bool {
 
    var err error
    for (retryCount < RetryNumber) {
-      newHash, err := Send(t.transitionalKey[subSend], t.recipientAddress, t.amountToSend[subSend], nil, nil, -1)
+      var newHash nt.BlockHash
+      newHash, err = Send(t.transitionalKey[subSend], t.recipientAddress, t.amountToSend[subSend], nil, nil, -1)
       if (err != nil) {
          retryCount++
       } else {
