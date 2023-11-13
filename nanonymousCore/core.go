@@ -28,8 +28,6 @@ import (
    "golang.org/x/crypto/blake2b"
 )
 
-// TODO take out all trailing "=" in php files
-
 //go:generate go run github.com/c-sto/encembed -i embed.txt -decvarname embeddedByte
 var embeddedData = string(embeddedByte)
 // "db = [url]" in embed.txt to set this value
@@ -578,7 +576,6 @@ func handleRequest(conn net.Conn) error {
                calculatedLastValue := 100 - (total - percents[len(percents)-1])
                percents[len(percents)-1] = calculatedLastValue
             }
-            fmt.Println(percents)
          case "delays":
             if (len(optionArray) > 1) {
                for _, num := range strings.Split(optionArray[1], ",") {
