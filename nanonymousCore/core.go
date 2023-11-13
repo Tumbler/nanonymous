@@ -555,6 +555,30 @@ func handleRequest(conn net.Conn) error {
                   percents = append(percents, integer)
                }
             }
+            // Make sure input properly adds up to 100
+            var total int
+            for _, num := range percents {
+               total += num
+            }
+            for (total > 100 && len(percents) > 0) {
+               // Reduce the last value to one before dropping it entirely
+               if ((total - percents[len(percents)-1] + 1) < 100) {
+                  total = total - percents[len(percents)-1] + 1
+                  percents[len(percents)-1] = 1
+               } else {
+                  total -= percents[len(percents)-1]
+                  percents = percents[:len(percents)-1]
+               }
+            }
+            if (len(percents) == 0) {
+               percents = append(percents, 100)
+            }
+            // Increase the final value to take up rest of the 100%.
+            if (total < 100) {
+               calculatedLastValue := 100 - (total - percents[len(percents)-1])
+               percents[len(percents)-1] = calculatedLastValue
+            }
+            fmt.Println(percents)
          case "delays":
             if (len(optionArray) > 1) {
                for _, num := range strings.Split(optionArray[1], ",") {
@@ -562,6 +586,12 @@ func handleRequest(conn net.Conn) error {
                   if (err != nil) {
                      fmt.Println("Error:", err)
                      continue
+                  }
+                  // Max delay of 1 hour.
+                  if (integer > 3600) {
+                     integer = 3600
+                  } else if (integer < 0) {
+                     integer = 0
                   }
                   delays = append(delays, integer)
                }
