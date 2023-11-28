@@ -13,8 +13,7 @@ if (isset($_SESSION[$_SERVER['REMOTE_ADDR']])) {
    $_SESSION[$_SERVER['REMOTE_ADDR']] = time();
 }
 
-
-$finalAddress=$_GET['address'];
+$request = explode("?", $_SERVER['REQUEST_URI']);
 $context = stream_context_create(
    ['ssl' => [
      'allow_self_signed' => true
@@ -24,11 +23,15 @@ $socket = stream_socket_client('ssl://147.182.231.89:41721', $errno, $errstr, 30
 if (!$socket) {
    echo "comm error: $errstr ($errno)<br />\n";
 } else {
-   fwrite($socket, "newaddress&address=$finalAddress");
-   while (($buffer = fgets($socket, 128)) !== false) {
-      $newAddress = $buffer;
+   if (count($request) > 1) {
+      fwrite($socket, $request[1]);
+      while (($buffer = fgets($socket, 128)) !== false) {
+         $newAddress = $buffer;
+      }
+      fclose($socket);
+   } else {
+      echo "error: Malformed URI<br />\n";
    }
-   fclose($socket);
 }
 
 echo $newAddress;
