@@ -116,43 +116,57 @@ function GetCurrentFee() {
 // Basically just a 0.2% fee, but truncates any dust from the fee itself (but
 // not from the payment so you can add your own dust if you so desire).
 function CalculateTax(amount) {
+   let feeFactor = 1000;
+   let rounding = 3;
+
+   let compare = 1
+   if (amount < 1 && amount > 0) {
+      while (amount < compare) {
+         compare /= 10;
+         feeFactor *= 10;
+         rounding++;
+      }
+   }
+
    var feeWithDust = amount * nanonymousFee;
-   var fee = Math.floor(feeWithDust * 1000) / 1000;
+   var fee = Math.floor(feeWithDust * feeFactor) / feeFactor;
+   console.log(fee)
 
    var finalVal = amount - fee;
 
    var precision = afterDecimal(amount);
-   if (precision < 3) {
-      precision = 3;
+   if (precision < rounding)
+   {
+      precision = rounding;
    }
    precision = 10 ** precision;
-
-   if (amount < 1 && !beta) {
-      document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano.";
-   } else {
-      document.getElementById("errorMessage").innerHTML = "";
-   }
 
    return Math.round(finalVal * precision) / precision;
 }
 
 function CalculateInverseTax(amount) {
+   let feeFactor = 1000;
+   let rounding = 3;
+
+   let compare = 1
+   if (amount < 1 && amount > 0) {
+      while (amount < compare) {
+         compare /= 10;
+         feeFactor *= 10;
+         rounding++;
+      }
+   }
+
    var origWithDust = amount / (1 - nanonymousFee);
-   var fee = Math.floor((origWithDust - amount) * 1000) / 1000;
+   var fee = Math.floor((origWithDust - amount) * feeFactor) / feeFactor;
 
    var trueOrig = amount + fee;
 
    var precision = afterDecimal(amount);
-   if (precision < 3) {
-      precision = 3;
+   if (precision < rounding) {
+      precision = rounding;
    }
    precision = 10 ** precision;
-
-   if (trueOrig < 1 && !beta) {
-      document.getElementById("errorMessage").innerHTML = "The minimum transaction supported is 1 Nano.";
-   } else {
-      document.getElementById("errorMessage").innerHTML = "";
-   }
 
    return Math.round(trueOrig * precision) / precision;
 }
