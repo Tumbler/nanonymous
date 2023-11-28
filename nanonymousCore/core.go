@@ -290,7 +290,8 @@ func initNanoymousCore(mainInstance bool) error {
 
    if (!betaMode) {
       feeDividend = int64(math.Trunc(100/FEE_PERCENT))
-      minPayment = nt.OneNano()
+      // 500 is the minimum we can get and still charge at least 1 raw for a fee.
+      minPayment = nt.NewRaw(500)
    } else {
       minPayment = nt.NewRaw(0)
    }
@@ -1051,7 +1052,7 @@ func receivedNano(nanoAddress string) error {
    if (minPayment.Cmp(payment) > 0) {
       // Less than the minimum. Refund it.
       pubKey, _ := keyMan.AddressToPubKey(nanoAddress)
-      sendInfoToClient("info=The minimum transaction supported is 1 Nano. Your transaction has been refunded.", pubKey)
+      sendInfoToClient("info=The minimum transaction supported is 500 raw. Your transaction has been refunded.", pubKey)
       nonTransactionRefund(receiveHash, parentSeedId, index, payment)
       // Transaction aborted
       return nil
@@ -2235,9 +2236,22 @@ func calculateFee(payment *nt.Raw) *nt.Raw {
    // Find base fee simply by taking the percentage
    fee := nt.NewRaw(0).Div(payment, nt.NewRaw(feeDividend))
 
+   // Find the most significant digit
+   var mostSig = nt.NewRaw(1)
+   var paymentCopy = nt.NewFromRaw(payment)
+   for (paymentCopy.Cmp(nt.NewRaw(9)) > 0) {
+      paymentCopy.Div(paymentCopy, nt.NewRaw(10))
+
+      mostSig.Mul(mostSig, nt.NewRaw(10))
+   }
+   // Maxes out at 1 NANO
+   if (mostSig.Cmp(nt.OneNano()) > 0) {
+      mostSig = nt.OneNano()
+   }
+
    // Don't want the user to have to deal with dust so I'll round the fee down
    // to the nearest .001 * minimum
-   minDust := nt.OneNano().Div(minPayment, nt.NewRaw(1000))
+   minDust := nt.OneNano().Div(mostSig, nt.NewRaw(1000))
 
    _, dust := nt.OneNano().DivMod(fee, minDust)
 
