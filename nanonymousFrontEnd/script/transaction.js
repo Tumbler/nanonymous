@@ -13,6 +13,18 @@ function showQR() {
 }
 
 function autoFill(caller) {
+   // Autofill zero first for decimals.
+   if (document.getElementById("USDamount").value[0] == ".") {
+      document.getElementById("USDamount").value = "0"+ document.getElementById("USDamount").value;
+   }
+   if (document.getElementById("nanoAmount").value[0] == ".") {
+      document.getElementById("nanoAmount").value = "0"+ document.getElementById("nanoAmount").value;
+   }
+   if (document.getElementById("afterTaxAmount").value[0] == ".") {
+      document.getElementById("afterTaxAmount").value = "0"+ document.getElementById("afterTaxAmount").value;
+   }
+
+   // Autofill other two text boxes as you type.
    switch(caller) {
       case 1:
          var price = document.getElementById("nanoPrice").innerHTML;
@@ -130,7 +142,6 @@ function CalculateTax(amount) {
 
    var feeWithDust = amount * nanonymousFee;
    var fee = Math.floor(feeWithDust * feeFactor) / feeFactor;
-   console.log(fee)
 
    var finalVal = amount - fee;
 
