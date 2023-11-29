@@ -80,7 +80,7 @@ var activeTransactionList = make(map[string]activeTransaction)
 
 var random *rand.Rand
 
-const version = "1.1.0"
+const version = "1.1.1"
 
 // Random info about used ports:
 // 41721    Nanonymous request port
@@ -538,6 +538,7 @@ func handleRequest(conn net.Conn) error {
    // Parse the whole url
    var percents []int
    var delays []int
+   var apiResponse bool
    for _, optionString := range array {
       if (verbosity >= 6) {
          fmt.Println(optionString)
@@ -594,7 +595,26 @@ func handleRequest(conn net.Conn) error {
                   delays = append(delays, integer)
                }
             }
+         case "api":
+            if (len(optionArray) > 1) {
+               if (optionArray[1] == "true") {
+                  apiResponse = true
+               }
+            } else {
+                  apiResponse = true
+            }
       }
+   }
+   // Delays must match percents
+   if (len(delays) > len(percents)) {
+      // If we have no percents, then make at least one.
+      if (len(percents) == 0) {
+         percents = append(percents, 100)
+      }
+      delays = delays[:len(percents)]
+   }
+   for (len(delays) < len(percents)) {
+      delays = append(delays, 0)
    }
 
    if (len(array) >= 2 && array[0] == "newaddress") {
@@ -622,7 +642,7 @@ func handleRequest(conn net.Conn) error {
 
                // Bridging to recipient address instead of the address
                // specified.
-               err = respondWithNewAddress(recipientAddress, conn, true, percents, delays)
+               err = respondWithNewAddress(recipientAddress, conn, true, percents, delays, apiResponse)
                if (err != nil) {
                   return fmt.Errorf("handleRequest2: %w", err)
                }
@@ -630,7 +650,7 @@ func handleRequest(conn net.Conn) error {
                conn.Write([]byte("Invalid Request!"))
             }
          } else {
-            err := respondWithNewAddress(subArray[1], conn, false, percents, delays)
+            err := respondWithNewAddress(subArray[1], conn, false, percents, delays, apiResponse)
             if (err != nil) {
                return fmt.Errorf("handleRequest4: %w", err)
             }
@@ -2464,7 +2484,7 @@ func removeHash(hashList []nt.BlockHash, i int) []nt.BlockHash {
    return hashList[:len(hashList)-1]
 }
 
-func respondWithNewAddress(recipientAddress string, conn net.Conn, bridge bool, percents []int, delays []int) error {
+func respondWithNewAddress(recipientAddress string, conn net.Conn, bridge bool, percents []int, delays []int, api bool) error {
    newKey, _, err := getNewAddress(recipientAddress, false, false, bridge, percents, delays, 0)
    if (err != nil) {
       if (verbosity >= 3) {
@@ -2476,7 +2496,30 @@ func respondWithNewAddress(recipientAddress string, conn net.Conn, bridge bool, 
       return fmt.Errorf("respondWithNewAddress: %w", err)
    }
 
-   conn.Write([]byte("address="+ newKey.NanoAddress +"&bridge="+ fmt.Sprint(bridge)))
+   if (api) {
+      var uri = "address="+ newKey.NanoAddress
+      for i, percent := range percents {
+         if (i == 0) {
+            uri += "&percents="
+         } else {
+            uri += ","
+         }
+
+         uri += strconv.Itoa(percent)
+      }
+      for i, delay := range delays {
+         if (i == 0) {
+            uri += "&delays="
+         } else {
+            uri += ","
+         }
+
+         uri += strconv.Itoa(delay)
+      }
+      conn.Write([]byte(uri))
+   } else {
+      conn.Write([]byte("address="+ newKey.NanoAddress +"&bridge="+ fmt.Sprint(bridge)))
+   }
 
    return nil
 }
