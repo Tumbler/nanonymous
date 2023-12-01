@@ -1,0 +1,29 @@
+ #Docspng {
+    width: 14em;
+    order: -1;
+
+    object-fit: contain;
+
+    margin-top: 50px;
+    margin-bottom: 50px;
+ }
+blockquote {
+   background-color: #616163;
+   border: solid #919193 1px;
+   border-radius: .25em;
+   text-wrap: wrap;
+   overflow-wrap: break-word;
+   padding: 5px;
+   font-family: "Times New Roman", Times, serif;
+}
+h2 {
+   margin-bottom: 0px;
+}
+.desc {
+   margin-top: 0px;
+}
+hr {
+   border: 0; /* reset the default stylesheet */
+   border-bottom: 2px solid rgba(200,200,200,0.5);
+   border-top: 2px solid rgba(0,0,0,0.7);
+}

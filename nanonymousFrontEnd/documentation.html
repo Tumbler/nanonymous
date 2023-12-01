@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nanonymous Docs</title>
+<link rel="stylesheet" href="css/documentation.css">
+<link rel="stylesheet" href="css/common.css">
+<a href="index.html">
+   <img src="images/1_nospace.svg" id="logo" alt="Nanonymous"></img>
+</a>
+</head>
+<body>
+   <div id=outerbody>
+   <div id=innerbody>
+      <div style="display: flex;">
+         <img id="Docspng" src="images/docs.png">
+         <svg width="9999px" style="margin-top: auto; margin-bottom: auto; margin-right: -600%;">
+            <line class="Line" x1="25" y1="75" x2="9999" y2="75" />
+         </svg>
+      </div>
+      <div class="content" id="Docs">
+         <p>Here is the list of API commands. To use the API send a POST request to "https://nanonymous.cc/api/v1" followed by the command and URI encoded parameters. All responses are in JSON.
+         <h2> Newaddress </h2>
+         <p class="desc"> Requests an anonymized address. The following parameters are accpeted:</p>
+
+         </p><b>[Required]</b><br>address=[nano_address]<br>This parameter is the final recipient's address. This parameter must be present and first.
+         <p><b>[Optional]</b><br>percents=[comma separated list of integers]<br>This parameter specifies how many sends to split the transaction into and how big each should be. Only whole percents accepted and they must add up to 100. Max of 5. If omitted there will only be one send.
+         <p><b>[Optional]</b><br>delays=[comma separated list of integers]<br>This parameter specifies the delay for each sub-send in seconds. Max of 3600. If omitted there will be no delay.
+         <p><b>Example:</b><br>call<blockquote>https://nanonymous.cc/api/v1?newaddress&address=nano_3abhmawykqrd54aadcpfmz3bndsrfuqnenwpzht7ecdcsbqyfs4ct1g18dw1&percents=49,51&delays=40,280</blockquote><br>response<blockquote>{"address": "nano_3xdd6tc4k5ujacwu1478taakeu1dkouf3mgacyxtou8ty7hp6579rgd5ij3t", "percents": [49, 51], "delays": [40, 280], "fee": 0.002}</blockquote></p>
+         <p>The "address" field in the response is where to send nano to complete the transaction.</p>
+
+         <br>
+         <hr>
+         <br>
+
+         <h2> Feecheck </h2>
+         <p class="desc"> Queries the current fee that Nanonymous is charging.</p>
+
+         <p><b>Example:</b><br>call<blockquote>https://nanonymous.cc/api/v1?feecheck</blockquote><br>response<blockquote>{"fee": 0.002}</blockquote></p>
+         <p> This fee corresponds to 0.2% of the sent nano.</p>
+      </div>
+
+   </div>
+   </div>
+</body>
+<footer>
+   <img src="images/name.png" style="margin: auto">
+   <p> Contact us: </p>
+   <div id="ContactImgs">
+      <a href="https://discord.gg/BzmgjYxyXa" class="footerImg">
+         <img id="discord" src="images/discord-white.svg">
+      </a>
+      <a href="https://twitter.com/Nanonymous_nano" class="footerImg">
+         <img id="twitter" src="images/twitter-x-seeklogoWhite.svg">
+      </a>
+      <a href="mailto:info@nanonymous.cc" style="margin: auto 20px; height: 70%;">
+         <img id="email" src="images/email.png">
+      </a>
+   </div>
+   <br>
+   <p id="Copyrite"> 2023 &#169; Nanonymous </p>
+   <br/>
+</footer>
+</html>
