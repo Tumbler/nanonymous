@@ -1,20 +1,5 @@
 <?php
 // Same as getNewAddress.php but returns standard JSON
-/*
-session_start();
-
-if (isset($_SESSION[$_SERVER['REMOTE_ADDR']])) {
-   $timeElapsed = time() - (int)$_SESSION[$_SERVER['REMOTE_ADDR']];
-   if ($timeElapsed < 30) {
-      //echo "info: Please wait 30 seconds before requesting another address";
-      die("info=Please wait 30 seconds before requesting another address.\n");
-   } else {
-      $_SESSION[$_SERVER['REMOTE_ADDR']] = time();
-   }
-} else {
-   $_SESSION[$_SERVER['REMOTE_ADDR']] = time();
-}
-*/
 
 $request = explode("?", $_SERVER['REQUEST_URI']);
 $context = stream_context_create(
@@ -29,7 +14,7 @@ if (!$socket) {
    echo "{\"error\": \"comm error: $errstr ($errno)\n\"}";
 } else {
    if (count($request) > 1) {
-      fwrite($socket, 'newaddress&'. $request[1] .'&api');
+      fwrite($socket, $request[1] .'&api');
       while (($buffer = fgets($socket, 128)) !== false) {
          $newAddress = $buffer;
       }
