@@ -82,7 +82,7 @@ var activeTransactionList = make(map[string]activeTransaction)
 
 var random *rand.Rand
 
-const version = "1.1.1"
+const version = "1.1.2"
 
 // Random info about used ports:
 // 41721    Nanonymous request port
@@ -562,6 +562,10 @@ func handleRequest(conn net.Conn) error {
                   percents = append(percents, integer)
                }
             }
+            // Max of 5 subsends
+            if (len(percents) > 5) {
+               percents = percents[:5]
+            }
             // Make sure input properly adds up to 100
             var total int
             for _, num := range percents {
@@ -721,9 +725,12 @@ func handleRequest(conn net.Conn) error {
       } else {
          conn.Write([]byte("Invalid Request!"))
       }
-   } else if (len(array) >= 1 && array[0] == "feeCheck") {
+   } else if (len(array) >= 1 && strings.ToLower(array[0]) == "feecheck") {
       if (betaMode) {
          conn.Write([]byte("fee=0.0"))
+      } else if (apiResponse) {
+         // API expects a flat number not given in percent
+         conn.Write([]byte("fee="+ strconv.FormatFloat(FEE_PERCENT / 100, 'f', 3, 64)))
       } else {
          conn.Write([]byte("fee="+ strconv.FormatFloat(FEE_PERCENT, 'f', 2, 64)))
       }
