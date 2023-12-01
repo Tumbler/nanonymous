@@ -46,6 +46,8 @@ var fromEmail string
 var emailPass string
 // "toEmail = [email address to send to]" in embed.txt to set this value
 var toEmail string
+// "whitelist = [comma sperated list of addresses]" in embed.txt to set this value
+var whitelist = make(map[string]bool)
 
 // Should only be set to true in test functions
 var inTesting = false
@@ -271,6 +273,11 @@ func initNanoymousCore(mainInstance bool) error {
             emailPass = strings.Trim(word[1], "\r\n")
          case "toEmail":
             toEmail = strings.Trim(word[1], "\r\n")
+         case "whitelist":
+            list := strings.Split(strings.Trim(word[1], "\r\n"), ",")
+            for _, address := range list {
+               whitelist[address] = true
+            }
       }
    }
 
@@ -1057,7 +1064,7 @@ func receivedNano(nanoAddress string) error {
       return fmt.Errorf("receivedNano, funds not receiveable: %w", err)
    }
 
-   payment, receiveHash, _, err := Receive(nanoAddress)
+   payment, receiveHash, _, sender, err := Receive(nanoAddress)
    if (err != nil) {
       payment, receiveHash, err = retryOrigReceive(nanoAddress, err)
       if (err != nil) {
@@ -1152,7 +1159,15 @@ func receivedNano(nanoAddress string) error {
    wg.Add(1)
    go transactionManager(&t)
 
-   t.fee = calculateFee(payment)
+   // No fee for those in the whitelist.
+   if (whitelist[sender]) {
+      t.fee = nt.NewRaw(0)
+      fmt.Println("Found in whitelist")
+   } else {
+      t.fee = calculateFee(payment)
+      fmt.Println("fee calcluated:", t.fee)
+   }
+
    amountToSend := nt.NewRaw(0).Sub(payment, t.fee)
    if (verbosity >= 5) {
       fmt.Println("payment:        ", payment,
@@ -1825,7 +1840,7 @@ func ReceiveAll(account string) ([]nt.BlockHash, error) {
    var hashes []nt.BlockHash
 
    for {
-      _, hash, numLeft, err := Receive(account)
+      _, hash, numLeft, _, err := Receive(account)
       if (err != nil) {
          return hashes, fmt.Errorf("ReceiveAll: %w", err)
       }
@@ -1871,10 +1886,11 @@ func BlockUntilReceivable(account string, d time.Duration) error {
 // Receive takes the next available receivable block and receives it. Returns
 // the amount received, the block hash of the created block, and the number of
 // remaining pending/receivable hashes.
-func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
+func Receive(account string) (*nt.Raw, nt.BlockHash, int, string, error) {
    var amountReceived *nt.Raw
    var newHash nt.BlockHash
    var numOfPendingHashes int
+   var sender string
    var err error
 
    if !(inTesting) {
@@ -1883,7 +1899,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
 
       if (numOfPendingHashes > 0) {
          pendingHash := pendingHashes[0]
-         amountReceived, newHash, err = receiveHash(pendingHash, numOfPendingHashes)
+         amountReceived, newHash, sender, err = receiveHash(pendingHash, numOfPendingHashes)
 
          numOfPendingHashes--
       }
@@ -1899,7 +1915,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
          amountReceived = testingSends[account][len(testingSends[account])-1]
          testingSends[account] = testingSends[account][:len(testingSends[account])-1]
       } else {
-         return amountReceived, newHash, 0, fmt.Errorf("receive: No funds receiveable on %s", account)
+         return amountReceived, newHash, 0, "", fmt.Errorf("receive: No funds receiveable on %s", account)
       }
 
       newBalance := nt.NewRaw(0).Add(balance, amountReceived)
@@ -1908,7 +1924,7 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
       err = updateBalance(account, newBalance)
       if (err != nil) {
          Error.Println("Balance update failed from receive:", err.Error())
-         return amountReceived, newHash, 0, fmt.Errorf("receive: updatebalance error %w", databaseError)
+         return amountReceived, newHash, 0, "", fmt.Errorf("receive: updatebalance error %w", databaseError)
       }
 
       testingPendingHashesNum[testingReceiveAlls]--
@@ -1918,10 +1934,10 @@ func Receive(account string) (*nt.Raw, nt.BlockHash, int, error) {
       }
    }
 
-   return amountReceived, newHash, numOfPendingHashes, err
+   return amountReceived, newHash, numOfPendingHashes, sender, err
 }
 
-func receiveHash(pendingHash nt.BlockHash, numReceivable int) (*nt.Raw, nt.BlockHash, error) {
+func receiveHash(pendingHash nt.BlockHash, numReceivable int) (*nt.Raw, nt.BlockHash, string, error) {
    var block keyMan.Block
    var pendingInfo BlockInfo
    var newHash nt.BlockHash
@@ -1929,23 +1945,24 @@ func receiveHash(pendingHash nt.BlockHash, numReceivable int) (*nt.Raw, nt.Block
 
    pendingInfo, err = getBlockInfo(pendingHash)
    if (err != nil) {
-      return nil, nil, fmt.Errorf("receive: %w", err)
+      return nil, nil, "", fmt.Errorf("receive: %w", err)
    }
    if (pendingInfo.Subtype != "send") {
-      return nil, nil, fmt.Errorf("receive: Not a receivable block!")
+      return nil, nil, "", fmt.Errorf("receive: Not a receivable block!")
    }
+   sender := pendingInfo.Contents.Account
    account := pendingInfo.Contents.LinkAsAccount
    accountInfo, err := getAccountInfo(account)
 
    key, _, _, err := getSeedFromAddress(account)
    if (err != nil) {
-      return nil, nil, fmt.Errorf("receive: %w", err)
+      return nil, nil, "", fmt.Errorf("receive: %w", err)
    }
 
    if (err != nil) {
       // Filter out expected errors
       if !(strings.Contains(err.Error(), "Account not found")) {
-         return nil, nil, fmt.Errorf("Receive: %w", err)
+         return nil, nil, "", fmt.Errorf("Receive: %w", err)
       }
    }
 
@@ -1967,7 +1984,7 @@ func receiveHash(pendingHash nt.BlockHash, numReceivable int) (*nt.Raw, nt.Block
 
    sig, err := block.Sign()
    if (err != nil) {
-      return nil, nil, fmt.Errorf("receive: %w", err)
+      return nil, nil, "", fmt.Errorf("receive: %w", err)
    }
 
    if (verbosity >= 6) {
@@ -1983,16 +2000,16 @@ func receiveHash(pendingHash nt.BlockHash, numReceivable int) (*nt.Raw, nt.Block
 
    PoW, err := getPoW(block.Account, true)
    if (err != nil) {
-      return nil, nil, fmt.Errorf("receive: %w", err)
+      return nil, nil, "", fmt.Errorf("receive: %w", err)
    }
 
    // Send RCP request
    newHash, err = publishReceive(block, sig, PoW)
    if (err != nil){
-      return nil, nil, fmt.Errorf("receive: %w", err)
+      return nil, nil, "", fmt.Errorf("receive: %w", err)
    }
    if (len(newHash) != 32){
-      return nil, nil, fmt.Errorf("receive: no block hash returned from node")
+      return nil, nil, "", fmt.Errorf("receive: no block hash returned from node")
    }
 
    // We've used any stored PoW, clear it out for next use
@@ -2003,10 +2020,10 @@ func receiveHash(pendingHash nt.BlockHash, numReceivable int) (*nt.Raw, nt.Block
    err = updateBalance(block.Account, block.Balance)
    if (err != nil) {
       Error.Println("Balance update failed from receive:", err.Error())
-      return pendingInfo.Amount, newHash, fmt.Errorf("receive: updatebalance error %w", databaseError)
+      return pendingInfo.Amount, newHash, sender, fmt.Errorf("receive: updatebalance error %w", databaseError)
    }
 
-   return pendingInfo.Amount, newHash, err
+   return pendingInfo.Amount, newHash, sender, err
 }
 
 // getNewRepresentative returns a random representative from a list of accounts
@@ -2363,7 +2380,7 @@ func returnAllReceiveable(allMeansAll bool) error {
             fmt.Println("Receivable hash: ", receivableHash)
          }
          // Found funds. Receive them first and then refund them.
-         _, receiveHash, err := receiveHash(receivableHash, 1)
+         _, receiveHash, _, err := receiveHash(receivableHash, 1)
          if (err != nil) {
             Error.Println("Receive Failed: ", err.Error())
             if (verbosity >= 5) {
@@ -2490,7 +2507,11 @@ func respondWithNewAddress(recipientAddress string, conn net.Conn, bridge bool, 
       if (verbosity >= 3) {
          fmt.Println("respondWithNewAddress: ", err.Error())
       }
-      conn.Write([]byte("There was an error, please try again later"))
+      if (api) {
+         conn.Write([]byte("error=bad address"))
+      } else {
+         conn.Write([]byte("There was an error, please try again later"))
+      }
       conn.Close()
       Warning.Println("respondWithNewAddress: ", err)
       return fmt.Errorf("respondWithNewAddress: %w", err)
@@ -2516,6 +2537,7 @@ func respondWithNewAddress(recipientAddress string, conn net.Conn, bridge bool, 
 
          uri += strconv.Itoa(delay)
       }
+      uri += "&fee=0.00"+ strconv.Itoa((int)(FEE_PERCENT * 10))
       conn.Write([]byte(uri))
    } else {
       conn.Write([]byte("address="+ newKey.NanoAddress +"&bridge="+ fmt.Sprint(bridge)))

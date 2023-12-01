@@ -985,7 +985,7 @@ func CLIselect(myKey *keyMan.Key, args []string, prompt *string) error {
 
 func CLIreceive(myKey *keyMan.Key, args []string, prompt *string) error {
 
-   raw, block, numLeft, err := Receive(myKey.NanoAddress)
+   raw, block, numLeft, _, err := Receive(myKey.NanoAddress)
    if (err != nil) {
       return fmt.Errorf("CLIreceive: %w", err)
    }

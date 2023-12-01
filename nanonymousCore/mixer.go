@@ -79,20 +79,20 @@ func sendToMixer(key *keyMan.Key, shufflesLeft int) error {
    // Make sure they're confirmed.
    waitForConfirmations(hashList)
 
-   _, _, _, err = Receive(mix1.NanoAddress)
+   _, _, _, _, err = Receive(mix1.NanoAddress)
    for (err != nil) {
       if (tries < RetryNumber) {
-         _, _, _, err = Receive(mix1.NanoAddress)
+         _, _, _, _, err = Receive(mix1.NanoAddress)
          tries++
          continue
       }
       return fmt.Errorf("sendToMixer: Orig: %d, %d, Send1: %d, %d, Send2: %d, %d - Receive 1 error: %w", origSeed, origIndex, send1Seed, send1Index, send2Seed, send2Index, err)
    }
    tries = 0
-   _, _, _, err = Receive(mix2.NanoAddress)
+   _, _, _, _, err = Receive(mix2.NanoAddress)
    for (err != nil) {
       if (tries < RetryNumber) {
-         _, _, _, err = Receive(mix2.NanoAddress)
+         _, _, _, _, err = Receive(mix2.NanoAddress)
          tries++
          continue
       }

@@ -792,7 +792,7 @@ func retryOrigReceive(nanoAddress string, prevError error) (*nt.Raw, nt.BlockHas
    var receiveHash nt.BlockHash
 
    for (retryCount < RetryNumber) {
-      payment, receiveHash, _, err = Receive(nanoAddress)
+      payment, receiveHash, _, _, err = Receive(nanoAddress)
       if (err != nil) {
          if (verbosity >= 5) {
             fmt.Println("Error with re-receive: ", retryCount, err.Error())

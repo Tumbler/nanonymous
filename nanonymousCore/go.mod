@@ -3,6 +3,7 @@ module nanonymousCore
 go 1.18
 
 require (
+	filippo.io/age v1.0.0
 	github.com/chzyer/readline v1.5.0
 	github.com/jackc/pgconn v1.11.0
 	github.com/jackc/pgerrcode v0.0.0-20220416144525-469b46aa5efa
@@ -15,7 +16,6 @@ require (
 )
 
 require (
-	filippo.io/age v1.0.0 // indirect
 	filippo.io/edwards25519 v1.0.0-rc.1 // indirect
 	github.com/c-sto/encembed v0.0.0-20211021084118-3213e2129290 // indirect
 	github.com/hectorchu/gonano v0.1.17 // indirect
