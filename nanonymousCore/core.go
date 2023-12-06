@@ -2611,3 +2611,74 @@ func sendSafeExit() {
       }
    }
 }
+
+func testTransaction() {
+   deleteTransactionRecord(41)
+
+   feeDividend = int64(math.Trunc(100/FEE_PERCENT))
+   minPayment = nt.OneNano()
+   var t Transaction
+   t.paymentParentSeedId = 1
+   t.paymentIndex = 72
+   t.payment = nt.OneNano()
+   t.fee = calculateFee(t.payment)
+   t.receiveHash, _ = hex.DecodeString("DCC89776B79E96C778EAECB4C2A6C4EE8EE22DE9388651FD5C57DDE32E181D96")
+   t.id = 41
+   t.paymentAddress, _ = keyMan.AddressToPubKey("nano_3mhrc9czyfzzok7xeoeaknq6w5ok9horo7d4a99m8tbtbyogg8apz491pkzt")
+   t.recipientAddress, _ = keyMan.AddressToPubKey("nano_3rksbipm1b1g64gw6t36ufc77q7mtw1uybnto4xyn1e7ae5aikyknb9fg4su")
+   hash, _ := hex.DecodeString("AC684A9447E47340DFC2C0F92208F1EBC58798FDAB9D1A40A46ACBAD73BE3314")
+   t.finalHash = append([]nt.BlockHash{}, hash)
+   t.bridge = false
+   t.percents = []int{40, 60}
+   t.delays = []int{15, 349}
+   t.numSubSends = len(t.percents)
+   t.confirmationChannel = make([]chan string, t.numSubSends)
+   t.transitionalKey = make([]*keyMan.Key, t.numSubSends)
+   t.commChannel = make([]chan transactionComm, t.numSubSends)
+   t.errChannel = make([]chan error, t.numSubSends)
+   t.transactionSuccessful = []bool{false, false}
+   for i := 0; i < t.numSubSends; i++ {
+      t.commChannel[i] = make(chan transactionComm)
+      t.errChannel[i] = make(chan error)
+      t.sendingKeys = append(t.sendingKeys, make([]*keyMan.Key, 0))
+      tmp, _ := getSeedFromIndex(1, i)
+      tmp2, _ := getSeedFromIndex(1, i+1)
+      t.sendingKeys[i] = append(t.sendingKeys[i], tmp)
+      if (i == 0) {
+         t.sendingKeys[i] = append(t.sendingKeys[i], tmp2)
+      }
+      t.walletSeed = append(t.walletSeed, make([]int, 0))
+      //t.walletSeed[i] = []int{}
+      t.walletBalance = append(t.walletBalance, make([]*nt.Raw, 0))
+      //t.walletBalance[i] = []*nt.Raw{}
+      t.multiSend = append(t.multiSend, false)
+      t.individualSendAmount = append(t.individualSendAmount, make([]*nt.Raw, 0))
+      //t.individualSendAmount[i] = []*nt.Raw{}
+      t.transitionSeedId = append(t.transitionSeedId, 0)
+      t.dirtyAddress = append(t.dirtyAddress, -1)
+
+      var err error
+      t.transitionalKey[i], err = getSeedFromIndex(1, i)
+      if (err != nil) {
+         fmt.Println("error? ", err)
+      }
+   }
+   // Split the send up into its smaller pieces
+   totalAdded := nt.NewRaw(0)
+   var amountToSend = nt.OneNano()
+   for i, percent := range t.percents {
+      t.amountToSend = append(t.amountToSend, nt.NewRaw(0))
+      if (i == len(t.percents) -1) {
+         // Final send is just whatever is left over
+         t.amountToSend[i] = nt.NewRaw(0).Sub(amountToSend, totalAdded)
+      } else {
+         onePercent := nt.NewRaw(0).Div(amountToSend, nt.NewRaw(100))
+         xPercent := onePercent.Mul(onePercent, nt.NewRaw(int64(percent)))
+         t.amountToSend[i] = xPercent
+
+         totalAdded.Add(totalAdded, t.amountToSend[i])
+      }
+   }
+
+   deleteTransactionRecord(41)
+}

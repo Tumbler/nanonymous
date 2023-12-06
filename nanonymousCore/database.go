@@ -1174,13 +1174,14 @@ func upsertTransactionRecord(t *Transaction) error {
    }
 
    var sendingKeys [][]string
+   var longestArray int
    for i, keys := range t.sendingKeys {
       sendingKeys = append(sendingKeys, make([]string, 0))
 
       if (len(keys) == 0) {
          sendingKeys[i] = append(sendingKeys[i], "0,0")
       }
-      for _, key := range keys {
+      for j, key := range keys {
          if (key != nil) {
             seedId, index, err := getWalletFromAddress(key.NanoAddress)
             if (err != nil) {
@@ -1191,6 +1192,15 @@ func upsertTransactionRecord(t *Transaction) error {
          } else {
             sendingKeys[i] = append(sendingKeys[i], "0,0")
          }
+         if (j+1 > longestArray) {
+            longestArray = j+1
+         }
+      }
+   }
+   // Append dummy values because postgres's multi-dimensional arrays support is lacking.
+   for i, keys := range sendingKeys {
+      for j := len(keys); j < longestArray; j++ {
+         sendingKeys[i] = append(sendingKeys[i], "-1,-1")
       }
    }
 
@@ -1422,7 +1432,7 @@ func getTranscationRecord(id int, t *Transaction) error {
             return fmt.Errorf("getTranscationRecord: Bad data in index ID: %w", err)
          }
 
-         if (seed != 0) {
+         if (seed > 0) {
             key, err := getSeedFromIndex(seed, id)
             if (err != nil) {
                return fmt.Errorf("getTranscationRecord: Coudn't get seed: %w", err)
