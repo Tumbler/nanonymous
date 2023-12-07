@@ -40,6 +40,8 @@ var nodeIP string
 var websocketAddress string
 // "work = [work_server_address]" in embed.txt to set this value
 var workServer string
+// "network = [network]" in embed.txt to set this value (main/beta/test)
+var network string
 // "fromEmail = [email address to send from]" in embed.txt to set this value
 var fromEmail string
 // "emailPass = [password of fromEmail]" in embed.txt to set this value
@@ -267,6 +269,8 @@ func initNanoymousCore(mainInstance bool) error {
             websocketAddress = strings.Trim(word[1], "\r\n")
          case "work":
             workServer = strings.Trim(word[1], "\r\n")
+         case "network":
+            network = strings.Trim(word[1], "\r\n")
          case "fromEmail":
             fromEmail = strings.Trim(word[1], "\r\n")
          case "emailPass":

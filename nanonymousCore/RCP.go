@@ -1034,6 +1034,8 @@ func sendEmail(subject string, contents string) error {
       return nil
    }
 
+   contents = "network: "+ network +"\n\n"+ contents
+
    from := fromEmail
    password := emailPass
 
