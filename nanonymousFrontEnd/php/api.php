@@ -7,22 +7,22 @@ $context = stream_context_create(
      'allow_self_signed' => true
 ]]);
 
-// TODO real server
-//$socket = stream_socket_client('ssl://147.182.231.89:41721', $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $context);
-$socket = stream_socket_client('ssl://164.92.92.51:41721', $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $context);
+$socket = stream_socket_client('ssl://147.182.231.89:41721', $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $context);
 if (!$socket) {
    echo "{\"error\": \"comm error: $errstr ($errno)\n\"}";
 } else {
    if (count($request) > 1) {
       fwrite($socket, $request[1] .'&api');
       while (($buffer = fgets($socket, 128)) !== false) {
-         $newAddress = $buffer;
+         $newAddress .= $buffer;
       }
       fclose($socket);
    } else {
       echo "{\"error\": \"Malformed URI\n\"}";
    }
 }
+
+// Generic URI to JSON constructor:
 
 $json = "{";
 // Construct the JSON
