@@ -84,7 +84,7 @@ var activeTransactionList = make(map[string]activeTransaction)
 
 var random *rand.Rand
 
-const version = "1.1.2"
+const version = "1.1.3"
 
 // Random info about used ports:
 // 41721    Nanonymous request port
@@ -549,6 +549,7 @@ func handleRequest(conn net.Conn) error {
    // Parse the whole url
    var percents []int
    var delays []int
+   var valueCheck = nt.NewRaw(0)
    var apiResponse bool
    for _, optionString := range array {
       if (verbosity >= 6) {
@@ -610,6 +611,11 @@ func handleRequest(conn net.Conn) error {
                   delays = append(delays, integer)
                }
             }
+         case "amount":
+            if (len(optionArray) > 1) {
+               valueCheck.SetString(optionArray[1], 10)
+               fmt.Println("valueCheck:", valueCheck)
+            }
          case "api":
             if (len(optionArray) > 1) {
                if (optionArray[1] == "true") {
@@ -657,7 +663,7 @@ func handleRequest(conn net.Conn) error {
 
                // Bridging to recipient address instead of the address
                // specified.
-               err = respondWithNewAddress(recipientAddress, conn, true, percents, delays, apiResponse)
+               err = respondWithNewAddress(recipientAddress, conn, true, percents, delays, valueCheck, apiResponse)
                if (err != nil) {
                   return fmt.Errorf("handleRequest2: %w", err)
                }
@@ -665,7 +671,7 @@ func handleRequest(conn net.Conn) error {
                conn.Write([]byte("Invalid Request!"))
             }
          } else {
-            err := respondWithNewAddress(subArray[1], conn, false, percents, delays, apiResponse)
+            err := respondWithNewAddress(subArray[1], conn, false, percents, delays, valueCheck, apiResponse)
             if (err != nil) {
                return fmt.Errorf("handleRequest4: %w", err)
             }
@@ -734,7 +740,16 @@ func handleRequest(conn net.Conn) error {
          conn.Write([]byte("fee=0.0"))
       } else if (apiResponse) {
          // API expects a flat number not given in percent
-         conn.Write([]byte("fee="+ strconv.FormatFloat(FEE_PERCENT / 100, 'f', 3, 64)))
+         uri := "fee="+ strconv.FormatFloat(FEE_PERCENT / 100, 'f', 3, 64)
+
+         if (valueCheck.Cmp(nt.NewRaw(0)) > 0) {
+            fee := calculateInverseFee(valueCheck)
+            total := nt.NewRaw(0).Add(valueCheck, fee)
+
+            uri += "&amountToSend="+ total.String()
+         }
+
+         conn.Write([]byte(uri))
       } else {
          conn.Write([]byte("fee="+ strconv.FormatFloat(FEE_PERCENT, 'f', 2, 64)))
       }
@@ -2309,6 +2324,42 @@ func calculateFee(payment *nt.Raw) *nt.Raw {
    return fee
 }
 
+// calculateInverseFee figures out what the fee would be when given the final
+// amount that will be sent to the recipient.
+func calculateInverseFee(payment *nt.Raw) *nt.Raw {
+
+   // Find original value
+   // Some setup required since we can't use fractions.
+   adjustedPayment := nt.NewRaw(0).Mul(payment, nt.NewRaw(1000))
+   originalWithDust := nt.NewRaw(0).Div(adjustedPayment, nt.NewRaw(int64((1-FEE_PERCENT/100)*1000)))
+
+   fee := nt.NewRaw(0).Sub(originalWithDust, payment)
+
+   // Find the most significant digit
+   var mostSig = nt.NewRaw(1)
+   var origCopy = nt.NewFromRaw(originalWithDust)
+   for (origCopy.Cmp(nt.NewRaw(9)) > 0) {
+      origCopy.Div(origCopy, nt.NewRaw(10))
+
+      mostSig.Mul(mostSig, nt.NewRaw(10))
+   }
+   // Maxes out at 1 NANO
+   if (mostSig.Cmp(nt.OneNano()) > 0) {
+      mostSig = nt.OneNano()
+   }
+
+   // Don't want the user to have to deal with dust so I'll round the fee down
+   // to the nearest .001 * minimum
+   minDust := nt.OneNano().Div(mostSig, nt.NewRaw(1000))
+
+   _, dust := nt.OneNano().DivMod(fee, minDust)
+
+   // Remove any dust from the fee
+   fee.Sub(fee, dust)
+
+   return fee
+}
+
 // returnAllReceivable checks all wallets in all active seeds and finds any
 // receiveable funds that are just lying around (Maybe someone accidentally
 // re-sent funds to an address that I'm no longer actively monitoring). If the
@@ -2512,7 +2563,7 @@ func removeHash(hashList []nt.BlockHash, i int) []nt.BlockHash {
    return hashList[:len(hashList)-1]
 }
 
-func respondWithNewAddress(recipientAddress string, conn net.Conn, bridge bool, percents []int, delays []int, api bool) error {
+func respondWithNewAddress(recipientAddress string, conn net.Conn, bridge bool, percents []int, delays []int, valueCheck *nt.Raw, api bool) error {
    newKey, _, err := getNewAddress(recipientAddress, false, false, bridge, percents, delays, 0)
    if (err != nil) {
       if (verbosity >= 3) {
@@ -2549,6 +2600,14 @@ func respondWithNewAddress(recipientAddress string, conn net.Conn, bridge bool, 
          uri += strconv.Itoa(delay)
       }
       uri += "&fee=0.00"+ strconv.Itoa((int)(FEE_PERCENT * 10))
+
+      if (valueCheck.Cmp(nt.NewRaw(0)) > 0) {
+         fee := calculateInverseFee(valueCheck)
+         total := nt.NewRaw(0).Add(valueCheck, fee)
+
+         uri += "&amountToSend="+ total.String()
+      }
+
       conn.Write([]byte(uri))
    } else {
       conn.Write([]byte("address="+ newKey.NanoAddress +"&bridge="+ fmt.Sprint(bridge)))
