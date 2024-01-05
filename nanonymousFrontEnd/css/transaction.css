@@ -7,6 +7,9 @@
  .info {
     color: grey
  }
+ .warning {
+    color: gold
+ }
  .error {
     color: red
  }

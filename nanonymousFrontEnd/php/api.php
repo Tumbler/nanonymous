@@ -49,7 +49,7 @@ for ($i = 0; $i < count($parameters); $i++) {
          }
          $json .= "]";
       } else {
-         if (is_numeric($values[0])) {
+         if (is_numeric($values[0]) && $statement[0] != "amountToSend") {
             $json .= $values[0];
          } else {
             $json .= '"'. $values[0] .'"';

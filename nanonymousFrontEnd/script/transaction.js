@@ -93,7 +93,7 @@ let nanoVal = 0
 function SetCurrentPrice(data) {
    nanoVal = data
 
-   document.getElementById("nanoPrice").innerHTML = nanoVal.toFixed(6);
+   document.getElementById("nanoPrice").innerHTML = +(nanoVal.toFixed(6));
 }
 
 function GetCurrentFee() {
@@ -503,7 +503,7 @@ function changeCurrency() {
          // The API I'm using is based in euros, so I have to do an extra
          // calculation to find the nano to curr val.
          newVal = nanoVal * curVal / usdVal
-         document.getElementById("nanoPrice").innerHTML = newVal.toFixed(6);
+         document.getElementById("nanoPrice").innerHTML = +(newVal.toFixed(6));
 
          if (info !== null && info.length > 1) {
             // Change all the currency symbols
