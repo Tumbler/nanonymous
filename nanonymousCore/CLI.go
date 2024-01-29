@@ -1259,7 +1259,7 @@ func CLIlast(myKey *keyMan.Key, args []string) error {
    transactions := make([]LineItem, 0)
 
    // Go through all active seeds
-   for i := seed; i < seed + 1; i++ {
+   for i := seed; i <= seed + 1; i++ {
       finalIndex, err := getCurrentIndexFromDatabase(i)
       if (err != nil) {
          fmt.Println("Index", i, ": CLIlast: ", err)
