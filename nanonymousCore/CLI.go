@@ -1254,6 +1254,9 @@ func CLIlast(myKey *keyMan.Key, args []string) error {
       Type string
       Amount *nt.Raw
       LocalTimestamp nt.JInt
+      address string
+      seed int
+      index int
    }
 
    transactions := make([]LineItem, 0)
@@ -1281,20 +1284,20 @@ func CLIlast(myKey *keyMan.Key, args []string) error {
             if (filter && (transType != history.Type)) {
                continue
             }
+
+            newEntry := LineItem{Type: history.Type, Amount: history.Amount, LocalTimestamp: history.LocalTimestamp, address: account.NanoAddress, seed: i, index: j}
             // Insertion sort
             for k, trans := range transactions {
                if (k > historyNumber-1) {
                   break
                }
                if (history.LocalTimestamp > trans.LocalTimestamp) {
-                  newEntry := LineItem{Type: history.Type, Amount: history.Amount, LocalTimestamp: history.LocalTimestamp}
                   transactions = append(transactions[:k], append([]LineItem{newEntry}, transactions[k:]...)...)
                   break
                }
 
             }
             if (len(transactions) < historyNumber) {
-                  newEntry := LineItem{Type: history.Type, Amount: history.Amount, LocalTimestamp: history.LocalTimestamp}
                   transactions = append(transactions, newEntry)
             }
             // Remove any excess
@@ -1309,7 +1312,7 @@ func CLIlast(myKey *keyMan.Key, args []string) error {
    // Print them out in human readable way
    for i, trans := range transactions {
       stamp := time.Unix(int64(trans.LocalTimestamp), 0)
-      fmt.Print(i+1, ") ", trans.Type, " ", trans.Amount, " (", rawToNANO(trans.Amount), ") ", stamp, "\n")
+      fmt.Print(i+1, ") ", trans.Type, " ", trans.Amount, " (", rawToNANO(trans.Amount), ") ", stamp, " ", trans.address, " (", trans.seed, ", ", trans.index, ")\n")
    }
 
    return nil
