@@ -145,6 +145,11 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
+               case "last":
+                  err = CLIlast(myKey, array)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
                case "count":
                   Nano, managed, mixer, err := findTotalBalance()
                   if (err != nil) {
@@ -1215,6 +1220,101 @@ func CLIfind(myKey *keyMan.Key, args []string) error {
    return nil
 }
 
+func CLIlast(myKey *keyMan.Key, args []string) error {
+   if (len(args) < 2) {
+      fmt.Println()
+      fmt.Println("Not enough arguments!")
+      CLIhelplast()
+      fmt.Println()
+      return nil
+   }
+
+   var historyNumber = 10
+   historyNumber, _ = strconv.Atoi(args[1])
+
+   var filter = false
+   var transType = ""
+   if (len(args) >= 3) {
+      filter = true
+      transType = args[2]
+   }
+
+   fmt.Println("Working...")
+
+   // Find latest transactions.
+   seed, err := getOldestActiveSeedIndex()
+   if (err != nil) {
+      return fmt.Errorf("CLIlast: %w", err)
+   }
+   if (seed < 1) {
+      seed = 1
+   }
+
+   type LineItem struct{
+      Type string
+      Amount *nt.Raw
+      LocalTimestamp nt.JInt
+   }
+
+   transactions := make([]LineItem, 0)
+
+   // Go through all active seeds
+   for i := seed; i < seed + 1; i++ {
+      finalIndex, err := getCurrentIndexFromDatabase(i)
+      if (err != nil) {
+         fmt.Println("Index", i, ": CLIlast: ", err)
+         continue
+      }
+      for j := 0; j < finalIndex; j++ {
+         account, err := getSeedFromIndex(i, j)
+         if (err != nil) {
+            fmt.Println("getSeed: CLIlast: %w", err)
+            continue
+         }
+         accHistory, err := getAccountHistory(account.NanoAddress, -1)
+         if (err != nil) {
+            // No history
+            continue
+         }
+
+         for _, history := range accHistory.History {
+            if (filter && (transType != history.Type)) {
+               continue
+            }
+            // Insertion sort
+            for k, trans := range transactions {
+               if (k > historyNumber-1) {
+                  break
+               }
+               if (history.LocalTimestamp > trans.LocalTimestamp) {
+                  newEntry := LineItem{Type: history.Type, Amount: history.Amount, LocalTimestamp: history.LocalTimestamp}
+                  transactions = append(transactions[:k], append([]LineItem{newEntry}, transactions[k:]...)...)
+                  break
+               }
+
+            }
+            if (len(transactions) < historyNumber) {
+                  newEntry := LineItem{Type: history.Type, Amount: history.Amount, LocalTimestamp: history.LocalTimestamp}
+                  transactions = append(transactions, newEntry)
+            }
+            // Remove any excess
+            for (len(transactions) > historyNumber) {
+               transactions = transactions[:len(transactions)-1]
+            }
+         }
+
+      }
+   }
+
+   // Print them out in human readable way
+   for i, trans := range transactions {
+      stamp := time.Unix(int64(trans.LocalTimestamp), 0)
+      fmt.Print(i+1, ") ", trans.Type, " ", trans.Amount, " (", rawToNANO(trans.Amount), ") ", stamp, "\n")
+   }
+
+   return nil
+}
+
 func CLIupdate(myKey *keyMan.Key, args []string, prompt *string) error {
    checkBalance(myKey.NanoAddress)
 
@@ -1255,6 +1355,8 @@ func CLIhelp(args []string) {
          CLIhelpclearPoW()
       case "find":
          CLIhelpfind()
+      case "last":
+         CLIhelplast()
       case "peek":
          CLIhelppeek()
       case "receive":
@@ -1292,6 +1394,7 @@ func CLIhelp(args []string) {
          CLIhelprefresh()
          CLIhelpclearPoW()
          CLIhelpfind()
+         CLIhelplast()
    }
 }
 
@@ -1360,6 +1463,11 @@ func CLIhelpclearPoW() {
 func CLIhelpfind() {
    fmt.Println()
    fmt.Print("   - find {address} | Finds the index (seedID, index) for the given \"address\"\n")
+}
+
+func CLIhelplast() {
+   fmt.Println()
+   fmt.Print("   - last {x} [send/receive] | Finds the last x transactions executed by Nanonymous\n")
 }
 
 func CLIhelpcount() {
