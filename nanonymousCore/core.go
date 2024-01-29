@@ -1188,10 +1188,8 @@ func receivedNano(nanoAddress string) error {
    // No fee for those in the whitelist.
    if (whitelist[sender]) {
       t.fee = nt.NewRaw(0)
-      fmt.Println("Found in whitelist")
    } else {
       t.fee = calculateFee(payment)
-      fmt.Println("fee calcluated:", t.fee)
    }
 
    amountToSend := nt.NewRaw(0).Sub(payment, t.fee)

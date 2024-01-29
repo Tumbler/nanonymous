@@ -67,6 +67,13 @@
          <p class="InfoText"> This is the maximum fee:<br><br>Taking a flat percent would leave your wallet with dust. Nobody wants that, so we round the fee down to get rid of any filthy digits before charging you.<br></p>
          <button class="nButton" onclick='(function(){document.getElementById("feeInfopopup").style.visibility="hidden";})();' style="margin: auto;">Got it!</button>
       </div>
+      <table class="warning">
+         <tr>
+            <td><h3>Maximum transaction currently supported:</h3></td>
+            <td><label id="maxTransaction">100 Nano</label></td>
+            <td><label>If the transaction is over this amount or there are other problems, the nano will be refunded. Be careful about sending from wallets you don't control!</label></td>
+         </tr>
+      </table>
       <table id="calculator">
          <caption>Fee calculator</caption>
          <tr class="row">
