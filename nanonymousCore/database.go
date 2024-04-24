@@ -872,10 +872,10 @@ func recordProfit(gross *nt.Raw, tid int) error {
 
    rowsAffected, err := conn.Exec(context.Background(), queryString, gross, nanoUsdValue, tid)
    if (err != nil) {
-      return fmt.Errorf("updateBalance: %w", err)
+      return fmt.Errorf("recordProfit: %w", err)
    }
    if (rowsAffected.RowsAffected() < 1) {
-      return fmt.Errorf("updateBalance: no rows affected in update")
+      return fmt.Errorf("recordProfit: no rows affected in update")
    }
 
    return nil

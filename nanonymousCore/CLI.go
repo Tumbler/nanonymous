@@ -179,6 +179,11 @@ func CLI() {
                   if (err != nil) {
                      fmt.Println(fmt.Errorf("CLI: %w", err))
                   }
+               case "updateentirewallet":
+                  err = CLIupdateAll(myKey, array, &prompt)
+                  if (err != nil) {
+                     fmt.Println(fmt.Errorf("CLI: %w", err))
+                  }
                case "-h":
                   fallthrough
                case "help":
@@ -1330,6 +1335,81 @@ func CLIupdate(myKey *keyMan.Key, args []string, prompt *string) error {
    return nil
 }
 
+func CLIupdateAll(myKey *keyMan.Key, args []string, prompt *string) error {
+   rows, conn, err := getSeedRowsFromDatabase()
+   if (err != nil) {
+      Warning.Println("CLIupdateAll failed on routine pending check:", err.Error())
+      return fmt.Errorf("CLIupdateAll: %w", err)
+   }
+
+   defer conn.Close(context.Background())
+
+   var seed keyMan.Key
+   var seedID int
+   var searched int
+   var numUpdated int
+   var receivableCount int
+   // For all our seeds
+   for rows.Next() {
+
+      rows.Scan(&seed.Seed, &seed.Index, &seedID)
+
+      innerRows, conn2, err := getWalletRowsFromDatabaseFromSeed(seedID)
+      if (err != nil) {
+         Warning.Println("getWalletRowsFromDatabaseFromSeed failed on routine pending check:", err.Error())
+         return fmt.Errorf("returnAllReceiveable: %w", err)
+      }
+      defer conn2.Close(context.Background())
+
+      // Get all accounts
+      for (innerRows.Next()) {
+         searched++
+         if (searched % 1000 == 0) {
+            fmt.Print(".")
+         }
+         var i int
+
+         err := innerRows.Scan(&i)
+         if (err != nil) {
+            Warning.Println("innerRows.Scan failed on routine pending check:", err.Error())
+            return fmt.Errorf("returnAllReceiveable: %w", err)
+         }
+
+         seed.Index = i
+         keyMan.SeedToKeys(&seed)
+
+         if (verbosity >= 6) {
+            fmt.Println("  ", seed.NanoAddress)
+            fmt.Println("  index", i)
+         }
+
+         balance, receiveable, _ := getAccountBalance(seed.NanoAddress)
+         if (receiveable.Cmp(nt.NewRaw(0)) != 0) {
+            receivableCount++
+         }
+
+         balanceInDB, err := getBalance(seed.NanoAddress)
+         if (err != nil) {
+            return fmt.Errorf("returnAllReceiveable: %w", err)
+         }
+
+         if (balance.Cmp(balanceInDB) != 0) {
+            numUpdated++
+            err := updateBalance(seed.NanoAddress, balance)
+            if (err != nil) {
+               return fmt.Errorf("returnAllReceiveable: %w", err)
+            }
+         }
+
+      }
+
+   }
+
+   fmt.Println("\nSearched", searched, "accounts and upated", numUpdated, "of them.\n", receivableCount, " had pending receives.")
+
+   return nil
+}
+
 func CLIhelp(args []string) {
    var term string
    if (len(args) >= 2) {
@@ -1671,6 +1751,7 @@ var walletCompleter = readline.NewPrefixCompleter(
       readline.PcItem("off"),
    ),
    readline.PcItem("update"),
+   readline.PcItem("updateEntireWallet"),
    readline.PcItem("clearpow"),
    readline.PcItem("find"),
    readline.PcItem("help"),

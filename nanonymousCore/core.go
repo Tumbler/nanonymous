@@ -84,7 +84,7 @@ var activeTransactionList = make(map[string]activeTransaction)
 
 var random *rand.Rand
 
-const version = "1.1.4"
+const version = "1.1.5"
 
 // Random info about used ports:
 // 41721    Nanonymous request port
@@ -2259,8 +2259,9 @@ func getPoW(nanoAddress string, isReceiveBlock bool) (string, error) {
 // checkBalance finds the actual balance of an account from the node and updates
 // the database if it doesn't match. Will also receive funds if it finds
 // receivable funds just sitting on the account.
-func checkBalance(nanoAddress string) error {
+func checkBalance(nanoAddress string) (error, bool) {
 
+   var updated bool
    balance, receiveable, _ := getAccountBalance(nanoAddress)
 
    if (receiveable.Cmp(nt.NewRaw(0)) != 0) {
@@ -2270,19 +2271,20 @@ func checkBalance(nanoAddress string) error {
 
       balanceInDB, err := getBalance(nanoAddress)
       if (err != nil) {
-         return fmt.Errorf("checkBalance: %w", err)
+         return fmt.Errorf("checkBalance: %w", err), false
       }
 
       fmt.Println("BalanceInDB:", balanceInDB, "\nbalance     :", balance)
       if (balance.Cmp(balanceInDB) != 0) {
+         updated = true
          err := updateBalance(nanoAddress, balance)
          if (err != nil) {
-            return fmt.Errorf("checkBalance: %w", err)
+            return fmt.Errorf("checkBalance: %w", err), false
          }
       }
    }
 
-   return nil
+   return nil, updated
 }
 
 // calculateFee applies the stored fee percent, but takes out any resulting dust
