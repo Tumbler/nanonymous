@@ -17,8 +17,8 @@ import (
    "reflect"
 
    // Local packages
-   keyMan "nanoKeyManager"
-   nt "nanoTypes"
+   keyMan "github.com/Tumbler/nanoKeyManager"
+   nt "github.com/Tumbler/nanoTypes"
 )
 
 func getAccountBalance(nanoAddress string) (*nt.Raw, *nt.Raw, error) {

@@ -10,8 +10,8 @@ import (
    _"embed"
 
    // Local packages
-   keyMan "nanoKeyManager"
-   nt "nanoTypes"
+   keyMan "github.com/Tumbler/nanoKeyManager"
+   nt "github.com/Tumbler/nanoTypes"
 
    // 3rd party packages
    pgx "github.com/jackc/pgx/v4"

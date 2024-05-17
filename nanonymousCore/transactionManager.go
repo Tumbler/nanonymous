@@ -11,8 +11,8 @@ import (
    "encoding/hex"
 
    // Local packages
-   keyMan "nanoKeyManager"
-   nt "nanoTypes"
+   keyMan "github.com/Tumbler/nanoKeyManager"
+   nt "github.com/Tumbler/nanoTypes"
 )
 
 type Transaction struct {

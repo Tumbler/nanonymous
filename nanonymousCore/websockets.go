@@ -12,8 +12,8 @@ import (
    "golang.org/x/net/websocket"
 
    // Local packages
-   keyMan "nanoKeyManager"
-   nt "nanoTypes"
+   keyMan "github.com/Tumbler/nanoKeyManager"
+   nt "github.com/Tumbler/nanoTypes"
 )
 
 // Port 80 (unsecured) and 443 (secure)

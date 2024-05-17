@@ -5,8 +5,8 @@ import (
    "context"
 
    // Local packages
-   keyMan "nanoKeyManager"
-   nt "nanoTypes"
+   keyMan "github.com/Tumbler/nanoKeyManager"
+   nt "github.com/Tumbler/nanoTypes"
 )
 
 // sendToMixer takes an address and shuffles it all into the mixer. shufflesLeft
