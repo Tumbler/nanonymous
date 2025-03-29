@@ -7,7 +7,7 @@ Nanonymous was a tool to help increase [nano](nano.org) anonymity by breaking th
 ## Disclaimer
 This repo was never meant as a community project. It is merely an archive of my project in the hopes that it might help someone. As such, there are quite a few oddities and hurdles to getting it set up. The code is provided as-is for posterity; I will not be helping you troubleshoot.
 
-There ARE two smaller repos that I was using in Nanonymous that are intended to be used by any nano go developers. They are the [nanoKeyManager](https://github.com/Tumbler/nanoKeyManager) and [nanoyTypes](https://github.com/Tumbler/nanoTypes).
+There ARE two smaller repos that I was using in Nanonymous that are intended to be used by any nano go developers. They are the [nanoKeyManager](https://github.com/Tumbler/nanoKeyManager) and [nanoTypes](https://github.com/Tumbler/nanoTypes).
 
 ## Breakdown
   * [Frontend](#frontend)
