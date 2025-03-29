@@ -18,10 +18,28 @@ There's not too much here other than your typcial HTML/javascript/css and some l
 This is the meat and potatoes of the project. Written in Go and Postgres.
 
 #### Setup
+  * Postgres must be setup and configured on the machine. (Then use [databaseSetup](https://github.com/Tumbler/nanonymous/blob/main/scripts/databaseSetup.sql))
   * `git clone git@github.com:Tumbler/nanonymous.git`
   * `cd nanonymous/nanonymousCore`
   * `go get github.com/c-sto/encembed` (This is an embedding library that I used to embed and encrypt the configuruation data)
   * Add "embed.txt" to the directory.
   * `go generate` (This must be done every time there is a change to `embed.txt`)
 
-At this point the core should be ready to run, with the caveat that you must have it talking to operating node or it will hang.
+At this point the core should be ready to run, with the caveat that you must have it talking to operating node or it will hang. <br><br>
+
+The default behavior of the core is to run in listen mode where it is simply waiting for calls from the front end to respond to. There is also a CLI that can be accessed with the launch option `-c`. <br><br>
+
+The CLI has three basic modes:
+ 1. A Wallet
+ 2. An RCP client for the connected node
+ 3. A very basic database viewer
+
+#### Launch options
+ * `-c` Launch the CLI instead of the listener
+ * `-s` Go through database and check if there are any unrecieved funds and receive them. (Scans only last two seeds unless `-a` is also specified)
+ * `-r` Compiles a report about the last weeks transactions and emails them to the specified email in embed.txt
+ * `-v` Prints version information
+ * `-h` Prings help message
+ * `-beta` Runs with no fees
+ * If the final argument is a number (no dash) the output verbosity is changed to that number (1-10)
+
