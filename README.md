@@ -54,7 +54,7 @@ Some small tools to help with server maintenance.
  * `cleardatabase.sql` Purges the database **CAUTION IRREVERSABLE**
  * `coreRetireSeed.sh` Tells the current running instance to stop generating addresses from the current seed. (Desinged to be called from a cron job)
  * `coreSafeExit.sh` Tells the current running instance to finsh whatever it's doing and exit. (This prevents inturrupting an active tranaction and losing customre funds)
- * `databaseSetup.sql` Initializes the database with the neccessary tables to run. Won't override already exsisting tables. (Use `cleardatabase.sql` first if you need to wipe and start over)
+ * `databaseSetup.sql` Initializes the database with the necessary tables to run. Won't override already exsisting tables. (Use `cleardatabase.sql` first if you need to wipe and start over)
  * `generateTLSCert.sh` Generates a self signed TLS certificate and key that can be used between your own servers.
  * `generateTLSCertNoPass.sh` Same as above but doesn't prompt for a password (In case you need to do this programmatically)
  * `resetTestDatabase.sql` Resets the test database to a known (non-empty) state so that all our unit tests can have known success cases.
